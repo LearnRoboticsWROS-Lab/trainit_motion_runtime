@@ -50,6 +50,10 @@ TRAINIT_BT_NODE(RemoveCollisionObject)
 TRAINIT_BT_NODE(AttachObject)
 TRAINIT_BT_NODE(DetachObject)
 
+// --- dynamic-object runtime flags (grasped-object planning + Isaac release) ---
+TRAINIT_BT_NODE(SetAttachedCollisionCheck)  // toggle planning-collision check for held objects
+TRAINIT_BT_NODE(SetReleasePolicy)           // tell Isaac freeze|gravity on the next release
+
 // --- pose math (produce/consume a Pose blackboard entry) ---
 TRAINIT_BT_NODE(MakePose)              // full TCP pose: position + orientation (all DOF)
 TRAINIT_BT_NODE(StoreCurrentPose)

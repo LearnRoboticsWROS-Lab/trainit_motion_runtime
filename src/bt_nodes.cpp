@@ -10,6 +10,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <future>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -19,6 +20,8 @@
 #include <Eigen/Geometry>
 #include <geometry_msgs/msg/pose.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <std_msgs/msg/bool.hpp>
+#include <std_srvs/srv/set_bool.hpp>
 
 namespace trainit
 {
@@ -445,6 +448,65 @@ BT::NodeStatus DetachObject::tick()
   return BT::NodeStatus::SUCCESS;
 }
 
+// ═══ dynamic-object runtime flags ═════════════════════════════════════════════
+// SetAttachedCollisionCheck: flips the scene_manager_node planning-collision check
+// for GRASPED objects (its SetBool service). ON => the planner routes the held
+// payload around the static/actuated meshes (e.g. into the prewash); OFF => the
+// payload is transparent to them (e.g. at the pick, where it sits on the belt).
+// BLOCKS on the service response so the ACM is applied BEFORE the next move plans.
+// Missing service (e.g. mock with no scene loader) is non-fatal.
+BT::PortsList SetAttachedCollisionCheck::providedPorts()
+{ return {BT::InputPort<std::string>("value"),   // "true"|"false"
+          BT::InputPort<std::string>("service", "/scene_manager_node/attached_collision_check")}; }
+BT::NodeStatus SetAttachedCollisionCheck::tick()
+{
+  auto* ctx = ctxOf(config());
+  const std::string v = in(*this, "value");
+  const bool value = (v == "true" || v == "1");
+  const std::string srv = in(*this, "service", "/scene_manager_node/attached_collision_check");
+  static rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr client;
+  if (!client) client = ctx->node->create_client<std_srvs::srv::SetBool>(srv);
+  if (!client->wait_for_service(std::chrono::seconds(2)))
+  {
+    RCLCPP_WARN(nlog(config()), "SetAttachedCollisionCheck: service '%s' unavailable — skipping "
+                "(no scene loader?)", srv.c_str());
+    return BT::NodeStatus::SUCCESS;   // non-fatal
+  }
+  auto req = std::make_shared<std_srvs::srv::SetBool::Request>();
+  req->data = value;
+  auto fut = client->async_send_request(req);
+  if (fut.wait_for(std::chrono::seconds(5)) != std::future_status::ready)
+  {
+    RCLCPP_ERROR(nlog(config()), "SetAttachedCollisionCheck: service timed out");
+    return BT::NodeStatus::FAILURE;
+  }
+  RCLCPP_INFO(nlog(config()), "SetAttachedCollisionCheck: %s", value ? "ON" : "OFF");
+  return BT::NodeStatus::SUCCESS;
+}
+
+// SetReleasePolicy: tells the Isaac manipulation adapter what a grasped object does
+// on the NEXT release — freeze (stay put; a PLC clamp is imagined to hold it) or
+// gravity (fall). Latched Bool on /isaac_release_policy (freeze=true). Fire-and-
+// forget: Isaac applies it when the grip opens, which the tree sequences after.
+// A no-op in mock/real (no Isaac subscriber) — safe to leave in every tree.
+BT::PortsList SetReleasePolicy::providedPorts()
+{ return {BT::InputPort<std::string>("policy", "freeze"),   // "freeze"|"gravity"
+          BT::InputPort<std::string>("topic", "/isaac_release_policy")}; }
+BT::NodeStatus SetReleasePolicy::tick()
+{
+  auto* ctx = ctxOf(config());
+  const std::string policy = in(*this, "policy", "freeze");
+  const bool freeze = (policy != "gravity");   // freeze default; only "gravity" => fall
+  const std::string topic = in(*this, "topic", "/isaac_release_policy");
+  static rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr pub;
+  if (!pub) pub = ctx->node->create_publisher<std_msgs::msg::Bool>(
+                    topic, rclcpp::QoS(1).transient_local());
+  std_msgs::msg::Bool msg; msg.data = freeze;
+  pub->publish(msg);
+  RCLCPP_INFO(nlog(config()), "SetReleasePolicy: %s", freeze ? "freeze" : "gravity");
+  return BT::NodeStatus::SUCCESS;
+}
+
 // ═══ pose math ════════════════════════════════════════════════════════════════
 // Build a FULL TCP pose for one waypoint: position + orientation. Requires the
 // orientation (quaternion or RPY) — a TCP waypoint must fill ALL its DOF; there
@@ -603,6 +665,8 @@ void registerAllNodes(BT::BehaviorTreeFactory& f)
   f.registerNodeType<RemoveCollisionObject>("RemoveCollisionObject");
   f.registerNodeType<AttachObject>("AttachObject");
   f.registerNodeType<DetachObject>("DetachObject");
+  f.registerNodeType<SetAttachedCollisionCheck>("SetAttachedCollisionCheck");
+  f.registerNodeType<SetReleasePolicy>("SetReleasePolicy");
   f.registerNodeType<MakePose>("MakePose");
   f.registerNodeType<StoreCurrentPose>("StoreCurrentPose");
   f.registerNodeType<ComputeTcpTarget>("ComputeTcpTarget");

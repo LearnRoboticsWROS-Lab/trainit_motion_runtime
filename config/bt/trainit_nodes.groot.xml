@@ -87,6 +87,14 @@
       <input_port name="id"/>
       <input_port name="link" default="tcp"/>
     </Action>
+    <Action ID="SetAttachedCollisionCheck">
+      <input_port name="value"/>
+      <input_port name="service" default="/scene_manager_node/attached_collision_check"/>
+    </Action>
+    <Action ID="SetReleasePolicy">
+      <input_port name="policy" default="freeze"/>
+      <input_port name="topic" default="/isaac_release_policy"/>
+    </Action>
     <Action ID="MakePose">
       <input_port name="position"/>
       <input_port name="orientation" default=""/>

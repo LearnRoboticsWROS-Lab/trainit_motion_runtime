@@ -173,6 +173,11 @@ if(BUILD_TESTING)
     ament_add_gtest(${test_name} test/${test_name}.cpp)
     target_link_libraries(${test_name} trainit_motion_runtime)
   endforeach()
+
+  # BT node registration/load test needs the behaviortree_cpp headers too.
+  ament_add_gtest(test_bt_nodes test/test_bt_nodes.cpp)
+  target_link_libraries(test_bt_nodes trainit_motion_runtime)
+  link_btcpp(test_bt_nodes)
 endif()
 
 ament_package()
