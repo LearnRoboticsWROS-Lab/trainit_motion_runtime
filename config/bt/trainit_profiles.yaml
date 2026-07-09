@@ -1,0 +1,25 @@
+# Motion profiles for the BehaviorTree nodes (name -> MotionOptions).
+# A BT node's `profile` port selects one of these DEFAULTS. A per-move `speed`
+# (and `accel`) port — PERCENT 1..100 — OVERRIDES the profile's scaling for that
+# single move (the application "Set_Speed(80)"). Generic / robot-agnostic.
+motion_profiles:
+  default:
+    velocity_scaling: 0.10
+    acceleration_scaling: 0.10
+    planning_time: 5.0
+    planning_attempts: 1
+  transit:                 # free-space / PTP transfers (≈ 50% speed)
+    velocity_scaling: 0.50
+    acceleration_scaling: 0.50
+    planning_time: 5.0
+    planning_attempts: 10
+  approach:                # linear approach / retreat (≈ 20% — precise but not crawling)
+    velocity_scaling: 0.20
+    acceleration_scaling: 0.20
+    planning_time: 3.0
+    goal_position_tolerance: 0.001
+  process:                 # cartesian process paths (slow & smooth)
+    velocity_scaling: 0.05
+    acceleration_scaling: 0.05
+    retime_with_totg: true
+    smooth_with_ruckig: true

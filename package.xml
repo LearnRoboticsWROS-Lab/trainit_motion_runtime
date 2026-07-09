@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>trainit_motion_runtime</name>
+  <version>0.0.0</version>
+  <description>TrainIt Motion Runtime: a robot-agnostic, multi-planner motion
+    framework on top of MoveIt 2 (discrete PTP/LIN/CIRC, free-space OMPL/CHOMP,
+    process-path planning, validation and metrics). Embeds the generic planning
+    pipelines; robot-specific MoveIt configs plug in at launch time.</description>
+  <maintainer email="ros.master.ai@gmail.com">fra</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>rclcpp_action</depend>
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>control_msgs</depend>
+  <depend>shape_msgs</depend>
+  <depend>moveit_core</depend>
+  <depend>moveit_msgs</depend>
+  <depend>moveit_ros_planning</depend>
+  <depend>moveit_ros_planning_interface</depend>
+  <depend>tf2_eigen</depend>
+  <depend>tf2_geometry_msgs</depend>
+  <depend>yaml-cpp</depend>
+  <depend>behaviortree_cpp</depend>
+  <depend>geometric_shapes</depend>   <!-- scene loader: mesh -> shape_msgs/Mesh -->
+  <exec_depend>resource_retriever</exec_depend>   <!-- resolve package:// mesh URIs -->
+
+
+  <!-- planning plugins the runtime selects at launch -->
+  <exec_depend>moveit_planners_ompl</exec_depend>
+  <exec_depend>moveit_planners_chomp</exec_depend>
+  <exec_depend>pilz_industrial_motion_planner</exec_depend>
+  <exec_depend>moveit_ros_move_group</exec_depend>
+  <exec_depend>moveit_configs_utils</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

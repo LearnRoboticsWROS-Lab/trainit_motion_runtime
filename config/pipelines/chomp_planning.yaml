@@ -1,0 +1,43 @@
+# Generic CHOMP planning pipeline (MoveIt 2.5.9).
+#
+# CHOMP here is a full PlannerManager (chomp_interface/CHOMPPlanner), NOT a
+# request adapter — MoveIt 2.5.9 has no CHOMP optimizer adapter. The "ompl_chomp"
+# mode is therefore implemented at the C++ layer (OmplChompStrategy): plan with
+# the `ompl` pipeline, then re-plan with this `chomp` pipeline seeding CHOMP with
+# the OMPL trajectory (req.reference_trajectories). This file makes the standalone
+# `chomp` pipeline available so move_group loads the plugin.
+planning_plugin: chomp_interface/CHOMPPlanner
+enable_failure_recovery: true
+jiggle_fraction: 0.05
+request_adapters: >-
+    default_planner_request_adapters/AddTimeOptimalParameterization
+    default_planner_request_adapters/ResolveConstraintFrames
+    default_planner_request_adapters/FixWorkspaceBounds
+    default_planner_request_adapters/FixStartStateBounds
+    default_planner_request_adapters/FixStartStateCollision
+    default_planner_request_adapters/FixStartStatePathConstraints
+ridge_factor: 0.01
+start_state_max_bounds_error: 0.1
+
+# CHOMP optimizer parameters
+planning_time_limit: 10.0
+max_iterations: 200
+max_iterations_after_collision_free: 5
+smoothness_cost_weight: 0.1
+obstacle_cost_weight: 1.0
+learning_rate: 0.01
+animate_path: false
+add_randomness: false
+smoothness_cost_velocity: 0.0
+smoothness_cost_acceleration: 1.0
+smoothness_cost_jerk: 0.0
+hmc_discretization: 0.01
+hmc_stochasticity: 0.01
+hmc_annealing_factor: 0.99
+use_hamiltonian_monte_carlo: false
+use_stochastic_descent: true
+trajectory_initialization_method: "quintic-spline"
+collision_clearance: 0.2
+collision_threshold: 0.07
+random_jump_amount: 1.0
+joint_update_limit: 0.1

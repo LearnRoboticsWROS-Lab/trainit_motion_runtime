@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Groot2 node model for the TrainIt Motion Runtime BT nodes.
+     Include this in a Groot2 .btproj to edit trees with port dialogs offline. -->
+<root BTCPP_format="4">
+  <TreeNodesModel>
+    <Action ID="MoveWaypoint">
+      <input_port name="waypoint"/>
+    </Action>
+    <Action ID="MovePtp">
+      <input_port name="joints" default=""/>
+      <input_port name="named" default=""/>
+      <input_port name="profile" default="transit"/>
+    </Action>
+    <Action ID="MoveToNamed">
+      <input_port name="target"/>
+      <input_port name="profile" default="transit"/>
+      <input_port name="speed" default=""/>
+      <input_port name="accel" default=""/>
+    </Action>
+    <Action ID="MoveToJoint">
+      <input_port name="joints"/>
+      <input_port name="profile" default="transit"/>
+    </Action>
+    <Action ID="MoveLinear">
+      <input_port name="pose_key"/>
+      <input_port name="tip_link" default=""/>
+      <input_port name="profile" default="approach"/>
+      <input_port name="speed" default=""/>
+      <input_port name="accel" default=""/>
+    </Action>
+    <Action ID="MoveCircular">
+      <input_port name="goal_key"/>
+      <input_port name="aux"/>
+      <input_port name="aux_is_center" default="false"/>
+      <input_port name="tip_link" default=""/>
+      <input_port name="profile" default="approach"/>
+    </Action>
+    <Action ID="MoveCollisionFree">
+      <input_port name="pose_key" default=""/>
+      <input_port name="joints" default=""/>
+      <input_port name="named" default=""/>
+      <input_port name="planner" default=""/>
+      <input_port name="tip_link" default=""/>
+      <input_port name="profile" default="transit"/>
+      <input_port name="speed" default=""/>
+      <input_port name="accel" default=""/>
+    </Action>
+    <Action ID="MoveFree">
+      <input_port name="pose_key" default=""/>
+      <input_port name="joints" default=""/>
+      <input_port name="named" default=""/>
+      <input_port name="planner" default=""/>
+      <input_port name="tip_link" default=""/>
+      <input_port name="profile" default="transit"/>
+    </Action>
+    <Action ID="ExecuteProcessPath">
+      <input_port name="path_file"/>
+      <input_port name="profile" default="process"/>
+    </Action>
+    <Action ID="OpenGripper"/>
+    <Action ID="CloseGripper"/>
+    <Action ID="SetGripper">
+      <input_port name="position" default="1.0"/>
+    </Action>
+    <Action ID="EnableProcess">
+      <input_port name="channel"/>
+    </Action>
+    <Action ID="DisableProcess">
+      <input_port name="channel"/>
+    </Action>
+    <Action ID="AddCollisionObject">
+      <input_port name="id"/>
+      <input_port name="frame" default="base_link"/>
+      <input_port name="dims"/>
+      <input_port name="position" default="0;0;0"/>
+    </Action>
+    <Action ID="RemoveCollisionObject">
+      <input_port name="id"/>
+    </Action>
+    <Action ID="AttachObject">
+      <input_port name="id"/>
+      <input_port name="link" default="tcp"/>
+      <input_port name="dims"/>
+      <input_port name="position" default="0;0;0"/>
+    </Action>
+    <Action ID="DetachObject">
+      <input_port name="id"/>
+      <input_port name="link" default="tcp"/>
+    </Action>
+    <Action ID="MakePose">
+      <input_port name="position"/>
+      <input_port name="orientation" default=""/>
+      <input_port name="rpy_deg" default=""/>
+      <input_port name="out_key"/>
+    </Action>
+    <Action ID="StoreCurrentPose">
+      <input_port name="pose_key"/>
+    </Action>
+    <Action ID="ComputeTcpTarget">
+      <input_port name="target_xyz"/>
+      <input_port name="tcp_offset_xyz" default="0;0;0"/>
+      <input_port name="tcp_offset_rpy_deg" default="0;0;0"/>
+      <input_port name="use_current_orientation" default="true"/>
+      <input_port name="fixed_rpy_deg" default="0;0;0"/>
+      <input_port name="quat" default=""/>
+      <input_port name="out_key"/>
+    </Action>
+    <Action ID="OffsetPoseInToolFrame">
+      <input_port name="in_key"/>
+      <input_port name="dx" default="0.0"/>
+      <input_port name="dy" default="0.0"/>
+      <input_port name="dz" default="0.0"/>
+      <input_port name="out_key"/>
+    </Action>
+    <Action ID="OffsetPoseInBaseFrame">
+      <input_port name="in_key"/>
+      <input_port name="dx" default="0.0"/>
+      <input_port name="dy" default="0.0"/>
+      <input_port name="dz" default="0.0"/>
+      <input_port name="xyz" default=""/>
+      <input_port name="out_key"/>
+    </Action>
+    <Action ID="Wait">
+      <input_port name="duration_ms" default="100"/>
+    </Action>
+    <Action ID="Log">
+      <input_port name="message"/>
+    </Action>
+  </TreeNodesModel>
+</root>

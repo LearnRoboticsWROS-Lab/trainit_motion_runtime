@@ -1,0 +1,18 @@
+# Planner profiles (documentation of the ManualMotionStrategySelector tables).
+#
+# Maps planner_mode + MotionIntent to {pipeline_id, planner_id}. The selector
+# currently encodes this in C++ (manual_motion_strategy_selector.cpp); this file
+# documents it and is the future source for a config-driven selector.
+#
+# Invariant: APPROACH (LINEAR) and CIRCULAR are ALWAYS Pilz LIN/CIRC regardless
+# of planner_mode (deterministic MoveL/MoveC). Only the free-space transfer
+# (PTP / COLLISION_FREE) follows the mode.
+
+linear:   { pipeline: pilz_industrial_motion_planner, planner: LIN }
+circular: { pipeline: pilz_industrial_motion_planner, planner: CIRC }
+
+free_space_transfer:
+  pilz:       { pipeline: pilz_industrial_motion_planner, planner: PTP }
+  ompl:       { pipeline: ompl,  planner: RRTConnectkConfigDefault }
+  ompl_chomp: { pipeline: ompl,  planner: RRTConnectkConfigDefault, optimizer: chomp }  # two-stage C++
+  stomp:      { pipeline: stomp, planner: STOMP }   # guarded: degrades to ompl if unavailable
