@@ -74,6 +74,11 @@
 #include <geometric_shapes/shapes.h>
 #include <boost/variant/get.hpp>
 
+#include <Eigen/Geometry>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
+#include <tf2_eigen/tf2_eigen.hpp>
+
 using ApplySceneClient = rclcpp::Client<moveit_msgs::srv::ApplyPlanningScene>;
 using GetSceneClient   = rclcpp::Client<moveit_msgs::srv::GetPlanningScene>;
 using Acm              = moveit_msgs::msg::AllowedCollisionMatrix;
@@ -92,6 +97,8 @@ struct SceneObjectSpec
   std::vector<double> position    = {0.0, 0.0, 0.0};
   std::vector<double> orientation = {0.0, 0.0, 0.0, 1.0};
   bool dynamic = false;
+  std::vector<double> grasp_box;          // AABB extents (grasp target, attach_box mode)
+  std::vector<double> grasp_box_center;   // local AABB centre offset
 };
 
 class SceneManagerNode : public rclcpp::Node
@@ -119,6 +126,11 @@ public:
       std::bind(&SceneManagerNode::onSetCheck, this,
                 std::placeholders::_1, std::placeholders::_2));
 
+    // TF: to place a grasped object relative to the tool at grasp time and re-place it
+    // at the tool pose on release (both grasp modes).
+    tf_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
+    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+
     init_timer_ = create_wall_timer(
       std::chrono::seconds(1),
       std::bind(&SceneManagerNode::loadInitialScene, this));
@@ -144,6 +156,10 @@ private:
     declare_parameter<int>("scene_update_wait_ms", 800);
     declare_parameter<std::string>("gripper_cmd_topic", "/isaac_gripper_cmd");
     declare_parameter<std::string>("attach_link", "tcp");
+    // how a grasped object is represented while held: "remove" (disappears on grasp,
+    // reappears at the tool on release — meshes stay meshes) | "attach_box" (attaches
+    // as its AABB box so attached_collision_check works).
+    declare_parameter<std::string>("grasp_attach_mode", "remove");
     // default OFF: at the pick the crate (and its bottles) sit ON the belt, so an
     // attached bottle is in contact with the belt mesh -> with the check ON the start
     // state is invalid and the arm can't move. OFF = transparent so the arm always
@@ -189,6 +205,10 @@ private:
     out.orientation = get_parameter(prefix + "orientation").as_double_array();
     declare_parameter<bool>(prefix + "dynamic", false);
     out.dynamic = get_parameter(prefix + "dynamic").as_bool();
+    declare_parameter<std::vector<double>>(prefix + "grasp_box", std::vector<double>{});
+    out.grasp_box = get_parameter(prefix + "grasp_box").as_double_array();
+    declare_parameter<std::vector<double>>(prefix + "grasp_box_center", std::vector<double>{});
+    out.grasp_box_center = get_parameter(prefix + "grasp_box_center").as_double_array();
     return !out.type.empty();
   }
 
@@ -404,6 +424,7 @@ private:
       scene_update_wait_ms_ = get_parameter("scene_update_wait_ms").as_int();
       attach_link_ = get_parameter("attach_link").as_string();
       collision_check_ = get_parameter("attached_collision_check").as_bool();
+      grasp_mode_ = get_parameter("grasp_attach_mode").as_string();
       touch_links_ = getStringArray("touch_links");
       attach_ids_ = getStringArray("attach_object_ids");
       const auto ids = getStringArray("object_ids");
@@ -433,6 +454,9 @@ private:
           if (spec.dynamic) {
             forced_[id] = obj;        // republished as a WORLD object at force_republish_hz
             dyn_objects_[id] = obj;   // persistent geometry, reused when attaching
+            world_pose_[id] = objectPose(obj);          // current world pose (tracked)
+            grasp_box_[id] = spec.grasp_box;            // AABB for attach_box mode
+            grasp_box_center_[id] = spec.grasp_box_center;
             dynamic_ids.push_back(id);
           } else {
             static_ids_.push_back(id);   // checked meshes attached objs route around
@@ -472,93 +496,151 @@ private:
     publishDiffOnTopic(objs);
   }
 
-  // ---- gripper-triggered attach / detach -----------------------------------
+  // ---- geometry helpers ----------------------------------------------------
+  static geometry_msgs::msg::Pose objectPose(const moveit_msgs::msg::CollisionObject & o)
+  {
+    if (!o.mesh_poses.empty())      return o.mesh_poses[0];
+    if (!o.primitive_poses.empty()) return o.primitive_poses[0];
+    return geometry_msgs::msg::Pose();
+  }
+
+  static void setObjectPose(moveit_msgs::msg::CollisionObject & o,
+                            const geometry_msgs::msg::Pose & p)
+  {
+    for (auto & mp : o.mesh_poses) mp = p;
+    for (auto & pp : o.primitive_poses) pp = p;
+  }
+
+  bool tcpInBase(Eigen::Isometry3d & out)
+  {
+    try {
+      const auto tf = tf_buffer_->lookupTransform(
+        frame_id_, attach_link_, tf2::TimePointZero, tf2::durationFromSec(2.0));
+      out = tf2::transformToEigen(tf);
+      return true;
+    } catch (const std::exception & e) {
+      RCLCPP_ERROR(get_logger(), "[GRASP] TF %s->%s failed: %s",
+                   frame_id_.c_str(), attach_link_.c_str(), e.what());
+      return false;
+    }
+  }
+
+  // ---- gripper-triggered grasp / release -----------------------------------
   void onGripperCmd(const std_msgs::msg::Bool::SharedPtr msg)
   {
     const bool closed = msg->data;
     if (closed == gripper_closed_) return;   // edge-triggered
     gripper_closed_ = closed;
     // diagnostic: if this line never prints on gripper close, the /isaac_gripper_cmd
-    // signal isn't reaching the node (check the bridge / QoS), not the attach itself.
-    RCLCPP_INFO(get_logger(), "[ATTACH] gripper cmd = %s (scene loaded=%s)",
-                closed ? "CLOSE" : "OPEN", initial_loaded_ ? "yes" : "no");
+    // signal isn't reaching the node (check the bridge / QoS), not the grasp itself.
+    RCLCPP_INFO(get_logger(), "[GRASP] gripper cmd = %s (mode=%s, scene loaded=%s)",
+                closed ? "CLOSE" : "OPEN", grasp_mode_.c_str(),
+                initial_loaded_ ? "yes" : "no");
     if (!initial_loaded_) return;            // scene not up yet
-    if (closed) attachObjects();
-    else        detachObjects();
+    if (closed) graspObjects();
+    else        releaseObjects();
   }
 
-  void attachObjects()
+  // On CLOSE: record each object's pose relative to the tool, REMOVE its mesh from the
+  // world (meshes are never attached — that is what froze RViz), and in attach_box mode
+  // also attach a cheap AABB box to the tool so the planner stays payload-aware.
+  void graspObjects()
   {
     if (attach_ids_.empty()) return;
+    Eigen::Isometry3d T_tcp;
+    if (!tcpInBase(T_tcp)) return;
     moveit_msgs::msg::PlanningScene ps;
-    size_t nattached = 0;
+    size_t n = 0;
     {
       std::lock_guard<std::mutex> lock(scene_mutex_);
       for (const auto & id : attach_ids_) {
-        if (dyn_objects_.find(id) == dyn_objects_.end()) {
-          RCLCPP_WARN(get_logger(), "[ATTACH] '%s' is not a known dynamic object; skipping.",
-                      id.c_str());
-          continue;
-        }
-        // Attach with EMPTY geometry: MoveIt moves the SAME-id world object (at its
-        // CURRENT pose) into the attached state. Crucial for re-picking: after a
-        // place+detach the object sits at the release pose, so re-attaching must use
-        // that current pose — carrying the cached (scene.yaml) geometry would teleport
-        // it back to its initial crate pose and corrupt later planning. No explicit
-        // world REMOVE: MoveIt moves the object itself, keeping its ACM linkage.
-        moveit_msgs::msg::AttachedCollisionObject aco;
-        aco.link_name = attach_link_;
-        aco.object.id = id;
-        aco.object.header.frame_id = frame_id_;
-        aco.object.operation = moveit_msgs::msg::CollisionObject::ADD;
-        aco.touch_links = touch_links_;
-        ps.robot_state.attached_collision_objects.push_back(aco);
+        if (dyn_objects_.find(id) == dyn_objects_.end()) continue;
+        Eigen::Isometry3d T_obj;
+        tf2::fromMsg(world_pose_.count(id) ? world_pose_[id]
+                                           : objectPose(dyn_objects_[id]), T_obj);
+        grasp_offset_[id] = T_tcp.inverse() * T_obj;   // object in the tool frame
 
-        attached_.insert(id);
-        forced_.erase(id);   // stop re-asserting it as a WORLD object (now attached)
-        ++nattached;
+        moveit_msgs::msg::CollisionObject rm;           // remove the world mesh
+        rm.id = id; rm.header.frame_id = frame_id_;
+        rm.operation = moveit_msgs::msg::CollisionObject::REMOVE;
+        ps.world.collision_objects.push_back(rm);
+        forced_.erase(id);
+
+        if (grasp_mode_ == "attach_box" && grasp_box_[id].size() == 3) {
+          moveit_msgs::msg::AttachedCollisionObject aco;
+          aco.link_name = attach_link_;
+          aco.object.id = id;
+          aco.object.header.frame_id = attach_link_;    // box pose given in the tool frame
+          aco.object.operation = moveit_msgs::msg::CollisionObject::ADD;
+          shape_msgs::msg::SolidPrimitive box;
+          box.type = shape_msgs::msg::SolidPrimitive::BOX;
+          box.dimensions = {grasp_box_[id][0], grasp_box_[id][1], grasp_box_[id][2]};
+          aco.object.primitives.push_back(box);
+          Eigen::Isometry3d T_box = grasp_offset_[id];  // centre the box on the AABB
+          const auto & c = grasp_box_center_[id];
+          if (c.size() == 3) T_box = T_box * Eigen::Translation3d(c[0], c[1], c[2]);
+          aco.object.primitive_poses.push_back(tf2::toMsg(T_box));
+          aco.touch_links = touch_links_;
+          ps.robot_state.attached_collision_objects.push_back(aco);
+          attached_.insert(id);
+        }
+        ++n;
       }
     }
-    if (nattached == 0) { RCLCPP_WARN(get_logger(), "[ATTACH] nothing to attach."); return; }
-    if (!applyScene(ps, "ATTACH")) {
-      RCLCPP_ERROR(get_logger(), "[ATTACH] move_group rejected the attach diff.");
-      return;
-    }
-    applyAttachedAcm();
-    RCLCPP_INFO(get_logger(), "[ATTACH] gripper CLOSE -> %zu object(s) attached to '%s'.",
-                nattached, attach_link_.c_str());
+    if (n == 0) return;
+    if (!applyScene(ps, "GRASP")) return;
+    if (grasp_mode_ == "attach_box") applyAttachedAcm();
+    RCLCPP_INFO(get_logger(), "[GRASP] CLOSE -> %zu object(s) %s.", n,
+                grasp_mode_ == "attach_box" ? "attached as AABB boxes"
+                                            : "removed from the scene (held)");
   }
 
-  void detachObjects()
+  // On OPEN: detach any box, and re-ADD each held object's MESH at the tool pose x the
+  // recorded grasp offset -> it reappears where the EE released it.
+  void releaseObjects()
   {
-    std::vector<std::string> detached;
+    Eigen::Isometry3d T_tcp;
+    const bool have_tcp = tcpInBase(T_tcp);
     moveit_msgs::msg::PlanningScene ps;
+    std::vector<std::string> released;
     {
       std::lock_guard<std::mutex> lock(scene_mutex_);
-      if (attached_.empty()) return;
-      for (const auto & id : attached_) {
-        moveit_msgs::msg::AttachedCollisionObject aco;
-        aco.link_name = attach_link_;
-        aco.object.id = id;
-        aco.object.operation = moveit_msgs::msg::CollisionObject::REMOVE;  // -> back to world
-        ps.robot_state.attached_collision_objects.push_back(aco);
-        detached.push_back(id);
+      for (const auto & id : attach_ids_) {
+        if (grasp_offset_.find(id) == grasp_offset_.end()) continue;  // wasn't grasped
+        if (attached_.count(id)) {
+          moveit_msgs::msg::AttachedCollisionObject aco;   // detach the box
+          aco.link_name = attach_link_;
+          aco.object.id = id;
+          aco.object.operation = moveit_msgs::msg::CollisionObject::REMOVE;
+          ps.robot_state.attached_collision_objects.push_back(aco);
+          attached_.erase(id);
+        }
+        geometry_msgs::msg::Pose newP =
+          have_tcp ? tf2::toMsg(Eigen::Isometry3d(T_tcp * grasp_offset_[id]))
+                   : objectPose(dyn_objects_[id]);
+        auto obj = dyn_objects_[id];                       // cached MESH collision object
+        obj.operation = moveit_msgs::msg::CollisionObject::ADD;
+        obj.header.frame_id = frame_id_;
+        setObjectPose(obj, newP);
+        ps.world.collision_objects.push_back(obj);
+        world_pose_[id] = newP;                            // track for re-pick
+        forced_[id] = obj;                                 // dynamic world object again
+        grasp_offset_.erase(id);
+        released.push_back(id);
       }
-      attached_.clear();
     }
-    if (!applyScene(ps, "DETACH")) return;   // MoveIt re-adds them to the world where released
-    // released objects are free dynamic objects again -> transparent, and clear any
-    // per-static "checked" entries left from the attached phase.
-    Acm acm;
+    if (released.empty()) return;
+    if (!applyScene(ps, "RELEASE")) return;
+    Acm acm;                                               // released -> transparent again
     if (fetchAcm(acm)) {
-      for (const auto & id : detached) {
+      for (const auto & id : released) {
         setAcmDefault(acm, id, true);
         for (const auto & s : static_ids_) setAcmEntry(acm, id, s, true);
       }
       applyAcm(acm);
     }
-    RCLCPP_INFO(get_logger(), "[ATTACH] gripper OPEN -> %zu object(s) detached (stay in place).",
-                detached.size());
+    RCLCPP_INFO(get_logger(), "[GRASP] OPEN -> %zu object(s) reappear at the tool pose.",
+                released.size());
   }
 
   // Attached objects: always allowed vs everything by DEFAULT (so vs the gripper —
@@ -617,9 +699,18 @@ private:
   std::vector<std::string> touch_links_;
   std::vector<std::string> attach_ids_;    // objects that attach on close
   std::vector<std::string> static_ids_;    // checked meshes attached objs route around
-  std::set<std::string> attached_;         // currently attached
+  std::set<std::string> attached_;         // currently attached (attach_box mode)
   bool collision_check_ = true;
   bool gripper_closed_ = false;
+
+  // grasp handling
+  std::string grasp_mode_ = "remove";
+  std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
+  std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+  std::unordered_map<std::string, geometry_msgs::msg::Pose> world_pose_;      // current world pose
+  std::unordered_map<std::string, Eigen::Isometry3d> grasp_offset_;          // object in tool frame
+  std::unordered_map<std::string, std::vector<double>> grasp_box_;           // AABB extents
+  std::unordered_map<std::string, std::vector<double>> grasp_box_center_;    // local AABB centre
 };
 
 }  // namespace trainit_scene

@@ -19,6 +19,7 @@ find_package(moveit_core REQUIRED)
 find_package(moveit_msgs REQUIRED)
 find_package(moveit_ros_planning REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
+find_package(tf2_ros REQUIRED)
 find_package(tf2_eigen REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(yaml-cpp REQUIRED)
@@ -140,7 +141,7 @@ install(TARGETS trainit_run_bt DESTINATION lib/${PROJECT_NAME})
 add_executable(scene_manager_node src/scene_manager_node.cpp)
 ament_target_dependencies(scene_manager_node
   rclcpp moveit_ros_planning_interface moveit_msgs shape_msgs geometry_msgs geometric_shapes
-  std_msgs std_srvs)
+  std_msgs std_srvs tf2_ros tf2_eigen)
 install(TARGETS scene_manager_node DESTINATION lib/${PROJECT_NAME})
 
 # python launch-assembly helper (the "embedded generic moveit config")
