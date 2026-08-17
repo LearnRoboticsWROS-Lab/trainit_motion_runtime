@@ -10,6 +10,7 @@
 #define TRAINIT_MOTION_RUNTIME__MOVEIT_MOTION_RUNTIME_HPP_
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -36,6 +37,8 @@ public:
     ProcessPathBackend process_backend{ProcessPathBackend::PILZ_SEQUENCE};
     std::vector<std::string> available_pipelines{"ompl", "pilz_industrial_motion_planner", "chomp"};
     bool enforce_validation{true};   // abort execution if validation fails
+    int  plan_retries{3};            // extra re-plans on stochastic OMPL failure (RRTConnect
+                                     // + "invalid after postprocessing") before giving up
     double max_joint_jump{0.5};      // [rad] between consecutive waypoints
     double cartesian_fraction_threshold{1.0};   // accept cartesian path only if fraction >= this
     bool   allow_partial_cartesian{false};      // execute a partial cartesian path
@@ -63,6 +66,10 @@ public:
   const std::string& tipLink() const { return config_.tip_link; }
   const std::string& baseFrame() const { return config_.base_frame; }
   const std::string& group() const { return config_.group; }
+
+  // FK: tip-link pose of a NAMED group state — lets a LIN/CIRC move target a
+  // waypoint captured as joints (blind mode). std::nullopt if the state is unknown.
+  std::optional<geometry_msgs::msg::Pose> namedPose(const std::string& named) const;
   rclcpp::Node::SharedPtr node() const { return node_; }
 
 private:

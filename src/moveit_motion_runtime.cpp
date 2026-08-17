@@ -5,6 +5,9 @@
 #include "trainit_motion_runtime/pilz_sequence_backend.hpp"
 #include "trainit_motion_runtime/cartesian_waypoint_backend.hpp"
 
+#include <moveit/robot_state/robot_state.h>
+#include <tf2_eigen/tf2_eigen.hpp>
+
 #include <algorithm>
 #include <cmath>
 
@@ -90,6 +93,19 @@ bool MoveItMotionRuntime::doPlan(const std::string& pipeline, const std::string&
   return static_cast<bool>(code);
 }
 
+std::optional<geometry_msgs::msg::Pose>
+MoveItMotionRuntime::namedPose(const std::string& named) const
+{
+  if (!robot_model_) return std::nullopt;
+  const moveit::core::JointModelGroup* jmg = robot_model_->getJointModelGroup(config_.group);
+  if (!jmg) return std::nullopt;
+  moveit::core::RobotState rs(robot_model_);
+  rs.setToDefaultValues();
+  if (!rs.setToDefaultValues(jmg, named)) return std::nullopt;   // unknown named state
+  rs.update();
+  return tf2::toMsg(rs.getGlobalLinkTransform(config_.tip_link));
+}
+
 MotionResult MoveItMotionRuntime::planAndExecute(
   const PlannerProfile& profile, const MotionOptions& options,
   MotionIntent /*intent*/, const std::string& stage)
@@ -104,6 +120,16 @@ MotionResult MoveItMotionRuntime::planAndExecute(
   std::string eff_pipeline = profile.pipeline_id;
   std::string eff_planner = profile.planner_id;
 
+  // Retry stochastic planning failures. RRTConnect is randomized, and MoveIt can flag a
+  // FOUND path as "invalid (possibly due to postprocessing)" when the time-parameterized
+  // resampling grazes an obstacle — a fresh plan almost always clears it. (Pilz PTP/LIN are
+  // deterministic, so a retry is harmless and simply won't change the outcome.)
+  const int max_attempts = std::max(1, config_.plan_retries + 1);
+  for (int attempt = 1; attempt <= max_attempts && !planning_ok; ++attempt)
+  {
+  if (attempt > 1)
+    RCLCPP_WARN(node_->get_logger(), "%s: plan invalid, re-planning (attempt %d/%d)",
+                stage.c_str(), attempt, max_attempts);
   if (profile.two_stage_optimize)
   {
     // ompl_chomp: try the CHOMP optimizer pipeline; fall back to OMPL on failure.
@@ -132,6 +158,7 @@ MotionResult MoveItMotionRuntime::planAndExecute(
   else
   {
     planning_ok = doPlan(profile.pipeline_id, profile.planner_id, options, plan, plan_time, code_val);
+  }
   }
 
   const PlannerProfile eff_profile{eff_pipeline, eff_planner, false, ""};

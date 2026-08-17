@@ -186,18 +186,35 @@ BT::NodeStatus MoveWaypoint::tick()
     return p;
   };
 
+  // LIN/CIRC need a TCP pose. A waypoint captured as JOINTS (blind mode, type=named)
+  // has none -> resolve it via FK, so a linear approach to a captured pick works
+  // instead of failing "needs orientation".
+  auto cartesianGoal = [&]() -> geometry_msgs::msg::Pose {
+    if (!field("position").empty()) return buildPose();
+    const std::string named = field("named");
+    if (!named.empty())
+    {
+      auto p = ctx->runtime->namedPose(named);
+      if (p) return *p;
+      throw std::runtime_error("waypoint '" + wp + "': LIN/CIRC to named state '" + named +
+                               "' but FK failed (unknown in this config's SRDF)");
+    }
+    throw std::runtime_error("waypoint '" + wp + "': LIN/CIRC needs a TCP pose or a named "
+                             "joint state — capture a TCP pose, or use motion ptp/free");
+  };
+
   const std::string tip = ctx->runtime->tipLink();
   MotionResult r;
   try
   {
     if (motion == "lin" || motion == "linear")
     {
-      CartesianTarget t; t.pose = buildPose(); t.tip_link = tip;
+      CartesianTarget t; t.pose = cartesianGoal(); t.tip_link = tip;
       r = ctx->runtime->moveLinear(t, opts);
     }
     else if (motion == "circ" || motion == "circular")
     {
-      CircularTarget t; t.goal = buildPose(); t.tip_link = tip;
+      CircularTarget t; t.goal = cartesianGoal(); t.tip_link = tip;
       auto a = parseXyz3(field("aux"));
       t.aux.x = a[0]; t.aux.y = a[1]; t.aux.z = a[2];
       t.aux_is_center = (field("aux_is_center", "false") == "true");
