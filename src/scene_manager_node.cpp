@@ -68,6 +68,7 @@
 #include <rcl_interfaces/msg/parameter_descriptor.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <std_srvs/srv/set_bool.hpp>
+#include <std_srvs/srv/trigger.hpp>
 
 #include <geometric_shapes/mesh_operations.h>
 #include <geometric_shapes/shape_operations.h>
@@ -125,6 +126,17 @@ public:
       "~/attached_collision_check",
       std::bind(&SceneManagerNode::onSetCheck, this,
                 std::placeholders::_1, std::placeholders::_2));
+
+    // Scene reset (sim): put every DYNAMIC object back at its INITIAL pose — the
+    // cycle boundary of a looping application (cycle 2 must pick where cycle 1 did).
+    reset_srv_ = create_service<std_srvs::srv::Trigger>(
+      "~/reset_scene",
+      std::bind(&SceneManagerNode::onResetScene, this,
+                std::placeholders::_1, std::placeholders::_2));
+    // Seam for the Isaac side: the sim adapter can subscribe and teleport its prims
+    // back too (latched so a late-joining Isaac still sees the last reset).
+    rclcpp::QoS reset_qos(1); reset_qos.transient_local();
+    reset_pub_ = create_publisher<std_msgs::msg::Bool>("/isaac_scene_reset", reset_qos);
 
     // TF: to place a grasped object relative to the tool at grasp time and re-place it
     // at the tool pose on release (both grasp modes).
@@ -455,6 +467,7 @@ private:
             forced_[id] = obj;        // republished as a WORLD object at force_republish_hz
             dyn_objects_[id] = obj;   // persistent geometry, reused when attaching
             world_pose_[id] = objectPose(obj);          // current world pose (tracked)
+            initial_pose_[id] = world_pose_[id];        // reset_scene restores THIS
             grasp_box_[id] = spec.grasp_box;            // AABB for attach_box mode
             grasp_box_center_[id] = spec.grasp_box_center;
             dynamic_ids.push_back(id);
@@ -666,6 +679,55 @@ private:
                 attached_copy.size(), collision_check_ ? "ON" : "OFF", static_ids_.size());
   }
 
+  // Scene reset (sim): detach anything held and re-ADD every dynamic object at its
+  // INITIAL pose. Called by the ResetScene BT node at the loop's cycle boundary.
+  void onResetScene(const std::shared_ptr<std_srvs::srv::Trigger::Request> /*req*/,
+                    std::shared_ptr<std_srvs::srv::Trigger::Response> res)
+  {
+    moveit_msgs::msg::PlanningScene ps;
+    std::vector<std::string> dyn_ids;
+    {
+      std::lock_guard<std::mutex> lock(scene_mutex_);
+      for (auto & kv : dyn_objects_) {
+        const std::string & id = kv.first;
+        if (attached_.count(id)) {                    // still held as a box: detach it
+          moveit_msgs::msg::AttachedCollisionObject aco;
+          aco.link_name = attach_link_;
+          aco.object.id = id;
+          aco.object.operation = moveit_msgs::msg::CollisionObject::REMOVE;
+          ps.robot_state.attached_collision_objects.push_back(aco);
+        }
+        auto obj = kv.second;                         // cached geometry
+        obj.operation = moveit_msgs::msg::CollisionObject::ADD;
+        obj.header.frame_id = frame_id_;
+        setObjectPose(obj, initial_pose_[id]);
+        ps.world.collision_objects.push_back(obj);
+        world_pose_[id] = initial_pose_[id];
+        forced_[id] = obj;
+        grasp_offset_.erase(id);
+        dyn_ids.push_back(id);
+      }
+      attached_.clear();
+    }
+    if (dyn_ids.empty()) {
+      res->success = false;
+      res->message = "no dynamic objects to reset";
+      return;
+    }
+    if (!applyScene(ps, "RESET")) {
+      res->success = false;
+      res->message = "reset diff failed";
+      return;
+    }
+    allowCollisions(dyn_ids);                          // transparent again, like startup
+    std_msgs::msg::Bool msg; msg.data = true;          // Isaac-side seam (latched)
+    reset_pub_->publish(msg);
+    res->success = true;
+    res->message = "scene reset: " + std::to_string(dyn_ids.size()) +
+                   " dynamic object(s) back to initial poses";
+    RCLCPP_INFO(get_logger(), "[RESET] %s", res->message.c_str());
+  }
+
   void onSetCheck(const std::shared_ptr<std_srvs::srv::SetBool::Request> req,
                   std::shared_ptr<std_srvs::srv::SetBool::Response> res)
   {
@@ -686,6 +748,8 @@ private:
   rclcpp::Publisher<moveit_msgs::msg::PlanningScene>::SharedPtr scene_pub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr gripper_sub_;
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr check_srv_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reset_srv_;
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr reset_pub_;
 
   std::mutex scene_mutex_;
   bool initial_loaded_ = false;
@@ -708,6 +772,7 @@ private:
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
   std::unordered_map<std::string, geometry_msgs::msg::Pose> world_pose_;      // current world pose
+  std::unordered_map<std::string, geometry_msgs::msg::Pose> initial_pose_;    // scene.yaml pose (reset)
   std::unordered_map<std::string, Eigen::Isometry3d> grasp_offset_;          // object in tool frame
   std::unordered_map<std::string, std::vector<double>> grasp_box_;           // AABB extents
   std::unordered_map<std::string, std::vector<double>> grasp_box_center_;    // local AABB centre

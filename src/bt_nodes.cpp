@@ -22,6 +22,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <std_srvs/srv/set_bool.hpp>
+#include <std_srvs/srv/trigger.hpp>
 
 namespace trainit
 {
@@ -524,6 +525,35 @@ BT::NodeStatus SetReleasePolicy::tick()
   return BT::NodeStatus::SUCCESS;
 }
 
+// ResetScene: put every dynamic object back at its scene.yaml pose (scene_manager
+// ~/reset_scene). The cycle boundary of a looping app in SIMULATION — cycle N+1
+// picks where cycle 1 did. The scene_manager also latches /isaac_scene_reset so the
+// Isaac adapter can teleport its prims. No-op (SUCCESS) without a scene loader.
+BT::PortsList ResetScene::providedPorts()
+{ return {BT::InputPort<std::string>("service", "/scene_manager_node/reset_scene")}; }
+BT::NodeStatus ResetScene::tick()
+{
+  auto* ctx = ctxOf(config());
+  const std::string srv = in(*this, "service", "/scene_manager_node/reset_scene");
+  static rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr client;
+  if (!client) client = ctx->node->create_client<std_srvs::srv::Trigger>(srv);
+  if (!client->wait_for_service(std::chrono::seconds(2)))
+  {
+    RCLCPP_WARN(nlog(config()), "ResetScene: service '%s' unavailable — skipping "
+                "(no scene loader?)", srv.c_str());
+    return BT::NodeStatus::SUCCESS;   // non-fatal
+  }
+  auto fut = client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+  if (fut.wait_for(std::chrono::seconds(10)) != std::future_status::ready)
+  {
+    RCLCPP_ERROR(nlog(config()), "ResetScene: service timed out");
+    return BT::NodeStatus::FAILURE;
+  }
+  auto resp = fut.get();
+  RCLCPP_INFO(nlog(config()), "ResetScene: %s", resp->message.c_str());
+  return resp->success ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
+}
+
 // ═══ pose math ════════════════════════════════════════════════════════════════
 // Build a FULL TCP pose for one waypoint: position + orientation. Requires the
 // orientation (quaternion or RPY) — a TCP waypoint must fill ALL its DOF; there
@@ -683,6 +713,7 @@ void registerAllNodes(BT::BehaviorTreeFactory& f)
   f.registerNodeType<AttachObject>("AttachObject");
   f.registerNodeType<DetachObject>("DetachObject");
   f.registerNodeType<SetAttachedCollisionCheck>("SetAttachedCollisionCheck");
+  f.registerNodeType<ResetScene>("ResetScene");
   f.registerNodeType<SetReleasePolicy>("SetReleasePolicy");
   f.registerNodeType<MakePose>("MakePose");
   f.registerNodeType<StoreCurrentPose>("StoreCurrentPose");
