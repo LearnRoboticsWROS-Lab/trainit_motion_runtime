@@ -29,6 +29,11 @@
 //                                gripper / the crate it rests on must touch it).
 //   --- gripper-triggered attach (dynamic objects become part of the EE) ---
 //   gripper_cmd_topic   (string, default /isaac_gripper_cmd)  Bool, true=close
+//   scene_reset_topic   (string, default /isaac_scene_reset)   Bool, latched. On
+//                                ~/reset_scene a RISING EDGE (true then false ~300 ms
+//                                later) is emitted so the hand-authored Isaac adapter
+//                                can teleport its dynamic prims home. Trigger on the
+//                                TRANSITION, never on the level.
 //   attach_link         (string, default tcp)   link the objects attach to
 //   touch_links         (string[]) robot links allowed to touch the attached objs
 //   attach_object_ids   (string[]) dynamic ids that attach on gripper close
@@ -41,6 +46,7 @@
 //                                Flip at runtime with the SetBool service
 //                                ~/attached_collision_check.
 
+#include <map>
 #include <algorithm>
 #include <chrono>
 #include <memory>
@@ -136,7 +142,8 @@ public:
     // Seam for the Isaac side: the sim adapter can subscribe and teleport its prims
     // back too (latched so a late-joining Isaac still sees the last reset).
     rclcpp::QoS reset_qos(1); reset_qos.transient_local();
-    reset_pub_ = create_publisher<std_msgs::msg::Bool>("/isaac_scene_reset", reset_qos);
+    reset_pub_ = create_publisher<std_msgs::msg::Bool>(
+      get_parameter("scene_reset_topic").as_string(), reset_qos);
 
     // TF: to place a grasped object relative to the tool at grasp time and re-place it
     // at the tool pose on release (both grasp modes).
@@ -167,6 +174,7 @@ private:
     declare_parameter<double>("force_republish_hz", 1.0);
     declare_parameter<int>("scene_update_wait_ms", 800);
     declare_parameter<std::string>("gripper_cmd_topic", "/isaac_gripper_cmd");
+    declare_parameter<std::string>("scene_reset_topic", "/isaac_scene_reset");
     declare_parameter<std::string>("attach_link", "tcp");
     // how a grasped object is represented while held: "remove" (disappears on grasp,
     // reappears at the tool on release — meshes stay meshes) | "attach_box" (attaches
@@ -563,6 +571,12 @@ private:
     Eigen::Isometry3d T_tcp;
     if (!tcpInBase(T_tcp)) return;
     moveit_msgs::msg::PlanningScene ps;
+    // STAGED state: committed only once /apply_planning_scene has accepted the diff.
+    // Mutating grasp_offset_/attached_/forced_ up front left the node believing it held
+    // an object the scene never received, so the next release "re-placed" a payload that
+    // was never attached — a silent desync that outlives the failed grasp.
+    std::map<std::string, Eigen::Isometry3d> pending_offset;
+    std::vector<std::string> pending_attached;
     size_t n = 0;
     {
       std::lock_guard<std::mutex> lock(scene_mutex_);
@@ -571,13 +585,12 @@ private:
         Eigen::Isometry3d T_obj;
         tf2::fromMsg(world_pose_.count(id) ? world_pose_[id]
                                            : objectPose(dyn_objects_[id]), T_obj);
-        grasp_offset_[id] = T_tcp.inverse() * T_obj;   // object in the tool frame
+        pending_offset[id] = T_tcp.inverse() * T_obj;  // object in the tool frame
 
         moveit_msgs::msg::CollisionObject rm;           // remove the world mesh
         rm.id = id; rm.header.frame_id = frame_id_;
         rm.operation = moveit_msgs::msg::CollisionObject::REMOVE;
         ps.world.collision_objects.push_back(rm);
-        forced_.erase(id);
 
         if (grasp_mode_ == "attach_box" && grasp_box_[id].size() == 3) {
           moveit_msgs::msg::AttachedCollisionObject aco;
@@ -589,19 +602,34 @@ private:
           box.type = shape_msgs::msg::SolidPrimitive::BOX;
           box.dimensions = {grasp_box_[id][0], grasp_box_[id][1], grasp_box_[id][2]};
           aco.object.primitives.push_back(box);
-          Eigen::Isometry3d T_box = grasp_offset_[id];  // centre the box on the AABB
+          Eigen::Isometry3d T_box = pending_offset[id];  // centre the box on the AABB
           const auto & c = grasp_box_center_[id];
           if (c.size() == 3) T_box = T_box * Eigen::Translation3d(c[0], c[1], c[2]);
           aco.object.primitive_poses.push_back(tf2::toMsg(T_box));
           aco.touch_links = touch_links_;
           ps.robot_state.attached_collision_objects.push_back(aco);
-          attached_.insert(id);
+          pending_attached.push_back(id);
         }
         ++n;
       }
     }
     if (n == 0) return;
-    if (!applyScene(ps, "GRASP")) return;
+    if (!applyScene(ps, "GRASP")) {
+      RCLCPP_ERROR(get_logger(),
+                   "[GRASP] scene NOT updated -> nothing attached and the node state is "
+                   "left untouched. The planner stays payload-blind for this transfer. "
+                   "A 'does not exist in this scene' warning from move_group usually "
+                   "means a SECOND scene_manager_node is fighting over the same scene.");
+      return;
+    }
+    {                                     // commit only what the scene actually accepted
+      std::lock_guard<std::mutex> lock(scene_mutex_);
+      for (const auto & kv : pending_offset) {
+        grasp_offset_[kv.first] = kv.second;
+        forced_.erase(kv.first);
+      }
+      for (const auto & id : pending_attached) attached_.insert(id);
+    }
     if (grasp_mode_ == "attach_box") applyAttachedAcm();
     RCLCPP_INFO(get_logger(), "[GRASP] CLOSE -> %zu object(s) %s.", n,
                 grasp_mode_ == "attach_box" ? "attached as AABB boxes"
@@ -681,6 +709,24 @@ private:
 
   // Scene reset (sim): detach anything held and re-ADD every dynamic object at its
   // INITIAL pose. Called by the ResetScene BT node at the loop's cycle boundary.
+  // Isaac-side seam. Publishing a permanent `true` on a LATCHED topic is unusable by a
+  // subscriber: dedupe on value and it fires once per session; act on every compute and
+  // the adapter pins its prims home every frame. So emit a RISING EDGE — true, then false
+  // shortly after — and let the adapter trigger on the transition. A late joiner reads the
+  // trailing `false`, i.e. "no reset pending", which is the correct resting state.
+  void publishResetPulse()
+  {
+    std_msgs::msg::Bool up; up.data = true;
+    reset_pub_->publish(up);
+    reset_pulse_timer_ = create_wall_timer(
+      std::chrono::milliseconds(reset_pulse_ms_),
+      [this]() {
+        std_msgs::msg::Bool down; down.data = false;
+        reset_pub_->publish(down);
+        reset_pulse_timer_->cancel();       // one-shot
+      });
+  }
+
   void onResetScene(const std::shared_ptr<std_srvs::srv::Trigger::Request> /*req*/,
                     std::shared_ptr<std_srvs::srv::Trigger::Response> res)
   {
@@ -720,8 +766,7 @@ private:
       return;
     }
     allowCollisions(dyn_ids);                          // transparent again, like startup
-    std_msgs::msg::Bool msg; msg.data = true;          // Isaac-side seam (latched)
-    reset_pub_->publish(msg);
+    publishResetPulse();
     res->success = true;
     res->message = "scene reset: " + std::to_string(dyn_ids.size()) +
                    " dynamic object(s) back to initial poses";
@@ -750,6 +795,8 @@ private:
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr check_srv_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reset_srv_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr reset_pub_;
+  rclcpp::TimerBase::SharedPtr reset_pulse_timer_;
+  int reset_pulse_ms_ = 300;      // width of the reset rising edge
 
   std::mutex scene_mutex_;
   bool initial_loaded_ = false;
