@@ -9,6 +9,8 @@
 //   ros2 run trainit_motion_runtime trainit_run_bt --ros-args -p bt_tree_file:=<xml>
 // (usually launched by the application package, which injects the MoveIt params).
 // =============================================================================
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
 #include <chrono>
 #include <memory>
 #include <string>
@@ -155,6 +157,11 @@ int main(int argc, char** argv)
 
   MotionProfileRegistry profiles = loadMotionProfiles(profiles_file);
   BtContext ctx{runtime.get(), gripper.get(), process.get(), node};
+  // TF for perception consumers (DetectObject). spin_thread=false: the executor above
+  // already spins this node, so the listener's subscriptions ride on it.
+  auto tf_buffer = std::make_shared<tf2_ros::Buffer>(node->get_clock());
+  auto tf_listener = std::make_shared<tf2_ros::TransformListener>(*tf_buffer, node, false);
+  ctx.tf = tf_buffer;
 
   BT::BehaviorTreeFactory factory;
   registerAllNodes(factory);

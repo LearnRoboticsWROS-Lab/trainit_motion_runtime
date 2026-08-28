@@ -20,6 +20,7 @@ find_package(moveit_msgs REQUIRED)
 find_package(moveit_ros_planning REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
 find_package(tf2_ros REQUIRED)
+find_package(vision_msgs REQUIRED)   # perception contract consumed by DetectObject
 find_package(tf2_eigen REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(yaml-cpp REQUIRED)
@@ -65,8 +66,10 @@ set(TRAINIT_DEPS
   moveit_msgs
   moveit_ros_planning
   moveit_ros_planning_interface
+  tf2_ros
   tf2_eigen
-  tf2_geometry_msgs)
+  tf2_geometry_msgs
+  vision_msgs)
 
 # --- core runtime library ----------------------------------------------------
 # Sources are added milestone by milestone; the build stays green at each step.

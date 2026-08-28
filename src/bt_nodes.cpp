@@ -23,6 +23,14 @@
 #include <std_msgs/msg/bool.hpp>
 #include <std_srvs/srv/set_bool.hpp>
 #include <std_srvs/srv/trigger.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
+#include <vision_msgs/msg/detection3_d_array.hpp>
+#include <map>
+#include <memory>
+#include <mutex>
 
 namespace trainit
 {
@@ -691,6 +699,255 @@ BT::NodeStatus Log::tick()
   return BT::NodeStatus::SUCCESS;
 }
 
+// ═══ perception ═══════════════════════════════════════════════════════════════
+namespace
+{
+// A logger that works WITHOUT a BtContext, so pure-blackboard nodes are unit-testable
+// with a bare tree (no runtime stack).
+rclcpp::Logger safeLog(const BT::NodeConfig& cfg)
+{
+  try { auto* c = cfg.blackboard->get<BtContext*>(BB_BT_CONTEXT); if (c && c->node) return c->node->get_logger(); }
+  catch (const std::exception&) {}
+  return rclcpp::get_logger("trainit_bt");
+}
+
+std::string fmtVec(const std::vector<double>& v)
+{
+  std::ostringstream os;
+  os.precision(6);
+  for (size_t i = 0; i < v.size(); ++i) { if (i) os << ';'; os << v[i]; }
+  return os.str();
+}
+
+// One subscription per topic, shared by every DetectObject that names it. Held as a
+// static so the subscription outlives a tick (the node object is recreated per tree).
+struct DetectionFeed
+{
+  std::mutex m;
+  vision_msgs::msg::Detection3DArray::SharedPtr latest;
+  uint64_t arrivals{0};
+  rclcpp::Subscription<vision_msgs::msg::Detection3DArray>::SharedPtr sub;
+};
+
+DetectionFeed& feedFor(const rclcpp::Node::SharedPtr& node, const std::string& topic)
+{
+  static std::map<std::string, std::shared_ptr<DetectionFeed>> feeds;
+  static std::mutex feeds_m;
+  std::lock_guard<std::mutex> lk(feeds_m);
+  auto& f = feeds[topic];
+  if (!f)
+  {
+    f = std::make_shared<DetectionFeed>();
+    // The perception contract publishes RELIABLE depth 1: a detection is an event the
+    // consumer waited for and must not miss.
+    auto qos = rclcpp::QoS(rclcpp::KeepLast(1)).reliable();
+    DetectionFeed* raw = f.get();
+    f->sub = node->create_subscription<vision_msgs::msg::Detection3DArray>(
+      topic, qos, [raw](vision_msgs::msg::Detection3DArray::SharedPtr msg) {
+        std::lock_guard<std::mutex> g(raw->m);
+        raw->latest = std::move(msg);
+        ++raw->arrivals;
+      });
+  }
+  return *f;
+}
+
+std::shared_ptr<tf2_ros::Buffer> tfFor(BtContext* ctx)
+{
+  if (ctx->tf) return ctx->tf;
+  // Older launcher without a buffer in the context: build one once, spun by the
+  // node's own executor (spin_thread=false).
+  static std::shared_ptr<tf2_ros::Buffer> buf;
+  static std::shared_ptr<tf2_ros::TransformListener> lis;
+  if (!buf)
+  {
+    buf = std::make_shared<tf2_ros::Buffer>(ctx->node->get_clock());
+    lis = std::make_shared<tf2_ros::TransformListener>(*buf, ctx->node, false);
+  }
+  return buf;
+}
+}  // namespace
+
+// DetectObject: wait for a detection FRESHER than this tick, transform it into
+// target_frame, and write it to the blackboard as strings the rest of the tree reads.
+//
+//   detector      name -> topic /perception/<detector>/detections (or give `topic`)
+//   class_id      keep only detections whose hypothesis.class_id matches ("" = any)
+//   target_frame  planning frame, default "base_link" (TF from the message's frame)
+//   timeout_ms    how long to wait for a fresh message
+//   out_key       prefix: writes <out_key>.position "x;y;z", .orientation "qx;qy;qz;qw",
+//                 .score, .class_id, .frame, .size "sx;sy;sz"
+//
+// Freshness is by ARRIVAL, not by stamp: a message that arrived after this tick began
+// is fresh, whatever clock the detector used. That survives sim/system clock mixes.
+BT::PortsList DetectObject::providedPorts()
+{ return {BT::InputPort<std::string>("detector"),
+          BT::InputPort<std::string>("topic", ""),
+          BT::InputPort<std::string>("class_id", ""),
+          BT::InputPort<std::string>("target_frame", "base_link"),
+          BT::InputPort<std::string>("timeout_ms", "3000"),
+          BT::InputPort<std::string>("min_score", "0"),
+          BT::InputPort<std::string>("out_key", "detected")}; }
+BT::NodeStatus DetectObject::tick()
+{
+  auto* ctx = ctxOf(config());
+  const std::string det = in(*this, "detector");
+  std::string topic = in(*this, "topic");
+  if (topic.empty())
+  {
+    if (det.empty()) { RCLCPP_ERROR(nlog(config()), "DetectObject: need 'detector' or 'topic'"); return BT::NodeStatus::FAILURE; }
+    topic = "/perception/" + det + "/detections";
+  }
+  const std::string want_class = in(*this, "class_id");
+  const std::string target = in(*this, "target_frame", "base_link");
+  const std::string out = in(*this, "out_key", "detected");
+  int timeout_ms = 3000; double min_score = 0.0;
+  try { timeout_ms = std::stoi(in(*this, "timeout_ms", "3000")); } catch (const std::exception&) {}
+  try { min_score = std::stod(in(*this, "min_score", "0")); } catch (const std::exception&) {}
+
+  DetectionFeed& feed = feedFor(ctx->node, topic);
+  uint64_t seen;
+  { std::lock_guard<std::mutex> g(feed.m); seen = feed.arrivals; }
+
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+  vision_msgs::msg::Detection3DArray::SharedPtr msg;
+  while (std::chrono::steady_clock::now() < deadline)
+  {
+    { std::lock_guard<std::mutex> g(feed.m); if (feed.arrivals > seen) { msg = feed.latest; break; } }
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  if (!msg)
+  {
+    RCLCPP_ERROR(nlog(config()), "DetectObject: no fresh detection on '%s' within %d ms "
+                 "(is the detector running? is it publishing RELIABLE?)", topic.c_str(), timeout_ms);
+    return BT::NodeStatus::FAILURE;
+  }
+
+  // pick the best matching detection
+  const vision_msgs::msg::Detection3D* best = nullptr; double best_score = -1.0;
+  for (const auto& d : msg->detections)
+  {
+    if (d.results.empty()) continue;
+    const auto& h = d.results.front();
+    if (!want_class.empty() && h.hypothesis.class_id != want_class) continue;
+    if (h.hypothesis.score < min_score) continue;
+    if (h.hypothesis.score > best_score) { best = &d; best_score = h.hypothesis.score; }
+  }
+  if (!best)
+  {
+    RCLCPP_WARN(nlog(config()), "DetectObject: fresh message on '%s' but no detection%s%s (had %zu)",
+                topic.c_str(), want_class.empty() ? "" : " of class ", want_class.c_str(), msg->detections.size());
+    return BT::NodeStatus::FAILURE;
+  }
+
+  // TF: the detector reports in its sensor's OPTICAL frame and knows nothing about robots.
+  const std::string src = best->header.frame_id.empty() ? msg->header.frame_id : best->header.frame_id;
+  geometry_msgs::msg::PoseStamped in_p, out_p;
+  in_p.header.frame_id = src;
+  in_p.pose = best->results.front().pose.pose;
+  try
+  {
+    auto tf = tfFor(ctx);
+    const auto T = tf->lookupTransform(target, src, tf2::TimePointZero, tf2::durationFromSec(2.0));
+    tf2::doTransform(in_p, out_p, T);
+  }
+  catch (const std::exception& e)
+  {
+    RCLCPP_ERROR(nlog(config()), "DetectObject: TF %s -> %s failed: %s", src.c_str(), target.c_str(), e.what());
+    return BT::NodeStatus::FAILURE;
+  }
+
+  auto bb = config().blackboard;
+  const auto& P = out_p.pose;
+  bb->set<std::string>(out + ".position", fmtVec({P.position.x, P.position.y, P.position.z}));
+  bb->set<std::string>(out + ".orientation", fmtVec({P.orientation.x, P.orientation.y, P.orientation.z, P.orientation.w}));
+  bb->set<std::string>(out + ".score", fmtVec({best_score}));
+  bb->set<std::string>(out + ".class_id", best->results.front().hypothesis.class_id);
+  bb->set<std::string>(out + ".frame", target);
+  bb->set<std::string>(out + ".size", fmtVec({best->bbox.size.x, best->bbox.size.y, best->bbox.size.z}));
+  RCLCPP_INFO(nlog(config()), "DetectObject: '%s' score %.2f at (%.4f, %.4f, %.4f) in %s -> BB[%s.*]",
+              best->results.front().hypothesis.class_id.c_str(), best_score,
+              P.position.x, P.position.y, P.position.z, target.c_str(), out.c_str());
+  return BT::NodeStatus::SUCCESS;
+}
+
+// SetWaypointFromDetection: make a data-driven waypoint point at a detection.
+//
+//   waypoint     the MoveWaypoint name to (re)define
+//   from         the DetectObject out_key
+//   dx dy dz     offset in the target frame (metres) -- dz=0.10 makes a pre-pick above
+//   orientation  keep         leave <waypoint>.orientation as bt_params set it
+//                from:<wp>    copy another waypoint's orientation (pre_pick from pick)
+//                detected     use the detection's orientation (fiducial / learned model)
+//                "qx;qy;qz;qw" literal
+//   type         "tcp" (default): a waypoint captured as joints becomes a TCP target
+//
+// Pure blackboard: no ROS, no runtime -- so it is unit-tested by ticking it.
+BT::PortsList SetWaypointFromDetection::providedPorts()
+{ return {BT::InputPort<std::string>("waypoint"),
+          BT::InputPort<std::string>("from", "detected"),
+          BT::InputPort<std::string>("dx", "0"), BT::InputPort<std::string>("dy", "0"),
+          BT::InputPort<std::string>("dz", "0"),
+          BT::InputPort<std::string>("orientation", "keep"),
+          BT::InputPort<std::string>("type", "tcp")}; }
+BT::NodeStatus SetWaypointFromDetection::tick()
+{
+  auto bb = config().blackboard;
+  auto log = safeLog(config());
+  const std::string wp = in(*this, "waypoint");
+  const std::string from = in(*this, "from", "detected");
+  if (wp.empty()) { RCLCPP_ERROR(log, "SetWaypointFromDetection: empty 'waypoint'"); return BT::NodeStatus::FAILURE; }
+
+  std::string src;
+  try { src = bb->get<std::string>(from + ".position"); }
+  catch (const std::exception&) {
+    RCLCPP_ERROR(log, "SetWaypointFromDetection: no '%s.position' on the blackboard (run DetectObject first)", from.c_str());
+    return BT::NodeStatus::FAILURE;
+  }
+  std::array<double, 3> p;
+  double dx = 0, dy = 0, dz = 0;
+  try
+  {
+    p = parseXyz3(src);
+    dx = std::stod(in(*this, "dx", "0")); dy = std::stod(in(*this, "dy", "0")); dz = std::stod(in(*this, "dz", "0"));
+  }
+  catch (const std::exception& e) { RCLCPP_ERROR(log, "SetWaypointFromDetection: %s", e.what()); return BT::NodeStatus::FAILURE; }
+
+  bb->set<std::string>(wp + ".position", fmtVec({p[0] + dx, p[1] + dy, p[2] + dz}));
+  bb->set<std::string>(wp + ".type", in(*this, "type", "tcp"));
+
+  const std::string ori = in(*this, "orientation", "keep");
+  try
+  {
+    if (ori == "detected")
+      bb->set<std::string>(wp + ".orientation", bb->get<std::string>(from + ".orientation"));
+    else if (ori.rfind("from:", 0) == 0)
+      bb->set<std::string>(wp + ".orientation", bb->get<std::string>(ori.substr(5) + ".orientation"));
+    else if (ori != "keep")
+    {
+      if (parseVec(ori).size() != 4) throw std::runtime_error("orientation literal needs qx;qy;qz;qw");
+      bb->set<std::string>(wp + ".orientation", ori);
+    }
+  }
+  catch (const std::exception& e)
+  {
+    RCLCPP_ERROR(log, "SetWaypointFromDetection '%s': orientation '%s': %s", wp.c_str(), ori.c_str(), e.what());
+    return BT::NodeStatus::FAILURE;
+  }
+  // a TCP waypoint MUST have an orientation, or MoveWaypoint will refuse it later
+  try { bb->get<std::string>(wp + ".orientation"); }
+  catch (const std::exception&)
+  {
+    RCLCPP_ERROR(log, "SetWaypointFromDetection '%s': no orientation -- bt_params has none for it; "
+                 "use orientation=\"from:<wp>\", \"detected\" or a literal", wp.c_str());
+    return BT::NodeStatus::FAILURE;
+  }
+  RCLCPP_INFO(log, "SetWaypointFromDetection: %s.position = %s (from %s %+.3f %+.3f %+.3f), type=%s, orientation=%s",
+              wp.c_str(), bb->get<std::string>(wp + ".position").c_str(), from.c_str(), dx, dy, dz,
+              in(*this, "type", "tcp").c_str(), ori.c_str());
+  return BT::NodeStatus::SUCCESS;
+}
+
 // ═══ registration ═════════════════════════════════════════════════════════════
 void registerAllNodes(BT::BehaviorTreeFactory& f)
 {
@@ -720,6 +977,8 @@ void registerAllNodes(BT::BehaviorTreeFactory& f)
   f.registerNodeType<ComputeTcpTarget>("ComputeTcpTarget");
   f.registerNodeType<OffsetPoseInToolFrame>("OffsetPoseInToolFrame");
   f.registerNodeType<OffsetPoseInBaseFrame>("OffsetPoseInBaseFrame");
+  f.registerNodeType<DetectObject>("DetectObject");
+  f.registerNodeType<SetWaypointFromDetection>("SetWaypointFromDetection");
   f.registerNodeType<Wait>("Wait");
   f.registerNodeType<Log>("Log");
 }

@@ -12,7 +12,10 @@
 #ifndef TRAINIT_MOTION_RUNTIME__BT_CONTEXT_HPP_
 #define TRAINIT_MOTION_RUNTIME__BT_CONTEXT_HPP_
 
+#include <memory>
+
 #include <rclcpp/rclcpp.hpp>
+#include <tf2_ros/buffer.h>
 
 #include "trainit_motion_runtime/moveit_motion_runtime.hpp"
 #include "trainit_motion_runtime/gripper_controller.hpp"
@@ -33,6 +36,9 @@ struct BtContext
   GripperController*    gripper{nullptr};   // may be null (no end-effector configured)
   ProcessController*    process{nullptr};   // may be null
   rclcpp::Node::SharedPtr node;             // logging / clock
+  // TF, for nodes that consume data in a sensor frame (DetectObject). May be null
+  // with an older launcher: the node then builds its own buffer lazily.
+  std::shared_ptr<tf2_ros::Buffer> tf;
 };
 
 }  // namespace trainit

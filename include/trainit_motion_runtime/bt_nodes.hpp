@@ -62,6 +62,14 @@ TRAINIT_BT_NODE(ComputeTcpTarget)
 TRAINIT_BT_NODE(OffsetPoseInToolFrame)
 TRAINIT_BT_NODE(OffsetPoseInBaseFrame)
 
+// --- perception (consume the perception contract, write the blackboard) ---
+// The runtime stays algorithm-agnostic: it reads vision_msgs/Detection3DArray from
+// ANY detector and knows nothing about how the object was found. Because MoveWaypoint
+// reads "<wp>.position" as a blackboard string, a detection written there at runtime
+// drives the unchanged tree -- vision is a block, not a new application.
+TRAINIT_BT_NODE(DetectObject)             // wait for a FRESH detection, TF it, write "<out_key>.*"
+TRAINIT_BT_NODE(SetWaypointFromDetection) // "<from>.position" (+offset) -> "<waypoint>.position"
+
 // --- utility ---
 TRAINIT_BT_NODE(Wait)
 TRAINIT_BT_NODE(Log)
