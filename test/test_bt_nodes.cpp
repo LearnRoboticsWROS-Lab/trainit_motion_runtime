@@ -90,6 +90,59 @@ static BT::NodeStatus tickSetWaypoint(const std::string& attrs, BT::Blackboard::
   return tree.tickOnce();
 }
 
+
+// SetWaypointRelative is pure blackboard too.
+static BT::NodeStatus tickSetRelative(const std::string& attrs, BT::Blackboard::Ptr bb)
+{
+  BT::BehaviorTreeFactory factory;
+  trainit::registerAllNodes(factory);
+  const std::string xml =
+    "<root BTCPP_format=\"4\" main_tree_to_execute=\"T\"><BehaviorTree ID=\"T\">"
+    "<SetWaypointRelative " + attrs + "/></BehaviorTree></root>";
+  factory.registerBehaviorTreeFromText(xml);
+  auto tree = factory.createTree("T", bb);
+  return tree.tickOnce();
+}
+
+TEST(SetWaypointRelative, FollowsTheReferenceWithAnOffsetAndCopiesOrientation)
+{
+  auto bb = BT::Blackboard::create();
+  // pick as vision would have left it this cycle
+  bb->set<std::string>("pick.position", "0.6396;0.0297;0.0306");
+  bb->set<std::string>("pick.orientation", "-0.707;0.7071;-0.0072;0.0066");
+  auto st = tickSetRelative(R"(waypoint="post_pick" from="pick" dz="0.08")", bb);
+  ASSERT_EQ(st, BT::NodeStatus::SUCCESS);
+  EXPECT_EQ(bb->get<std::string>("post_pick.position"), "0.6396;0.0297;0.1106");
+  EXPECT_EQ(bb->get<std::string>("post_pick.orientation"), "-0.707;0.7071;-0.0072;0.0066");
+  EXPECT_EQ(bb->get<std::string>("post_pick.type"), "tcp");
+}
+
+TEST(SetWaypointRelative, RpyDeltaComposesInBaseFrame)
+{
+  auto bb = BT::Blackboard::create();
+  bb->set<std::string>("a.position", "1;0;0");
+  bb->set<std::string>("a.orientation", "0;0;0;1");     // identity reference
+  ASSERT_EQ(tickSetRelative(R"(waypoint="b" from="a" dyaw="90")", bb), BT::NodeStatus::SUCCESS);
+  // Rz(90 deg) on identity -> qz = sin(45 deg), qw = cos(45 deg)
+  const auto q = bb->get<std::string>("b.orientation");
+  std::vector<double> v;
+  { std::stringstream ss(q); std::string t;
+    while (std::getline(ss, t, ';')) v.push_back(std::stod(t)); }
+  ASSERT_EQ(v.size(), 4u);
+  EXPECT_NEAR(v[0], 0.0, 1e-6);
+  EXPECT_NEAR(v[1], 0.0, 1e-6);
+  EXPECT_NEAR(v[2], 0.7071067, 1e-5);
+  EXPECT_NEAR(v[3], 0.7071067, 1e-5);
+}
+
+TEST(SetWaypointRelative, FailsLoudlyWithoutAReferencePose)
+{
+  auto bb = BT::Blackboard::create();
+  EXPECT_EQ(tickSetRelative(R"(waypoint="b" from="ghost" dz="0.1")", bb), BT::NodeStatus::FAILURE);
+  bb->set<std::string>("j.position", "0;0;0");           // position but no orientation
+  EXPECT_EQ(tickSetRelative(R"(waypoint="b" from="j")", bb), BT::NodeStatus::FAILURE);
+}
+
 TEST(SetWaypointFromDetection, WritesPositionWithOffsetAndCopiesOrientation)
 {
   auto bb = BT::Blackboard::create();

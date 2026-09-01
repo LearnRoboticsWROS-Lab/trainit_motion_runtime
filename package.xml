@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>trainit_motion_runtime</name>
-  <version>0.0.0</version>
+  <version>1.4.0</version>
   <description>TrainIt Motion Runtime: a robot-agnostic, multi-planner motion
     framework on top of MoveIt 2 (discrete PTP/LIN/CIRC, free-space OMPL/CHOMP,
     process-path planning, validation and metrics). Embeds the generic planning

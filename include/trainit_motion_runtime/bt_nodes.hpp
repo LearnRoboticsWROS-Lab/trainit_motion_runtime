@@ -69,6 +69,7 @@ TRAINIT_BT_NODE(OffsetPoseInBaseFrame)
 // drives the unchanged tree -- vision is a block, not a new application.
 TRAINIT_BT_NODE(DetectObject)             // wait for a FRESH detection, TF it, write "<out_key>.*"
 TRAINIT_BT_NODE(SetWaypointFromDetection) // "<from>.position" (+offset) -> "<waypoint>.position"
+TRAINIT_BT_NODE(SetWaypointRelative)      // "<from>" pose (+offset, +rpy delta) -> "<waypoint>" (D-017)
 
 // --- utility ---
 TRAINIT_BT_NODE(Wait)

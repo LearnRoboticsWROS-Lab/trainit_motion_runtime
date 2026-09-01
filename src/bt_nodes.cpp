@@ -948,6 +948,93 @@ BT::NodeStatus SetWaypointFromDetection::tick()
   return BT::NodeStatus::SUCCESS;
 }
 
+// ─── SetWaypointRelative ──────────────────────────────────────────────────────
+// A waypoint DERIVED from another step's FINAL pose (D-017): reads the reference
+// waypoint's blackboard pose — which vision may have overwritten this very cycle —
+// and writes waypoint = reference (+ dx/dy/dz, + an rpy DELTA), promoted to tcp.
+// The canonical use is the retreat: post_pick = pick + 8 cm, wherever the camera
+// sent pick, with no second detection (at retreat time the arm occludes the object
+// anyway; a relative pose is motion's business, not perception's).
+//
+// Frames: dx/dy/dz are metres along the BASE-frame axes (same convention as
+// SetWaypointFromDetection). droll/dpitch/dyaw are DEGREES, an extrinsic
+// base-frame rotation composed ONTO the reference orientation:
+//   q_new = Rz(dyaw) * Ry(dpitch) * Rx(droll) * q_ref
+// All-zero delta (the common case) copies the reference orientation verbatim.
+//
+// The reference must carry a pose on the blackboard: a tcp waypoint from
+// bt_params, or one a vision/relative node promoted this cycle. Order the tree so
+// the reference is set FIRST (the generator emits relatives after vision lines).
+//
+// Pure blackboard: no ROS, no runtime -- so it is unit-tested by ticking it.
+BT::PortsList SetWaypointRelative::providedPorts()
+{ return {BT::InputPort<std::string>("waypoint"),
+          BT::InputPort<std::string>("from"),
+          BT::InputPort<std::string>("dx", "0"), BT::InputPort<std::string>("dy", "0"),
+          BT::InputPort<std::string>("dz", "0"),
+          BT::InputPort<std::string>("droll", "0"),
+          BT::InputPort<std::string>("dpitch", "0"),
+          BT::InputPort<std::string>("dyaw", "0"),
+          BT::InputPort<std::string>("type", "tcp")}; }
+BT::NodeStatus SetWaypointRelative::tick()
+{
+  auto bb = config().blackboard;
+  auto log = safeLog(config());
+  const std::string wp = in(*this, "waypoint");
+  const std::string from = in(*this, "from");
+  if (wp.empty() || from.empty())
+  { RCLCPP_ERROR(log, "SetWaypointRelative: 'waypoint' and 'from' are required"); return BT::NodeStatus::FAILURE; }
+
+  std::string src_p, src_q;
+  try
+  {
+    src_p = bb->get<std::string>(from + ".position");
+    src_q = bb->get<std::string>(from + ".orientation");
+  }
+  catch (const std::exception&)
+  {
+    RCLCPP_ERROR(log, "SetWaypointRelative '%s': reference '%s' has no pose on the blackboard -- "
+                 "it must be a tcp waypoint (or vision-promoted) and set BEFORE this node", wp.c_str(), from.c_str());
+    return BT::NodeStatus::FAILURE;
+  }
+
+  try
+  {
+    const auto p = parseXyz3(src_p);
+    const double dx = std::stod(in(*this, "dx", "0"));
+    const double dy = std::stod(in(*this, "dy", "0"));
+    const double dz = std::stod(in(*this, "dz", "0"));
+    const double dr = std::stod(in(*this, "droll", "0")) * M_PI / 180.0;
+    const double dp = std::stod(in(*this, "dpitch", "0")) * M_PI / 180.0;
+    const double dw = std::stod(in(*this, "dyaw", "0")) * M_PI / 180.0;
+
+    const auto q = parseVec(src_q);
+    if (q.size() != 4) throw std::runtime_error("reference orientation needs qx;qy;qz;qw");
+    Eigen::Quaterniond q_ref(q[3], q[0], q[1], q[2]);
+    Eigen::Quaterniond q_new = q_ref;
+    if (dr != 0.0 || dp != 0.0 || dw != 0.0)
+    {
+      const Eigen::Quaterniond q_delta =
+        Eigen::AngleAxisd(dw, Eigen::Vector3d::UnitZ()) *
+        Eigen::AngleAxisd(dp, Eigen::Vector3d::UnitY()) *
+        Eigen::AngleAxisd(dr, Eigen::Vector3d::UnitX());
+      q_new = (q_delta * q_ref).normalized();
+    }
+
+    bb->set<std::string>(wp + ".position", fmtVec({p[0] + dx, p[1] + dy, p[2] + dz}));
+    bb->set<std::string>(wp + ".orientation",
+                         fmtVec({q_new.x(), q_new.y(), q_new.z(), q_new.w()}));
+    bb->set<std::string>(wp + ".type", in(*this, "type", "tcp"));
+    RCLCPP_INFO(log, "SetWaypointRelative: %s = %s %+.3f %+.3f %+.3f (rpy %+.1f %+.1f %+.1f deg) -> %s",
+                wp.c_str(), from.c_str(), dx, dy, dz,
+                dr * 180.0 / M_PI, dp * 180.0 / M_PI, dw * 180.0 / M_PI,
+                bb->get<std::string>(wp + ".position").c_str());
+    return BT::NodeStatus::SUCCESS;
+  }
+  catch (const std::exception& e)
+  { RCLCPP_ERROR(log, "SetWaypointRelative '%s': %s", wp.c_str(), e.what()); return BT::NodeStatus::FAILURE; }
+}
+
 // ═══ registration ═════════════════════════════════════════════════════════════
 void registerAllNodes(BT::BehaviorTreeFactory& f)
 {
@@ -979,6 +1066,7 @@ void registerAllNodes(BT::BehaviorTreeFactory& f)
   f.registerNodeType<OffsetPoseInBaseFrame>("OffsetPoseInBaseFrame");
   f.registerNodeType<DetectObject>("DetectObject");
   f.registerNodeType<SetWaypointFromDetection>("SetWaypointFromDetection");
+  f.registerNodeType<SetWaypointRelative>("SetWaypointRelative");
   f.registerNodeType<Wait>("Wait");
   f.registerNodeType<Log>("Log");
 }
