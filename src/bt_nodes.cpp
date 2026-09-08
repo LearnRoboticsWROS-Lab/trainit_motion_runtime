@@ -21,6 +21,7 @@
 #include <geometry_msgs/msg/pose.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/bool.hpp>
+#include <std_msgs/msg/string.hpp>
 #include <std_srvs/srv/set_bool.hpp>
 #include <std_srvs/srv/trigger.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
@@ -1035,6 +1036,217 @@ BT::NodeStatus SetWaypointRelative::tick()
   { RCLCPP_ERROR(log, "SetWaypointRelative '%s': %s", wp.c_str(), e.what()); return BT::NodeStatus::FAILURE; }
 }
 
+// ═══ learned-policy execution ═══════════════════════════════════════════════════
+// Extension point (POLICY_EXECUTION.md, ADR-0005). These nodes keep TMR torch-free:
+// they only speak a ROS contract to the separate Pro package trainit_policy_runtime.
+namespace
+{
+// Generic "latest message on a topic" feed, shared across ticks (like DetectionFeed).
+template <typename MsgT>
+struct LatestFeed
+{
+  std::mutex m;
+  typename MsgT::SharedPtr latest;
+  uint64_t arrivals{0};
+  typename rclcpp::Subscription<MsgT>::SharedPtr sub;
+};
+
+template <typename MsgT>
+LatestFeed<MsgT>& latestFeedFor(const rclcpp::Node::SharedPtr& node,
+                                const std::string& topic, const rclcpp::QoS& qos)
+{
+  static std::map<std::string, std::shared_ptr<LatestFeed<MsgT>>> feeds;
+  static std::mutex feeds_m;
+  std::lock_guard<std::mutex> lk(feeds_m);
+  auto& f = feeds[topic];
+  if (!f)
+  {
+    f = std::make_shared<LatestFeed<MsgT>>();
+    LatestFeed<MsgT>* raw = f.get();
+    f->sub = node->create_subscription<MsgT>(
+      topic, qos, [raw](typename MsgT::SharedPtr msg) {
+        std::lock_guard<std::mutex> g(raw->m);
+        raw->latest = std::move(msg);
+        ++raw->arrivals;
+      });
+  }
+  return *f;
+}
+
+rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr triggerClientFor(
+  const rclcpp::Node::SharedPtr& node, const std::string& service)
+{
+  static std::map<std::string, rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr> clients;
+  static std::mutex m;
+  std::lock_guard<std::mutex> lk(m);
+  auto& c = clients[service];
+  if (!c) c = node->create_client<std_srvs::srv::Trigger>(service);
+  return c;
+}
+}  // namespace
+
+// RunPolicy: trigger a run in trainit_policy_runtime (the Pro package that owns the
+// policy) and wait for its part to finish. TMR stays torch-free -- it only calls a
+// std_srvs/Trigger service and reads a status string; it never loads a policy.
+//
+//   service       the runtime's run service (default /trainit_policy_runtime/run)
+//   status_topic  std_msgs/String JSON status (default /trainit_policy_runtime/status)
+//   mode          pure|hybrid|residual (informational + completion criterion)
+//   timeout_ms    max wait for pure/residual to run its window
+//
+// hybrid returns as soon as the run service returns (the policy has published its
+// decided target on the Detection3D contract -> the existing DetectObject/MoveWaypoint
+// move there). pure/residual return once the runtime leaves the "running" state. This
+// node only reports whether the policy RAN; the following CheckRobotState judges whether
+// it ended in the right state (fail-safe, ADR-0005).
+BT::PortsList RunPolicy::providedPorts()
+{ return {BT::InputPort<std::string>("service", "/trainit_policy_runtime/run"),
+          BT::InputPort<std::string>("status_topic", "/trainit_policy_runtime/status"),
+          BT::InputPort<std::string>("mode", "hybrid"),
+          BT::InputPort<std::string>("timeout_ms", "10000")}; }
+BT::NodeStatus RunPolicy::tick()
+{
+  auto* ctx = ctxOf(config());
+  const std::string service = in(*this, "service", "/trainit_policy_runtime/run");
+  const std::string status_topic = in(*this, "status_topic", "/trainit_policy_runtime/status");
+  const std::string mode = in(*this, "mode", "hybrid");
+  int timeout_ms = 10000;
+  try { timeout_ms = std::stoi(in(*this, "timeout_ms", "10000")); } catch (const std::exception&) {}
+
+  auto client = triggerClientFor(ctx->node, service);
+  if (!client->wait_for_service(std::chrono::seconds(2)))
+  {
+    RCLCPP_ERROR(nlog(config()), "RunPolicy: service '%s' unavailable -- is trainit_policy_runtime launched?",
+                 service.c_str());
+    return BT::NodeStatus::FAILURE;
+  }
+
+  // Baseline the status feed BEFORE starting, so we detect the run leaving "running".
+  auto status_qos = rclcpp::QoS(rclcpp::KeepLast(1)).best_effort();
+  LatestFeed<std_msgs::msg::String>* status = nullptr;
+  uint64_t status_base = 0;
+  if (mode != "hybrid")
+  {
+    status = &latestFeedFor<std_msgs::msg::String>(ctx->node, status_topic, status_qos);
+    std::lock_guard<std::mutex> g(status->m); status_base = status->arrivals;
+  }
+
+  auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
+  auto future = client->async_send_request(request);
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+  while (rclcpp::ok() && std::chrono::steady_clock::now() < deadline)
+  {
+    if (future.wait_for(std::chrono::milliseconds(10)) == std::future_status::ready) break;
+  }
+  if (future.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+  {
+    RCLCPP_ERROR(nlog(config()), "RunPolicy: run service '%s' did not respond within %d ms",
+                 service.c_str(), timeout_ms);
+    return BT::NodeStatus::FAILURE;
+  }
+  auto response = future.get();
+  if (!response->success)
+  {
+    RCLCPP_ERROR(nlog(config()), "RunPolicy: runtime refused the run: %s", response->message.c_str());
+    return BT::NodeStatus::FAILURE;
+  }
+  if (mode == "hybrid")
+  {
+    RCLCPP_INFO(nlog(config()), "RunPolicy(hybrid): target ready (%s)", response->message.c_str());
+    return BT::NodeStatus::SUCCESS;
+  }
+
+  // pure / residual: wait until the runtime leaves "running" (its window elapsed).
+  while (rclcpp::ok() && std::chrono::steady_clock::now() < deadline)
+  {
+    std::string state;
+    {
+      std::lock_guard<std::mutex> g(status->m);
+      if (status->arrivals > status_base && status->latest) state = status->latest->data;
+    }
+    if (!state.empty() && state.find("\"running\"") == std::string::npos)
+    {
+      RCLCPP_INFO(nlog(config()), "RunPolicy(%s): run ended (%s)", mode.c_str(), state.c_str());
+      return BT::NodeStatus::SUCCESS;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+  RCLCPP_WARN(nlog(config()), "RunPolicy(%s): stopped waiting after %d ms (letting CheckRobotState judge)",
+              mode.c_str(), timeout_ms);
+  return BT::NodeStatus::SUCCESS;
+}
+
+// CheckRobotState: assert the robot is in the state a policy card promised (end_state),
+// so the next step starts from a known configuration. Pure state check, no motion.
+//
+//   position           expected tcp position "x;y;z" in the planning frame ("" = skip)
+//   position_tolerance metres (default 0.03, the card's success radius)
+//   require_attached   "true" to require the suction/attached signal
+//   attached_topic     std_msgs/Bool that is true while the object is held ("" = skip)
+//   timeout_ms         how long to wait for a fresh attached message
+BT::PortsList CheckRobotState::providedPorts()
+{ return {BT::InputPort<std::string>("position", ""),
+          BT::InputPort<std::string>("position_tolerance", "0.03"),
+          BT::InputPort<std::string>("require_attached", "false"),
+          BT::InputPort<std::string>("attached_topic", ""),
+          BT::InputPort<std::string>("timeout_ms", "3000")}; }
+BT::NodeStatus CheckRobotState::tick()
+{
+  auto* ctx = ctxOf(config());
+  const std::string pos_s = in(*this, "position");
+  double tol = 0.03;
+  try { tol = std::stod(in(*this, "position_tolerance", "0.03")); } catch (const std::exception&) {}
+  const bool require_attached = (in(*this, "require_attached", "false") == "true");
+  const std::string attached_topic = in(*this, "attached_topic");
+  int timeout_ms = 3000;
+  try { timeout_ms = std::stoi(in(*this, "timeout_ms", "3000")); } catch (const std::exception&) {}
+
+  // 1) tcp position near the expected pose
+  if (!pos_s.empty())
+  {
+    if (!ctx->runtime)
+    { RCLCPP_ERROR(nlog(config()), "CheckRobotState: no runtime to read the current pose"); return BT::NodeStatus::FAILURE; }
+    std::array<double, 3> want{};
+    try { want = parseXyz3(pos_s); }
+    catch (const std::exception& e)
+    { RCLCPP_ERROR(nlog(config()), "CheckRobotState: bad 'position': %s", e.what()); return BT::NodeStatus::FAILURE; }
+    const auto cur = currentPose(ctx).position;
+    const double dx = cur.x - want[0], dy = cur.y - want[1], dz = cur.z - want[2];
+    const double dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+    if (dist > tol)
+    {
+      RCLCPP_ERROR(nlog(config()), "CheckRobotState: tcp %.4f m from expected (tol %.4f) -- policy did not reach the end pose",
+                   dist, tol);
+      return BT::NodeStatus::FAILURE;
+    }
+    RCLCPP_INFO(nlog(config()), "CheckRobotState: tcp within %.4f m of expected (tol %.4f)", dist, tol);
+  }
+
+  // 2) suction/attached
+  if (require_attached)
+  {
+    if (attached_topic.empty())
+    { RCLCPP_ERROR(nlog(config()), "CheckRobotState: require_attached set but no 'attached_topic'"); return BT::NodeStatus::FAILURE; }
+    auto qos = rclcpp::QoS(rclcpp::KeepLast(1)).best_effort();
+    auto& feed = latestFeedFor<std_msgs::msg::Bool>(ctx->node, attached_topic, qos);
+    uint64_t seen; { std::lock_guard<std::mutex> g(feed.m); seen = feed.arrivals; }
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+    std_msgs::msg::Bool::SharedPtr msg;
+    while (rclcpp::ok() && std::chrono::steady_clock::now() < deadline)
+    {
+      { std::lock_guard<std::mutex> g(feed.m); if (feed.arrivals > seen) { msg = feed.latest; break; } }
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    if (!msg)
+    { RCLCPP_ERROR(nlog(config()), "CheckRobotState: no attached signal on '%s' within %d ms", attached_topic.c_str(), timeout_ms); return BT::NodeStatus::FAILURE; }
+    if (!msg->data)
+    { RCLCPP_ERROR(nlog(config()), "CheckRobotState: object NOT attached -- policy ended without the object"); return BT::NodeStatus::FAILURE; }
+    RCLCPP_INFO(nlog(config()), "CheckRobotState: object attached");
+  }
+
+  return BT::NodeStatus::SUCCESS;
+}
+
 // ═══ registration ═════════════════════════════════════════════════════════════
 void registerAllNodes(BT::BehaviorTreeFactory& f)
 {
@@ -1067,6 +1279,8 @@ void registerAllNodes(BT::BehaviorTreeFactory& f)
   f.registerNodeType<DetectObject>("DetectObject");
   f.registerNodeType<SetWaypointFromDetection>("SetWaypointFromDetection");
   f.registerNodeType<SetWaypointRelative>("SetWaypointRelative");
+  f.registerNodeType<RunPolicy>("RunPolicy");
+  f.registerNodeType<CheckRobotState>("CheckRobotState");
   f.registerNodeType<Wait>("Wait");
   f.registerNodeType<Log>("Log");
 }

@@ -71,6 +71,18 @@ TRAINIT_BT_NODE(DetectObject)             // wait for a FRESH detection, TF it, 
 TRAINIT_BT_NODE(SetWaypointFromDetection) // "<from>.position" (+offset) -> "<waypoint>.position"
 TRAINIT_BT_NODE(SetWaypointRelative)      // "<from>" pose (+offset, +rpy delta) -> "<waypoint>" (D-017)
 
+// --- learned-policy execution (extension point; see docs POLICY_EXECUTION.md, ADR-0005) ---
+// The Community core stays torch-free: these nodes only speak a ROS contract to the
+// separate Pro package `trainit_policy_runtime`, which loads the policy and runs it.
+// RunPolicy triggers a run in one of three modes (pure|hybrid|residual) and waits; in
+// hybrid it returns once the policy has published its decided target on the Detection3D
+// contract, so the EXISTING DetectObject + SetWaypointFromDetection + MoveWaypoint
+// execute it smoothly (no policy-specific move node). CheckRobotState then asserts the
+// policy card's end_state, so a mis-ending policy fails safe instead of corrupting the
+// next step.
+TRAINIT_BT_NODE(RunPolicy)         // call the policy runtime's run service, wait for its part
+TRAINIT_BT_NODE(CheckRobotState)   // assert tcp near expected + suction/attached (the end_state)
+
 // --- utility ---
 TRAINIT_BT_NODE(Wait)
 TRAINIT_BT_NODE(Log)
