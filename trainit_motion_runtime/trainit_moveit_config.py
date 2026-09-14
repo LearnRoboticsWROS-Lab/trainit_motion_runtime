@@ -53,13 +53,35 @@ def generic_pipeline_params(pipelines=DEFAULT_PIPELINES):
     return params
 
 
+def _hardware_mappings(use_isaac=False, backend=None):
+    """The ros2_control hardware-plugin xacro args for a backend (ADR-0008).
+
+    Backward compatible: with ``backend=None`` this returns exactly the legacy
+    ``{"use_isaac": ...}`` mapping (so non-gazebo bundles/xacros are unchanged). When a
+    ``backend`` token is given it also sets ``use_gazebo`` — a gazebo-capable xacro selects
+    ``gazebo_ros2_control/GazeboSystem`` on ``use_gazebo``, ``TopicBasedSystem`` on
+    ``use_isaac``, else ``mock_components/GenericSystem``.
+    """
+    if backend is None:
+        return {"use_isaac": "true" if use_isaac else "false"}
+    b = str(backend)
+    return {"use_isaac": "true" if b == "isaac" else "false",
+            "use_gazebo": "true" if b == "gazebo" else "false"}
+
+
 def build_moveit_configs(robot_name="fr3wml",
                          moveit_config_package="fr3wml_app_moveit_config",
-                         use_isaac=False):
-    """Robot-specific MoveIt configs (description/semantic/kinematics/limits/controllers)."""
+                         use_isaac=False,
+                         backend=None):
+    """Robot-specific MoveIt configs (description/semantic/kinematics/limits/controllers).
+
+    ``backend`` (ADR-0008): a backend token (mock|isaac|gazebo|real) selecting the
+    ros2_control hardware plugin via the xacro. Legacy ``use_isaac`` still works when
+    ``backend`` is omitted.
+    """
     return (
         MoveItConfigsBuilder(robot_name, package_name=moveit_config_package)
-        .robot_description(mappings={"use_isaac": "true" if use_isaac else "false"})
+        .robot_description(mappings=_hardware_mappings(use_isaac, backend))
         .to_moveit_configs()
     )
 
@@ -88,6 +110,7 @@ DEFAULT_TRAJECTORY_EXECUTION = {
 def build_move_group_params(robot_name="fr3wml",
                             moveit_config_package="fr3wml_app_moveit_config",
                             use_isaac=False,
+                            backend=None,
                             pipelines=DEFAULT_PIPELINES,
                             default_pipeline="ompl",
                             trajectory_execution=None):
@@ -100,8 +123,11 @@ def build_move_group_params(robot_name="fr3wml",
     ``trajectory_execution``: optional dict overriding DEFAULT_TRAJECTORY_EXECUTION
     (e.g. ``{"trajectory_execution.allowed_start_tolerance": 0.0}`` to disable the
     start-state check).
+
+    ``backend`` (ADR-0008): a backend token (mock|isaac|gazebo|real) selecting the
+    ros2_control hardware plugin. Omit it to keep the legacy ``use_isaac`` behaviour.
     """
-    moveit_configs = build_moveit_configs(robot_name, moveit_config_package, use_isaac)
+    moveit_configs = build_moveit_configs(robot_name, moveit_config_package, use_isaac, backend)
     params = moveit_configs.to_dict()
 
     params["planning_pipelines"] = list(pipelines)
