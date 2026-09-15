@@ -391,20 +391,43 @@ BT::NodeStatus ExecuteProcessPath::tick()
 }
 
 // ═══ end-effector ═════════════════════════════════════════════════════════════
+// Grasp/release honour the two ADR-0010 axes: the ACTUATION (a GripperCommand to the
+// open/closed target — 1.0/0.0 by default == the historical suction on/off) AND, when a
+// gripper_cmd_topic is configured, the SIM GRASP ADAPTER signal (a latched Bool that fires
+// the planning-scene attach + the active backend's adapter). Either may be absent: a cell
+// with only a grasp adapter (no actuation controller) still welds; the "no gripper" error
+// is kept only when NEITHER is configured.
+namespace
+{
+void fireGraspSignal(const trainit::BtContext* ctx, bool close)
+{
+  if (!ctx->gripper_cmd_pub) return;
+  std_msgs::msg::Bool m;
+  m.data = close;
+  ctx->gripper_cmd_pub->publish(m);
+}
+}  // namespace
+
 BT::PortsList OpenGripper::providedPorts() { return {}; }
 BT::NodeStatus OpenGripper::tick()
 {
   auto* ctx = ctxOf(config());
-  if (!ctx->gripper) { RCLCPP_ERROR(nlog(config()), "OpenGripper: no gripper configured"); return BT::NodeStatus::FAILURE; }
-  return ctx->gripper->open() ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
+  if (!ctx->gripper && !ctx->gripper_cmd_pub)
+  { RCLCPP_ERROR(nlog(config()), "OpenGripper: no gripper configured"); return BT::NodeStatus::FAILURE; }
+  const bool ok = ctx->gripper ? ctx->gripper->command(ctx->gripper_open_pos) : true;
+  if (ok) fireGraspSignal(ctx, false);
+  return ok ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
 }
 
 BT::PortsList CloseGripper::providedPorts() { return {}; }
 BT::NodeStatus CloseGripper::tick()
 {
   auto* ctx = ctxOf(config());
-  if (!ctx->gripper) { RCLCPP_ERROR(nlog(config()), "CloseGripper: no gripper configured"); return BT::NodeStatus::FAILURE; }
-  return ctx->gripper->close() ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
+  if (!ctx->gripper && !ctx->gripper_cmd_pub)
+  { RCLCPP_ERROR(nlog(config()), "CloseGripper: no gripper configured"); return BT::NodeStatus::FAILURE; }
+  const bool ok = ctx->gripper ? ctx->gripper->command(ctx->gripper_close_pos) : true;
+  if (ok) fireGraspSignal(ctx, true);
+  return ok ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
 }
 
 BT::PortsList SetGripper::providedPorts() { return {BT::InputPort<std::string>("position", "1.0")}; }

@@ -49,6 +49,11 @@ int getInt(const rclcpp::Node::SharedPtr& n, const std::string& name, int def)
   if (!n->has_parameter(name)) n->declare_parameter(name, def);
   return static_cast<int>(n->get_parameter(name).as_int());
 }
+double getDouble(const rclcpp::Node::SharedPtr& n, const std::string& name, double def)
+{
+  if (!n->has_parameter(name)) n->declare_parameter(name, def);
+  return n->get_parameter(name).as_double();
+}
 std::vector<std::string> getStrArray(const rclcpp::Node::SharedPtr& n, const std::string& name,
                                      const std::vector<std::string>& def)
 {
@@ -157,6 +162,25 @@ int main(int argc, char** argv)
 
   MotionProfileRegistry profiles = loadMotionProfiles(profiles_file);
   BtContext ctx{runtime.get(), gripper.get(), process.get(), node};
+
+  // End-effector actuation targets (ADR-0010). Default 1.0/0.0 == suction on/off, so a
+  // TRIGGER cell (no override in bt_params) behaves exactly as before. A JOINT_POSITION
+  // cell (e.g. a Robotiq) sets the closed/open joint angles here.
+  ctx.gripper_close_pos = getDouble(node, "gripper_close_position", 1.0);
+  ctx.gripper_open_pos  = getDouble(node, "gripper_open_position", 0.0);
+  // Sim grasp adapter signal (ADR-0010): when a gripper_cmd_topic is set, the runtime
+  // publishes a LATCHED Bool on grasp/release that fires the planning-scene attach AND
+  // the backend's sim adapter (Isaac SurfaceGripper / Gazebo LinkAttacher). Empty (the
+  // default, and the deterministic golden) => no publisher => the adaptation-layer bridge
+  // keeps driving the Bool, unchanged.
+  const std::string gripper_cmd_topic = getStr(node, "gripper_cmd_topic", "");
+  if (!gripper_cmd_topic.empty())
+  {
+    auto qos = rclcpp::QoS(1).transient_local();  // latched, like the Isaac suction bridge
+    ctx.gripper_cmd_pub = node->create_publisher<std_msgs::msg::Bool>(gripper_cmd_topic, qos);
+    RCLCPP_INFO(log, "gripper_cmd_topic='%s' -> runtime fires the sim grasp adapter (ADR-0010)",
+                gripper_cmd_topic.c_str());
+  }
   // TF for perception consumers (DetectObject). spin_thread=false: the executor above
   // already spins this node, so the listener's subscriptions ride on it.
   auto tf_buffer = std::make_shared<tf2_ros::Buffer>(node->get_clock());

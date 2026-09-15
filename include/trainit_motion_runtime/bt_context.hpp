@@ -15,6 +15,7 @@
 #include <memory>
 
 #include <rclcpp/rclcpp.hpp>
+#include <std_msgs/msg/bool.hpp>
 #include <tf2_ros/buffer.h>
 
 #include "trainit_motion_runtime/moveit_motion_runtime.hpp"
@@ -39,6 +40,22 @@ struct BtContext
   // TF, for nodes that consume data in a sensor frame (DetectObject). May be null
   // with an older launcher: the node then builds its own buffer lazily.
   std::shared_ptr<tf2_ros::Buffer> tf;
+
+  // --- end-effector actuation (ADR-0010) -------------------------------------
+  // The GripperCommand position Close/OpenGripper send. The defaults 1.0/0.0 are
+  // exactly the historical suction on/off, so a project that leaves them unset
+  // behaves byte-for-byte as before. A JOINT_POSITION gripper (e.g. a Robotiq)
+  // overrides them with the closed/open joint angles.
+  double gripper_close_pos{1.0};
+  double gripper_open_pos{0.0};
+  // --- sim grasp adapter signal (ADR-0010) -----------------------------------
+  // When a gripper_cmd_topic is configured the runtime publishes a LATCHED Bool on
+  // grasp (true) / release (false) that fires BOTH the planning-scene attach
+  // (scene_manager_node) AND the active backend's sim grasp adapter (Isaac
+  // SurfaceGripper / Gazebo LinkAttacher), on the same contract for every backend.
+  // Null == not configured == the runtime publishes nothing (today's behaviour;
+  // the adaptation-layer bridge drives the Bool instead).
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr gripper_cmd_pub;
 };
 
 }  // namespace trainit
