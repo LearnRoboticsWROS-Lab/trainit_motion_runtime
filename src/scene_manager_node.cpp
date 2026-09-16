@@ -644,6 +644,16 @@ private:
     const bool have_tcp = tcpInBase(T_tcp);
     moveit_msgs::msg::PlanningScene ps;
     std::vector<std::string> released;
+    // STAGED (mirrors graspObjects): build the diff WITHOUT mutating attached_/grasp_offset_/
+    // world_pose_/forced_, and commit only once /apply_planning_scene has ACCEPTED the detach.
+    // Erasing the state up front meant a single failed apply (e.g. move_group momentarily busy)
+    // left the node believing it had released while RViz kept the object ATTACHED (purple)
+    // forever, and no later OPEN could retry — a silent, permanent desync. The DETACHLINK weld
+    // in Gazebo (a separate Bool subscriber) succeeds independently, so the symptom was
+    // "detached in Gazebo, stuck purple in RViz".
+    std::vector<std::string> pending_detach;
+    std::map<std::string, geometry_msgs::msg::Pose> pending_world_pose;
+    std::map<std::string, moveit_msgs::msg::CollisionObject> pending_forced;
     {
       std::lock_guard<std::mutex> lock(scene_mutex_);
       for (const auto & id : attach_ids_) {
@@ -654,24 +664,35 @@ private:
           aco.object.id = id;
           aco.object.operation = moveit_msgs::msg::CollisionObject::REMOVE;
           ps.robot_state.attached_collision_objects.push_back(aco);
-          attached_.erase(id);
+          pending_detach.push_back(id);
         }
         geometry_msgs::msg::Pose newP =
           have_tcp ? tf2::toMsg(Eigen::Isometry3d(T_tcp * grasp_offset_[id]))
                    : objectPose(dyn_objects_[id]);
-        auto obj = dyn_objects_[id];                       // cached MESH collision object
+        auto obj = dyn_objects_[id];                       // cached collision object (mesh/box)
         obj.operation = moveit_msgs::msg::CollisionObject::ADD;
         obj.header.frame_id = frame_id_;
         setObjectPose(obj, newP);
         ps.world.collision_objects.push_back(obj);
-        world_pose_[id] = newP;                            // track for re-pick
-        forced_[id] = obj;                                 // dynamic world object again
-        grasp_offset_.erase(id);
+        pending_world_pose[id] = newP;                     // track for re-pick (commit on success)
+        pending_forced[id] = obj;                          // dynamic world object again
         released.push_back(id);
       }
     }
     if (released.empty()) return;
-    if (!applyScene(ps, "RELEASE")) return;
+    if (!applyScene(ps, "RELEASE")) {
+      RCLCPP_ERROR(get_logger(),
+                   "[RELEASE] scene NOT updated -> object stays ATTACHED (purple); node state "
+                   "left intact so the NEXT open retries (no silent desync).");
+      return;
+    }
+    {                                     // commit only what the scene actually accepted
+      std::lock_guard<std::mutex> lock(scene_mutex_);
+      for (const auto & id : pending_detach) attached_.erase(id);
+      for (const auto & kv : pending_world_pose) world_pose_[kv.first] = kv.second;
+      for (const auto & kv : pending_forced) forced_[kv.first] = kv.second;
+      for (const auto & id : released) grasp_offset_.erase(id);
+    }
     Acm acm;                                               // released -> transparent again
     if (fetchAcm(acm)) {
       for (const auto & id : released) {
