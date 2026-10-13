@@ -1,0 +1,20 @@
+m2_6 capture eef_release_policy
+behaviortree_cpp 4.10.0 | rmw rmw_fastrtps_cpp | moveit_ros_planning_interface 2.5.10
+
+=== scenario REL-01
+pins: the function-static publisher binds the FIRST topic: ticks naming another topic, or the default, still publish on it; anything but "gravity" is freeze (true)
+recorders (transient_local reliable depth 10, made before the ticks): /m26_rel/first, /m26_rel/second, /isaac_release_policy
+--- tick 1: <SetReleasePolicy policy="freeze" topic="/m26_rel/first"/>
+bt: SUCCESS
+--- tick 2: <SetReleasePolicy policy="gravity" topic="/m26_rel/second"/>
+bt: SUCCESS
+--- tick 3: <SetReleasePolicy policy="gravity"/>
+bt: SUCCESS
+--- tick 4: <SetReleasePolicy policy="drop" topic="/m26_rel/second"/>
+bt: SUCCESS
+received on /m26_rel/first: /trainit_run_bt: true, false, false, true
+received on /m26_rel/second: (none)
+received on /isaac_release_policy: (none)
+publishers in the graph: /m26_rel/first=1 /m26_rel/second=0 /isaac_release_policy=0
+semantic: command sent=SetReleasePolicy(policy="freeze" topic="/m26_rel/first"); SetReleasePolicy(policy="gravity" topic="/m26_rel/second"); SetReleasePolicy(policy="gravity"); SetReleasePolicy(policy="drop" topic="/m26_rel/second") | ack=none (fire-and-forget topic) | state=/m26_rel/first: /trainit_run_bt: true, false, false, true; /m26_rel/second: (none); /isaac_release_policy: (none) | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=tick 1=SUCCESS; tick 2=SUCCESS; tick 3=SUCCESS; tick 4=SUCCESS | timeout=none | release result=every release policy landed on /m26_rel/first: [true, false, false, true]
+

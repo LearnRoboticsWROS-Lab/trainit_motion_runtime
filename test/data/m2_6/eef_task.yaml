@@ -1,0 +1,10 @@
+# vNext M2.6 TaskRunner fixture (family eef_task_runner): a GRIPPER step after each move, on the
+# inline M2.5 test arm. The grip step closes (1.0), the release step opens (0.0).
+name: m26_eef_task
+group: arm
+base_frame: base_link
+tip_link: tcp
+orientation: [1.0, 0.0, 0.0, 0.0]
+steps:
+  - {name: grip, motion: ptp, named: ready, eef: {gripper: 1.0}}
+  - {name: release, motion: ptp, named: home, eef: {gripper: 0.0}}

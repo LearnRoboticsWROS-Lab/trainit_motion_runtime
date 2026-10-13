@@ -2,6 +2,8 @@
 // pilz_sequence_backend.cpp
 // =============================================================================
 #include "trainit_motion_runtime/pilz_sequence_backend.hpp"
+#include "trainit_motion_runtime/manual_motion_strategy_selector.hpp"   // PIPELINE_PILZ, PILZ_LIN/CIRC
+#include "trainit_motion_runtime/motion_failure.hpp"
 
 #include <chrono>
 
@@ -17,15 +19,22 @@ namespace trainit
 
 namespace
 {
-constexpr const char* PILZ_PIPELINE = "pilz_industrial_motion_planner";
+// vNext M2.7: a failure before MoveIt answered names its cause; the ONE sequence goal plans AND executes.
+MotionResult unanswered(const std::string& stage, const char* cause)
+{
+  MotionResult r = MotionResult::failure(stage);
+  r.phase = MotionPhase::PLAN_AND_EXECUTE;
+  r.cause = cause;
+  return r;
 }
+}  // namespace
 
 PilzSequenceBackend::PilzSequenceBackend(rclcpp::Node::SharedPtr node, std::string group,
                                          std::string tip_link, std::string base_frame)
 : node_(std::move(node)), group_(std::move(group)), tip_(std::move(tip_link)),
   base_(std::move(base_frame))
 {
-  client_ = rclcpp_action::create_client<MoveGroupSequence>(node_, "sequence_move_group");
+  client_ = rclcpp_action::create_client<MoveGroupSequence>(node_, kActionName);
 }
 
 moveit_msgs::msg::MotionPlanRequest PilzSequenceBackend::buildRequest(
@@ -33,8 +42,8 @@ moveit_msgs::msg::MotionPlanRequest PilzSequenceBackend::buildRequest(
 {
   moveit_msgs::msg::MotionPlanRequest req;
   req.group_name = group_;
-  req.pipeline_id = PILZ_PIPELINE;
-  req.planner_id = (seg.type == ProcessSegmentType::CIRCULAR) ? "CIRC" : "LIN";
+  req.pipeline_id = PIPELINE_PILZ;
+  req.planner_id = (seg.type == ProcessSegmentType::CIRCULAR) ? PILZ_CIRC : PILZ_LIN;
   req.num_planning_attempts = std::max(1, options.planning_attempts);
   req.allowed_planning_time = options.planning_time;
   req.max_velocity_scaling_factor = seg.velocity_scaling;
@@ -75,7 +84,7 @@ MotionResult PilzSequenceBackend::run(const std::vector<ProcessSegment>& segment
     return MotionResult::failure("pilz_sequence: empty segment list");
 
   if (!client_->wait_for_action_server(5s))
-    return MotionResult::failure("pilz_sequence: 'sequence_move_group' action server not available");
+    return unanswered("pilz_sequence: 'sequence_move_group' action server not available", kCauseServerUnavailable);
 
   MoveGroupSequence::Goal goal;
   for (std::size_t i = 0; i < segments.size(); ++i)
@@ -93,14 +102,14 @@ MotionResult PilzSequenceBackend::run(const std::vector<ProcessSegment>& segment
 
   auto goal_future = client_->async_send_goal(goal);
   if (goal_future.wait_for(10s) != std::future_status::ready)
-    return MotionResult::failure("pilz_sequence: goal send timed out");
+    return unanswered("pilz_sequence: goal send timed out", kCauseGoalSendTimeout);
   auto handle = goal_future.get();
   if (!handle)
-    return MotionResult::failure("pilz_sequence: goal rejected");
+    return unanswered("pilz_sequence: goal rejected", kCauseGoalRejected);
 
   auto result_future = client_->async_get_result(handle);
   if (result_future.wait_for(120s) != std::future_status::ready)
-    return MotionResult::failure("pilz_sequence: result timed out");
+    return unanswered("pilz_sequence: result timed out", kCauseResultTimeout);
 
   auto wrapped = result_future.get();
   const auto& resp = wrapped.result->response;
@@ -115,6 +124,7 @@ MotionResult PilzSequenceBackend::run(const std::vector<ProcessSegment>& segment
   const bool ok = (wrapped.code == rclcpp_action::ResultCode::SUCCEEDED) &&
                   (resp.error_code.val == moveit_msgs::msg::MoveItErrorCodes::SUCCESS);
   mr.success = ok;
+  if (!ok) mr.phase = MotionPhase::PLAN_AND_EXECUTE;   // vNext M2.7: the code is the answer's
   mr.process.execution_success = ok && !options.plan_only;
   mr.stage = ok ? "pilz_sequence: OK" : "pilz_sequence: FAILED (code=" +
                   std::to_string(resp.error_code.val) + ")";

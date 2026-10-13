@@ -1,6 +1,16 @@
 // =============================================================================
 // online_servo_backend.hpp — ONLINE motion backend (Section 11). DESIGN ONLY.
 //
+// SUPERSEDED by ADR-0015 Decision 5 — do not implement this interface as written.
+// moveit_servo 2.5.10 on Humble is a NODE, not a library: ServoNode is driven
+// through ROS only (four std_srvs/Trigger services, a TwistStamped input, an Int8
+// status output), and the stop() declared below has no counterpart in
+// moveit_servo::Servo, which offers start() and setPaused(bool). Online servoing
+// is therefore the `ServoTrack` BT node (src/bt_nodes.cpp): a service client plus a
+// publisher, which keeps moveit_servo off the Community library's link line.
+// This header is kept only as the record of the shape that was rejected; nothing
+// includes it and it is not in the CMake sources.
+//
 // For visual servoing, online corrections, dynamic targets, cartesian jog,
 // tracking and teleoperation. This is NOT an offline path planner — do not use
 // it for offline geometric paths.

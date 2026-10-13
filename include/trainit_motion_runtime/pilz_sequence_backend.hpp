@@ -28,6 +28,10 @@ class PilzSequenceBackend : public ProcessPathBackendBase
 {
 public:
   using MoveGroupSequence = moveit_msgs::action::MoveGroupSequence;
+  // The Pilz capability's action, RELATIVE: it resolves in the node's namespace
+  // (/r3/sequence_move_group for a runner in /r3). The cross-namespace remap guard checks
+  // its entities by this one name (MoveItMotionRuntime::crossNamespaceRemaps, ADR-0023).
+  static constexpr const char* kActionName = "sequence_move_group";
 
   PilzSequenceBackend(rclcpp::Node::SharedPtr node,
                       std::string group, std::string tip_link, std::string base_frame);

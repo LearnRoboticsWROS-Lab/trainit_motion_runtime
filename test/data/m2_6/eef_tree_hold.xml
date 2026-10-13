@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<!-- vNext M2.6 family eef_runner_child: close, then HOLD 6 s (the latched grasp Bool stays
+     published while the runner lives, so a late joiner can be made in that window). -->
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence>
+      <CloseGripper/>
+      <Wait duration_ms="6000"/>
+    </Sequence>
+  </BehaviorTree>
+</root>

@@ -12,6 +12,19 @@
 //
 // Params (node name: scene_manager_node):
 //   frame_id            (string, default base_link)
+//   apply_planning_scene_service (string, default "" == the RELATIVE name
+//                                "apply_planning_scene") and
+//   get_planning_scene_service   (string, default "" == "get_planning_scene")
+//                                The planning-scene services this node drives. Left
+//                                empty they are resolved against the node's OWN
+//                                namespace: /apply_planning_scene in the global
+//                                namespace (what the absolute hardcoded name used to
+//                                do, so generated bundles are unaffected) and
+//                                /r3/apply_planning_scene for a node launched under
+//                                /r3 — which is what multi-robot needs: four
+//                                instances no longer write to one global service
+//                                (ADR-0015 Decision 3). Set an ABSOLUTE name to drive
+//                                a move_group in another namespace.
 //   force_republish_hz  (double, default 1.0)   re-assert dynamic objects
 //   scene_update_wait_ms(int,    default 800)
 //   attach_acm_links    (string[]) links allowed to collide with everything
@@ -34,6 +47,11 @@
 //                                later) is emitted so the hand-authored Isaac adapter
 //                                can teleport its dynamic prims home. Trigger on the
 //                                TRANSITION, never on the level.
+//                                LEGACY (ADR-0022, ADR-0023): both defaults are
+//                                Isaac-named GLOBAL topics, kept for legacy projects;
+//                                a canonical project writes its relative
+//                                eef/<id>/engaged and, under a cell namespace, a
+//                                relative reset topic.
 //   attach_link         (string, default tcp)   link the objects attach to
 //   touch_links         (string[]) robot links allowed to touch the attached objs
 //   attach_object_ids   (string[]) dynamic ids that attach on gripper close
@@ -76,6 +94,8 @@
 #include <std_srvs/srv/set_bool.hpp>
 #include <std_srvs/srv/trigger.hpp>
 
+#include "trainit_motion_runtime/scene_service_names.hpp"
+
 #include <geometric_shapes/mesh_operations.h>
 #include <geometric_shapes/shape_operations.h>
 #include <geometric_shapes/shapes.h>
@@ -116,10 +136,21 @@ public:
     declareParams();
 
     client_cb_group_ = create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+    // RELATIVE by default (scene_service_names.hpp): identical to the previously
+    // hardcoded "/apply_planning_scene" for a node in the global namespace, and
+    // automatically /<ns>/apply_planning_scene for a namespaced one.
     apply_client_ = create_client<moveit_msgs::srv::ApplyPlanningScene>(
-      "/apply_planning_scene", rmw_qos_profile_services_default, client_cb_group_);
+      trainit_scene::resolveSceneServiceName(
+        get_parameter(trainit_scene::kApplyPlanningSceneServiceParam).as_string(),
+        trainit_scene::kApplyPlanningSceneServiceDefault),
+      rmw_qos_profile_services_default, client_cb_group_);
     get_scene_client_ = create_client<moveit_msgs::srv::GetPlanningScene>(
-      "/get_planning_scene", rmw_qos_profile_services_default, client_cb_group_);
+      trainit_scene::resolveSceneServiceName(
+        get_parameter(trainit_scene::kGetPlanningSceneServiceParam).as_string(),
+        trainit_scene::kGetPlanningSceneServiceDefault),
+      rmw_qos_profile_services_default, client_cb_group_);
+    RCLCPP_INFO(get_logger(), "[scene] planning-scene services: '%s' + '%s'",
+                apply_client_->get_service_name(), get_scene_client_->get_service_name());
     scene_pub_ = create_publisher<moveit_msgs::msg::PlanningScene>("planning_scene", 1);
 
     // gripper mirror: subscribe to the close/open signal + expose the flag service
@@ -171,8 +202,13 @@ private:
   void declareParams()
   {
     declare_parameter<std::string>("frame_id", "base_link");
+    // Empty == the relative default, which resolves to this node's namespace. Set an
+    // absolute name to drive a move_group in a different namespace.
+    declare_parameter<std::string>(trainit_scene::kApplyPlanningSceneServiceParam, "");
+    declare_parameter<std::string>(trainit_scene::kGetPlanningSceneServiceParam, "");
     declare_parameter<double>("force_republish_hz", 1.0);
     declare_parameter<int>("scene_update_wait_ms", 800);
+    // LEGACY (ADR-0022, ADR-0023): the two Isaac-named GLOBAL defaults below, kept byte for byte.
     declare_parameter<std::string>("gripper_cmd_topic", "/isaac_gripper_cmd");
     declare_parameter<std::string>("scene_reset_topic", "/isaac_scene_reset");
     declare_parameter<std::string>("attach_link", "tcp");
@@ -320,7 +356,8 @@ private:
   bool applyScene(moveit_msgs::msg::PlanningScene ps, const std::string & label)
   {
     if (!apply_client_->wait_for_service(std::chrono::seconds(5))) {
-      RCLCPP_ERROR(get_logger(), "[%s] /apply_planning_scene unavailable.", label.c_str());
+      RCLCPP_ERROR(get_logger(), "[%s] '%s' unavailable.", label.c_str(),
+                   apply_client_->get_service_name());
       return false;
     }
     ps.is_diff = true;
@@ -354,7 +391,7 @@ private:
   bool fetchAcm(Acm & out)
   {
     if (!get_scene_client_->wait_for_service(std::chrono::seconds(5))) {
-      RCLCPP_ERROR(get_logger(), "[ACM] /get_planning_scene unavailable.");
+      RCLCPP_ERROR(get_logger(), "[ACM] '%s' unavailable.", get_scene_client_->get_service_name());
       return false;
     }
     auto greq = std::make_shared<moveit_msgs::srv::GetPlanningScene::Request>();
@@ -452,7 +489,9 @@ private:
                   ids.size(), frame_id_.c_str());
 
       if (!ids.empty()) {
-        moveit::planning_interface::PlanningSceneInterface psi;
+        // its own node in THIS node's namespace (vNext M2.7): unchanged under the launch's
+        // process-wide __ns remap, correct under any other way of setting the namespace
+        moveit::planning_interface::PlanningSceneInterface psi(get_namespace());
         psi.removeCollisionObjects(ids);
         rclcpp::sleep_for(std::chrono::milliseconds(scene_update_wait_ms_));
       }
@@ -552,8 +591,9 @@ private:
     const bool closed = msg->data;
     if (closed == gripper_closed_) return;   // edge-triggered
     gripper_closed_ = closed;
-    // diagnostic: if this line never prints on gripper close, the /isaac_gripper_cmd
-    // signal isn't reaching the node (check the bridge / QoS), not the grasp itself.
+    // diagnostic: if this line never prints on gripper close, the gripper_cmd_topic signal
+    // (LEGACY default /isaac_gripper_cmd) isn't reaching the node (check the bridge / QoS),
+    // not the grasp itself.
     RCLCPP_INFO(get_logger(), "[GRASP] gripper cmd = %s (mode=%s, scene loaded=%s)",
                 closed ? "CLOSE" : "OPEN", grasp_mode_.c_str(),
                 initial_loaded_ ? "yes" : "no");

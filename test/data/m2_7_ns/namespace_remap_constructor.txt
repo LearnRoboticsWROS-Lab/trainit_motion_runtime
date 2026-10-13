@@ -1,0 +1,14 @@
+m2_5 capture namespace_remap_constructor
+moveit_ros_planning_interface 2.5.10 | behaviortree_cpp 4.10.0 | rmw rmw_fastrtps_cpp
+
+=== scenario NS-03
+pins: where MoveItMotionRuntime's constructor waits when only the /r3 fakes serve
+node: /r3/trainit_run_bt
+after only the /r3 fakes, within 10 s: constructed=yes
+after root /move_action, within 10 s: constructed=yes
+after root /execute_trajectory, within 10 s: constructed=yes
+after root get_planning_scene + apply_planning_scene, within 10 s: constructed=yes
+events:
+[1] SERVICE /r3/get_planning_scene GetPlanningScene.request components=1023
+counts: /r3/get_planning_scene=1
+

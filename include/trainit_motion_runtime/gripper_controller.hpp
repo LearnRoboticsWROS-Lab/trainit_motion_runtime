@@ -5,6 +5,11 @@
 // controller action. Robot- and application-agnostic: the action name is a
 // runtime parameter provided by the application bring-up; whatever physical
 // physical effect it has lives entirely in the controller / hardware bridge.
+//
+// LEGACY (ADR-0022, ADR-0023): the gripper client of a project without an `eef`
+// block; its action name is used as the project writes it (TSA writes it absolute,
+// with the cell namespace in front). trainit_run_bt never builds it for a canonical
+// project: its actuators are the end-effector registry's relative clients.
 // =============================================================================
 #ifndef TRAINIT_MOTION_RUNTIME__GRIPPER_CONTROLLER_HPP_
 #define TRAINIT_MOTION_RUNTIME__GRIPPER_CONTROLLER_HPP_

@@ -8,9 +8,15 @@
 namespace trainit
 {
 
+TaskRunner::TaskRunner(MotionRuntime& runtime, PlanningSceneManager& scene, rclcpp::Logger logger,
+                       GripperController* gripper, ProcessController* process)
+: runtime_(runtime), scene_(scene), log_(std::move(logger)), gripper_(gripper), process_(process)
+{
+}
+
 TaskRunner::TaskRunner(MoveItMotionRuntime& runtime, GripperController* gripper,
                        ProcessController* process)
-: runtime_(runtime), gripper_(gripper), process_(process)
+: TaskRunner(runtime, runtime.scene(), runtime.node()->get_logger(), gripper, process)
 {
 }
 
@@ -94,7 +100,7 @@ bool TaskRunner::processPathStep(const MotionStep& step)
 {
   if (!step.process_path.has_value())
   {
-    RCLCPP_ERROR(runtime_.node()->get_logger(), "process_path step '%s' has no path spec",
+    RCLCPP_ERROR(log_, "process_path step '%s' has no path spec",
                  step.name.c_str());
     return false;
   }
@@ -107,7 +113,7 @@ bool TaskRunner::processPathStep(const MotionStep& step)
   }
   catch (const std::exception& e)
   {
-    RCLCPP_ERROR(runtime_.node()->get_logger(), "process path build failed: %s", e.what());
+    RCLCPP_ERROR(log_, "process path build failed: %s", e.what());
     return false;
   }
 
@@ -141,14 +147,14 @@ bool TaskRunner::eefAction(const EefAction& eef)
     case EefActionType::GRIPPER:
       if (!gripper_)
       {
-        RCLCPP_ERROR(runtime_.node()->get_logger(), "step requests gripper action but no gripper");
+        RCLCPP_ERROR(log_, "step requests gripper action but no gripper");
         return false;
       }
       return gripper_->command(eef.gripper_position);
     case EefActionType::PROCESS:
       if (!process_)
       {
-        RCLCPP_ERROR(runtime_.node()->get_logger(), "step requests process event but no controller");
+        RCLCPP_ERROR(log_, "step requests process event but no controller");
         return false;
       }
       return process_->executeEvent(eef.process_event);
@@ -164,10 +170,10 @@ void TaskRunner::payloadAction(const MotionStep& step)
   switch (step.payload_op)
   {
     case PayloadOp::ATTACH:
-      runtime_.scene().attachBox(step.payload.id, link, step.payload.dims, step.payload.pose);
+      scene_.attachBox(step.payload.id, link, step.payload.dims, step.payload.pose);
       break;
     case PayloadOp::DETACH:
-      runtime_.scene().detachObject(step.payload.id, link);
+      scene_.detachObject(step.payload.id, link);
       break;
     case PayloadOp::NONE:
     default:
@@ -177,14 +183,14 @@ void TaskRunner::payloadAction(const MotionStep& step)
 
 bool TaskRunner::run(const MotionTask& task)
 {
-  auto log = runtime_.node()->get_logger();
+  auto log = log_;
   task_orientation_ = task.default_orientation;
   RCLCPP_INFO(log, "=== task '%s': %zu steps (mode=%s) ===",
               task.name.c_str(), task.steps.size(), toString(runtime_.plannerMode()).c_str());
 
   // static scene (fixtures / surfaces): MoveIt plans blind without it.
   for (const SceneObject& obj : task.scene)
-    runtime_.scene().addCollisionBox(obj.id, obj.frame, obj.dims, obj.pose);
+    scene_.addCollisionBox(obj.id, obj.frame, obj.dims, obj.pose);
 
   for (std::size_t i = 0; i < task.steps.size(); ++i)
   {

@@ -16,12 +16,24 @@
 namespace trainit
 {
 
-// Canonical pipeline ids used by the framework.
+// Pipeline and planner ids: the C++ side of the planner registry
+// (config/planner_profiles.yaml, ADR-0021); test_planner_registry checks every one.
 inline constexpr const char* PIPELINE_OMPL  = "ompl";
 inline constexpr const char* PIPELINE_PILZ  = "pilz_industrial_motion_planner";
 inline constexpr const char* PIPELINE_CHOMP = "chomp";
 inline constexpr const char* PIPELINE_STOMP = "stomp";
 inline constexpr const char* OMPL_DEFAULT_PLANNER = "RRTConnectkConfigDefault";
+inline constexpr const char* PILZ_PTP  = "PTP";
+inline constexpr const char* PILZ_LIN  = "LIN";
+inline constexpr const char* PILZ_CIRC = "CIRC";
+inline constexpr const char* STOMP_PLANNER = "STOMP";
+
+// The default loaded set (registry: the pipelines with `loaded: true`, in order): what
+// the runtime's availability guard assumes when the launch passes no available_pipelines.
+inline std::vector<std::string> defaultAvailablePipelines()
+{
+  return {PIPELINE_OMPL, PIPELINE_PILZ, PIPELINE_CHOMP};
+}
 
 class ManualMotionStrategySelector : public MotionStrategySelector
 {

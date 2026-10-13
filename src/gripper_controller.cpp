@@ -55,6 +55,27 @@ bool GripperController::command(double position, double timeout_s)
     return false;
   }
 
+  // EEF-D3 (ADR-0022): the LEGACY contract counts ANY result as done -- the golden suction cell
+  // needs its shim's ABORTED goal to -- and now says so. The behaviour is unchanged: a result
+  // the client cannot read (an invalidated goal handle makes get() throw) is counted as done too,
+  // as it always was, since this function never read the result before.
+  const char* text = nullptr;
+  try
+  {
+    const auto code = result_future.get().code;
+    if (code != rclcpp_action::ResultCode::SUCCEEDED)
+      text = code == rclcpp_action::ResultCode::ABORTED    ? "ABORTED"
+             : code == rclcpp_action::ResultCode::CANCELED ? "CANCELED"
+                                                           : "UNKNOWN";
+  }
+  catch (const std::exception&)
+  {
+    text = "UNREADABLE";
+  }
+  if (text != nullptr)
+    RCLCPP_WARN(node_->get_logger(),
+                "gripper command position=%.2f: result %s is counted as done (LEGACY contract, ADR-0022)",
+                position, text);
   RCLCPP_INFO(node_->get_logger(), "gripper command position=%.2f done", position);
   return true;
 }

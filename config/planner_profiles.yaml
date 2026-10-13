@@ -1,18 +1,92 @@
-# Planner profiles (documentation of the ManualMotionStrategySelector tables).
+# =============================================================================
+# planner_profiles.yaml -- THE planner registry of TrainIt (vNext M2.1, ADR-0021).
 #
-# Maps planner_mode + MotionIntent to {pipeline_id, planner_id}. The selector
-# currently encodes this in C++ (manual_motion_strategy_selector.cpp); this file
-# documents it and is the future source for a config-driven selector.
+# Which planners exist, and what every planner token means, is written HERE.
+# Everything that needs the vocabulary reads this file or is tested against it:
 #
-# Invariant: APPROACH (LINEAR) and CIRCULAR are ALWAYS Pilz LIN/CIRC regardless
-# of planner_mode (deterministic MoveL/MoveC). Only the free-space transfer
-# (PTP / COLLISION_FREE) follows the mode.
+#   trainit_moveit_config.py   READS it: the pipelines move_group loads (in this
+#                              order), their parameter files, the default pipeline.
+#   C++ PlannerMode, its token table, ManualMotionStrategySelector, the defaults
+#                              are the MAPPING of this registry onto MoveIt, in
+#                              code (owner decision, M2.1 option A);
+#                              test_planner_registry checks them entry by entry.
+#   TSA                        reads a byte COPY of it, committed in its catalog
+#                              (catalog/tmr_planner_registry.yaml) -- never this
+#                              file while it generates -- and its parity test fails
+#                              when the two differ.
+#
+# Adding a planner = an entry here (+ its config/pipelines/ file) + its token and
+# its selector case in C++, then a TSA catalog refresh; the tests name whatever is
+# missing. Candidate providers (cuMotion, cuRobo, ...) are NOT entries: they are
+# external metadata in TSA's candidate catalog (ADR-0019).
+# =============================================================================
+schema_version: 1
 
-linear:   { pipeline: pilz_industrial_motion_planner, planner: LIN }
-circular: { pipeline: pilz_industrial_motion_planner, planner: CIRC }
+# MoveIt planning pipelines. `loaded: true` = in the DEFAULT loaded set: move_group
+# loads it in every TrainIt cell (planning_pipelines, in this order) and the
+# runtime's availability guard counts it as available. A cell cannot choose its
+# own set yet (ADR-0020). `parameters` is the file under config/pipelines/.
+pipelines:
+  ompl:
+    plugin_package: moveit_planners_ompl
+    parameters: ompl_planning.yaml
+    loaded: true
+  pilz_industrial_motion_planner:
+    plugin_package: pilz_industrial_motion_planner
+    parameters: pilz_industrial_motion_planner_planning.yaml
+    loaded: true
+  chomp:
+    plugin_package: moveit_planners_chomp
+    parameters: chomp_planning.yaml
+    loaded: true
+  stomp:
+    plugin_package: moveit_planners_stomp
+    parameters: null            # MoveIt on Humble has no STOMP plugin: never loaded
+    loaded: false
+default_pipeline: ompl          # move_group default_planning_pipeline
 
-free_space_transfer:
-  pilz:       { pipeline: pilz_industrial_motion_planner, planner: PTP }
-  ompl:       { pipeline: ompl,  planner: RRTConnectkConfigDefault }
-  ompl_chomp: { pipeline: ompl,  planner: RRTConnectkConfigDefault, optimizer: chomp }  # two-stage C++
-  stomp:      { pipeline: stomp, planner: STOMP }   # guarded: degrades to ompl if unavailable
+# planner_mode tokens (bt_params `planner_mode`, a waypoint's `planner`): what the
+# selector resolves a FREE-SPACE move (intent PTP / COLLISION_FREE) to -- TMR's
+# PlannerProfile. A mode is DELIVERABLE when its pipeline, and its optimizer
+# pipeline if it has one, are loaded; any other mode degrades at runtime to
+# `degrades_to`. TSA offers a project only the deliverable, `stable` modes.
+# Code, not data (pinned by test_planner_resolution_identity): the OMPL upgrade to
+# the optimizer stage for intent COLLISION_FREE_OPTIMIZED, and ONLINE_SERVO.
+planner_modes:
+  pilz:
+    pipeline: pilz_industrial_motion_planner
+    planner: PTP                # joint interpolation: collision-CHECKED, not avoiding
+    stability: stable
+  ompl:
+    pipeline: ompl
+    planner: RRTConnectkConfigDefault
+    stability: stable
+  ompl_chomp:
+    pipeline: ompl
+    planner: RRTConnectkConfigDefault
+    # Two-stage in PlannerProfile terms. MoveIt 2.5 ships no CHOMP optimizer adapter,
+    # so the runtime does not chain OMPL into CHOMP: it tries this pipeline FIRST,
+    # standalone (planner id ""), and falls back to pipeline/planner above when it fails.
+    optimizer_pipeline: chomp
+    degrades_to: ompl           # when the optimizer pipeline is not loaded
+    stability: stable
+  stomp:
+    pipeline: stomp
+    planner: STOMP
+    degrades_to: ompl           # its pipeline is never loaded on Humble
+    stability: experimental
+default_planner_mode: pilz      # when nothing sets planner_mode
+
+# Cartesian shapes do not follow the mode: always Pilz.
+cartesian:
+  linear:       {pipeline: pilz_industrial_motion_planner, planner: LIN}
+  circular:     {pipeline: pilz_industrial_motion_planner, planner: CIRC}
+  process_path: {pipeline: pilz_industrial_motion_planner, planner: LIN}
+
+# HOW a move is executed (ADR-0015), and the BT node that executes it. A planner
+# applies only to a planned move. MoveIt-realised modes only: a learned policy
+# (ADR-0005) is run by the Pro trainit_policy_runtime behind TMR's torch-free
+# RunPolicy BT node, never an entry here.
+execution:
+  plan:  {planned: true, node: MoveWaypoint}    # plan the trajectory, then execute it
+  servo: {planned: false, node: ServoTrack}     # MoveIt Servo streams it; no planner applies

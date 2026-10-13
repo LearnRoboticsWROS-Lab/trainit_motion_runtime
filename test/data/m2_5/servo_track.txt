@@ -1,0 +1,205 @@
+m2_5 capture servo_track
+moveit_ros_planning_interface 2.5.10 | behaviortree_cpp 4.10.0 | rmw rmw_fastrtps_cpp
+
+=== scenario SERVO-01
+pins: target = the current TCP: start once, unpause, a zero twist in the model frame, pause
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: t.position=0.5;0;0.4; t.type=tcp
+script: default (SUCCEED; chomp refuses a pose goal with -16)
+--- tick 1: <ServoTrack waypoint="t" servo_node="m25_servo_s1"/>
+events:
+[1] SERVICE /m25_servo_s1/start_servo Trigger.call
+[2] SERVICE /m25_servo_s1/unpause_servo Trigger.call
+[3] SERVICE /m25_servo_s1/pause_servo Trigger.call
+bt: SUCCESS
+twist first: frame=world lin=(0,0,0) ang=(0,0,0)
+twist last:  frame=world lin=(0,0,0) ang=(0,0,0)
+planner_mode_after: ompl
+counts: /m25_servo_s1/pause_servo=1 /m25_servo_s1/start_servo=1 /m25_servo_s1/unpause_servo=1
+
+=== scenario SERVO-02
+pins: a second ServoTrack on the same servo node: no second start_servo
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: t.position=0.5;0;0.4; t.type=tcp
+script: default (SUCCEED; chomp refuses a pose goal with -16)
+--- tick 1: <ServoTrack waypoint="t" servo_node="m25_servo_s1"/>
+events:
+[1] SERVICE /m25_servo_s1/unpause_servo Trigger.call
+[2] SERVICE /m25_servo_s1/pause_servo Trigger.call
+bt: SUCCESS
+twist first: frame=world lin=(0,0,0) ang=(0,0,0)
+twist last:  frame=world lin=(0,0,0) ang=(0,0,0)
+planner_mode_after: ompl
+counts: /m25_servo_s1/pause_servo=1 /m25_servo_s1/unpause_servo=1
+
+=== scenario SERVO-03
+pins: 5 cm short in x: the first twist, then FAILURE on the timeout, a zero twist and pause
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: t.position=0.55;0;0.4; t.type=tcp
+script: default (SUCCEED; chomp refuses a pose goal with -16)
+--- tick 1: <ServoTrack waypoint="t" servo_node="m25_servo_s3" timeout_ms="500"/>
+events:
+[1] SERVICE /m25_servo_s3/start_servo Trigger.call
+[2] SERVICE /m25_servo_s3/unpause_servo Trigger.call
+[3] SERVICE /m25_servo_s3/pause_servo Trigger.call
+bt: FAILURE
+twist first: frame=world lin=(0.050000000000000003,0,0) ang=(0,0,0)
+twist last:  frame=world lin=(0,0,0) ang=(0,0,0)
+planner_mode_after: ompl
+counts: /m25_servo_s3/pause_servo=1 /m25_servo_s3/start_servo=1 /m25_servo_s3/unpause_servo=1
+
+=== scenario SERVO-04
+pins: a servo HALT status (4, collision) after the first twist fails the move, then releases
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: t.position=0.6;0;0.4; t.type=tcp
+script: default (SUCCEED; chomp refuses a pose goal with -16)
+--- tick 1: <ServoTrack waypoint="t" servo_node="m25_servo_s4" timeout_ms="20000"/>
+events:
+[1] SERVICE /m25_servo_s4/start_servo Trigger.call
+[2] SERVICE /m25_servo_s4/unpause_servo Trigger.call
+[3] SERVICE /m25_servo_s4/pause_servo Trigger.call
+bt: FAILURE
+twist first: frame=world lin=(0.050000000000000003,0,0) ang=(0,0,0)
+twist last:  frame=world lin=(0,0,0) ang=(0,0,0)
+halted before half the timeout: yes
+planner_mode_after: ompl
+counts: /m25_servo_s4/pause_servo=1 /m25_servo_s4/start_servo=1 /m25_servo_s4/unpause_servo=1
+
+=== scenario SERVO-05
+pins: no servo node: FAILURE after the 2 s discovery, no call
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: t.position=0.55;0;0.4; t.type=tcp
+script: default (SUCCEED; chomp refuses a pose goal with -16)
+--- tick 1: <ServoTrack waypoint="t" servo_node="m25_servo_absent"/>
+events:
+bt: FAILURE
+twists: no servo node
+planner_mode_after: ompl
+counts: none
+
+=== scenario SERVO-06
+pins: services but nothing subscribed to the twist: FAILURE after 2 s, then released
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: t.position=0.55;0;0.4; t.type=tcp
+script: default (SUCCEED; chomp refuses a pose goal with -16)
+--- tick 1: <ServoTrack waypoint="t" servo_node="m25_servo_s6"/>
+events:
+[1] SERVICE /m25_servo_s6/start_servo Trigger.call
+[2] SERVICE /m25_servo_s6/unpause_servo Trigger.call
+[3] SERVICE /m25_servo_s6/pause_servo Trigger.call
+bt: FAILURE
+twists: none
+planner_mode_after: ompl
+counts: /m25_servo_s6/pause_servo=1 /m25_servo_s6/start_servo=1 /m25_servo_s6/unpause_servo=1
+
+=== scenario SERVO-07
+pins: a target in base_link while the arm is measured in world: FAILURE before any call
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: t.frame=base_link; t.position=0.5;0;0.3; t.type=tcp
+script: default (SUCCEED; chomp refuses a pose goal with -16)
+--- tick 1: <ServoTrack waypoint="t" servo_node="m25_servo_s7"/>
+events:
+bt: FAILURE
+twists: none
+planner_mode_after: ompl
+counts: none
+
+=== scenario SERVO-08
+pins: arbitration ON: an execution in flight refuses the stream before any call; the port unset (tick 2) streams
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: t.position=0.5;0;0.4; t.type=tcp
+script: default (SUCCEED; chomp refuses a pose goal with -16)
+--- tick 1: <ServoTrack waypoint="t" servo_node="m25_servo_s8" execution_status_topic="/execute_trajectory/_action/status"/>
+events:
+bt: FAILURE
+twists: none
+planner_mode_after: ompl
+counts: none
+--- tick 2: <ServoTrack waypoint="t" servo_node="m25_servo_s8"/>
+events:
+[1] SERVICE /m25_servo_s8/start_servo Trigger.call
+[2] SERVICE /m25_servo_s8/unpause_servo Trigger.call
+[3] SERVICE /m25_servo_s8/pause_servo Trigger.call
+bt: SUCCESS
+twist first: frame=world lin=(0,0,0) ang=(0,0,0)
+twist last:  frame=world lin=(0,0,0) ang=(0,0,0)
+planner_mode_after: ompl
+counts: /m25_servo_s8/pause_servo=1 /m25_servo_s8/start_servo=1 /m25_servo_s8/unpause_servo=1
+
+=== scenario SERVO-09
+pins: a joint waypoint, or no position: FAILURE at once
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: j.named=ready; j.type=joint; n.type=tcp
+script: default (SUCCEED; chomp refuses a pose goal with -16)
+--- tick 1: <ServoTrack waypoint="j" servo_node="m25_servo_s9"/>
+events:
+bt: FAILURE
+twists: none
+planner_mode_after: ompl
+counts: none
+--- tick 2: <ServoTrack waypoint="n" servo_node="m25_servo_s9"/>
+events:
+bt: FAILURE
+twists: none
+planner_mode_after: ompl
+counts: none
+
+=== scenario SERVO-10
+pins: start_servo=false: no start call
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: t.position=0.5;0;0.4; t.type=tcp
+script: default (SUCCEED; chomp refuses a pose goal with -16)
+--- tick 1: <ServoTrack waypoint="t" servo_node="m25_servo_s10" start_servo="false"/>
+events:
+[1] SERVICE /m25_servo_s10/unpause_servo Trigger.call
+[2] SERVICE /m25_servo_s10/pause_servo Trigger.call
+bt: SUCCESS
+twist first: frame=world lin=(0,0,0) ang=(0,0,0)
+twist last:  frame=world lin=(0,0,0) ang=(0,0,0)
+planner_mode_after: ompl
+counts: /m25_servo_s10/pause_servo=1 /m25_servo_s10/unpause_servo=1
+
+=== scenario SERVO-11
+pins: command_in_type unitless: the twist is divided by linear_scale 0.4
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: t.position=0.55;0;0.4; t.type=tcp
+script: default (SUCCEED; chomp refuses a pose goal with -16)
+--- tick 1: <ServoTrack waypoint="t" servo_node="m25_servo_s11" command_in_type="unitless" timeout_ms="500"/>
+events:
+[1] SERVICE /m25_servo_s11/start_servo Trigger.call
+[2] SERVICE /m25_servo_s11/unpause_servo Trigger.call
+[3] SERVICE /m25_servo_s11/pause_servo Trigger.call
+bt: FAILURE
+twist first: frame=world lin=(0.125,0,0) ang=(0,0,0)
+twist last:  frame=world lin=(0,0,0) ang=(0,0,0)
+planner_mode_after: ompl
+counts: /m25_servo_s11/pause_servo=1 /m25_servo_s11/start_servo=1 /m25_servo_s11/unpause_servo=1
+
+=== scenario SERVO-12
+pins: an orientation target: the angular twist (90 deg about z, capped at 0.30 rad/s)
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: t.orientation=0;0;0.7071068;0.7071068; t.position=0.5;0;0.4; t.type=tcp
+script: default (SUCCEED; chomp refuses a pose goal with -16)
+--- tick 1: <ServoTrack waypoint="t" servo_node="m25_servo_s12" timeout_ms="500"/>
+events:
+[1] SERVICE /m25_servo_s12/start_servo Trigger.call
+[2] SERVICE /m25_servo_s12/unpause_servo Trigger.call
+[3] SERVICE /m25_servo_s12/pause_servo Trigger.call
+bt: FAILURE
+twist first: frame=world lin=(0,0,0) ang=(0,0,0.29999999999999999)
+twist last:  frame=world lin=(0,0,0) ang=(0,0,0)
+planner_mode_after: ompl
+counts: /m25_servo_s12/pause_servo=1 /m25_servo_s12/start_servo=1 /m25_servo_s12/unpause_servo=1
+

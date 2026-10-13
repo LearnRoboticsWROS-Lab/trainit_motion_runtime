@@ -1,0 +1,142 @@
+# ADR-0022 conformance (vNext M2.6): mutations of eef_conformance.yaml, and what the REFERENCE
+# normaliser (normalize_eef.py, the byte copy beside this file) answers for each. Every expected
+# column was computed by normalize_eef.parse, never typed by hand; test_m2_6_eef_reference.py
+# re-computes it from the reference at every test run, and test_m2_6_eef_contract.cpp checks the
+# C++ parser (trainit::eef::parseContract) against the same column. Together: same refusal KEY
+# (and text) for every row, and the same dump for every accepted row.
+#
+# <id> | <mutation>[ ; <mutation> ...] | <expected>
+#   mutation:  erase <key>  |  erase_prefix <prefix>  |  set <key> = <YAML flow value>
+#              (applied to the fixture's flat {dotted name: value} map, in order)
+#   expected:  REFUSED <key>: <why>  |  ACCEPT <sha256 of the normalised dump>  |  LEGACY
+# A YAML value is one a params file can carry: rcl refuses empty and mixed sequences, so none
+# appears here. S14-S16 (a list where a site expects a name) were added when the reference was
+# fixed to refuse them; its first copy raised TypeError there (README.md). A46-A55 and S17-S21
+# came with the reference's third copy (two rules): a gripper_command actuator's target VALUES
+# are pairwise distinct (an adapter tells a command by its position), and a set_bool grip's
+# engage is `engage` (its polarity is the adapter's), so S10, the swap, is now refused.
+A00 | (none) | ACCEPT 1f6bd1d2ac2fb18865ee67a815877483537d0a325fbc9a5400cf2977710d242c
+L01 | erase_prefix eef. | LEGACY
+L02 | erase_prefix eef. ; set gripper_cmd_topic = "/legacy_grasp_bool" | LEGACY
+R01 | erase eef.ids | REFUSED eef.ids: a non-empty string array is required
+R02 | set eef.ids = "composite_tool" | REFUSED eef.ids: a non-empty string array is required
+R03 | set eef.ids = [1, 2] | REFUSED eef.ids: a non-empty string array is required
+R04 | set gripper_action = "/suctioncup_controller/gripper_command" | REFUSED gripper_action: a legacy key next to an eef block
+R05 | set gripper_action = 0 | ACCEPT 1f6bd1d2ac2fb18865ee67a815877483537d0a325fbc9a5400cf2977710d242c
+R06 | set gripper_cmd_topic = "" | REFUSED gripper_cmd_topic: a legacy key next to an eef block
+R07 | set gripper_close_position = 1.0 | REFUSED gripper_close_position: a legacy key next to an eef block
+R08 | set gripper_open_position = 0.0 | REFUSED gripper_open_position: a legacy key next to an eef block
+R09 | set eef.ids = ["composite_tool", "suction_simple", "jaw_simple", "jaw_binary", "composite_tool"] | REFUSED eef.ids: duplicate device id
+R10 | set eef.ids = ["composite_tool", "suction_simple", "jaw_simple", "jaw-binary"] | REFUSED eef.ids: bad device id 'jaw-binary'
+R11 | set eef.ids = ["eef"] | REFUSED eef.ids: bad device id 'eef'
+R12 | set eef.ids = ["9tool"] | REFUSED eef.ids: bad device id '9tool'
+D01 | erase eef.suction_simple.actuator_ids | REFUSED eef.suction_simple.actuator_ids: required
+D02 | erase eef.suction_simple.site_ids | REFUSED eef.suction_simple.site_ids: required
+D03 | set eef.suction_simple.actuator_ids = "vacuum" | REFUSED eef.suction_simple.actuator_ids: non-empty, unique ROS name tokens required
+D04 | set eef.composite_tool.actuator_ids = ["linear_axis", "linear_axis"] | REFUSED eef.composite_tool.actuator_ids: non-empty, unique ROS name tokens required
+D05 | set eef.suction_simple.actuator_ids = ["vac-uum"] | REFUSED eef.suction_simple.actuator_ids: non-empty, unique ROS name tokens required
+D06 | set eef.suction_simple.site_ids = ["main", "main"] | REFUSED eef.suction_simple.site_ids: non-empty, unique ROS name tokens required
+D07 | set eef.suction_simple.site_ids = ["vacuum"] | REFUSED eef.suction_simple: one token used as both an actuator and a site id
+D08 | set eef.suction_simple.command_timeout_ms = 0 | REFUSED eef.suction_simple.command_timeout_ms: a positive integer
+D09 | set eef.suction_simple.command_timeout_ms = 10000.0 | REFUSED eef.suction_simple.command_timeout_ms: a positive integer
+D10 | set eef.suction_simple.command_timeout_ms = true | REFUSED eef.suction_simple.command_timeout_ms: a positive integer
+D11 | erase eef.suction_simple.command_timeout_ms | ACCEPT 1f6bd1d2ac2fb18865ee67a815877483537d0a325fbc9a5400cf2977710d242c
+D12 | erase eef.suction_simple.scene_signal | REFUSED eef.suction_simple.scene_signal: required
+D13 | set eef.suction_simple.scene_signal = "isaac" | REFUSED eef.suction_simple.scene_signal: one of ('adapter', 'tmr', 'none')
+D14 | set eef.composite_tool.scene_signal = "tmr" | REFUSED eef.composite_tool.scene_signal: only a single-site device has a scene signal
+A01 | erase eef.suction_simple.actuators.vacuum.command_interface | REFUSED eef.suction_simple.actuators.vacuum.command_interface: required
+A02 | set eef.suction_simple.actuators.vacuum.command_interface = "trigger" | REFUSED eef.suction_simple.actuators.vacuum.command_interface: one of ('set_bool', 'gripper_command', 'follow_joint_trajectory')
+A03 | set eef.jaw_binary.actuators.gripper.joints = ["jaw_joint", "jaw_joint"] | REFUSED eef.jaw_binary.actuators.gripper.joints: a non-empty array of unique names
+A04 | set eef.jaw_binary.actuators.gripper.joints = "jaw_joint" | REFUSED eef.jaw_binary.actuators.gripper.joints: a non-empty array of unique names
+A05 | set eef.composite_tool.actuators.gripper_b.joints = ["robot_a_jaw_a_joint"] | REFUSED eef.composite_tool.actuators.gripper_b.joints: joint robot_a_jaw_a_joint shared with gripper_a
+A06 | erase eef.jaw_binary.actuators.gripper.joint_positions.released | REFUSED eef.jaw_binary.actuators.gripper.joint_positions: joints and both joint_positions, or none
+A07 | erase eef.jaw_binary.actuators.gripper.joints | REFUSED eef.jaw_binary.actuators.gripper.joint_positions: joints and both joint_positions, or none
+A08 | set eef.jaw_binary.actuators.gripper.joint_positions.engaged = [0.0, 1.0] | REFUSED eef.jaw_binary.actuators.gripper.joint_positions: one number per joint
+A09 | set eef.jaw_binary.actuators.gripper.joint_positions.engaged = ["0.0"] | REFUSED eef.jaw_binary.actuators.gripper.joint_positions: one number per joint
+A10 | set eef.composite_tool.actuators.binary_lock.actuation_feedback = "true" | REFUSED eef.composite_tool.actuators.binary_lock.actuation_feedback: a bool
+A11 | set eef.composite_tool.actuators.binary_lock.confirm_timeout_ms = -5 | REFUSED eef.composite_tool.actuators.binary_lock.confirm_timeout_ms: a positive integer
+A12 | erase eef.jaw_binary.actuators.gripper.joints ; erase eef.jaw_binary.actuators.gripper.joint_positions.engaged ; erase eef.jaw_binary.actuators.gripper.joint_positions.released | ACCEPT 128cdedd14f86e8a5e0df3fd0034fc0a74e9c75499d1cac13441a51416db758b
+A13 | set eef.suction_simple.actuators.vacuum.action = "vacuum_controller/gripper_cmd" | REFUSED eef.suction_simple.actuators.vacuum.action: unknown key
+A14 | erase eef.jaw_simple.actuators.gripper.action | REFUSED eef.jaw_simple.actuators.gripper.action: required
+A15 | set eef.jaw_simple.actuators.gripper.action = "/gripper_controller/gripper_cmd" | REFUSED eef.jaw_simple.actuators.gripper.action: a relative ROS name
+A16 | set eef.jaw_simple.actuators.gripper.action = "~/gripper_cmd" | REFUSED eef.jaw_simple.actuators.gripper.action: a relative ROS name
+A17 | set eef.jaw_simple.actuators.gripper.action = "gripper_controller//gripper_cmd" | REFUSED eef.jaw_simple.actuators.gripper.action: a relative ROS name
+A18 | set eef.composite_tool.actuators.rotary_axis.action = "linear_axis_controller/follow_joint_trajectory" | REFUSED eef.composite_tool.actuators.rotary_axis.action: shared with linear_axis
+A19 | erase eef.jaw_simple.actuators.gripper.joints | REFUSED eef.jaw_simple.actuators.gripper.joints: required
+A20 | erase eef.jaw_simple.actuators.gripper.targets.open ; erase eef.jaw_simple.actuators.gripper.targets.closed | REFUSED eef.jaw_simple.actuators.gripper.targets: required
+A21 | set eef.jaw_simple.actuators.gripper.joints = ["finger_joint", "finger_joint_2"] | REFUSED eef.jaw_simple.actuators.gripper.joints: exactly one driven joint
+A22 | erase eef.jaw_simple.actuators.gripper.targets.open | REFUSED eef.jaw_simple.actuators.gripper.targets: open and closed are required
+A23 | set eef.jaw_simple.actuators.gripper.targets.half = "0.35" | REFUSED eef.jaw_simple.actuators.gripper.targets.half: a number
+A24 | set eef.jaw_simple.actuators.gripper.targets.closed = 1 | ACCEPT 52b2046a94dbc2dde010bfb1029c51f5d1d90c5d3bcc7011a6caa1741b498cdf
+A25 | erase eef.jaw_simple.actuators.gripper.result_policy | REFUSED eef.jaw_simple.actuators.gripper.result_policy: required
+A26 | set eef.jaw_simple.actuators.gripper.result_policy = "any_result" | REFUSED eef.jaw_simple.actuators.gripper.result_policy: one of ('succeeded', 'succeeded_or_stalled')
+A27 | set eef.composite_tool.actuators.gripper_a.max_effort = 0 | REFUSED eef.composite_tool.actuators.gripper_a.max_effort: a number > 0
+A28 | set eef.composite_tool.actuators.gripper_a.max_effort = "20" | REFUSED eef.composite_tool.actuators.gripper_a.max_effort: a number > 0
+A29 | set eef.composite_tool.actuators.gripper_a.joint_positions.engaged = [0.0] | REFUSED eef.composite_tool.actuators.gripper_a.joint_positions.engaged: unknown key
+A30 | set eef.composite_tool.actuators.linear_axis.targets.home = [0.0, 0.1] | REFUSED eef.composite_tool.actuators.linear_axis.targets.home: 1 numbers
+A31 | set eef.composite_tool.actuators.wrist_mechanism.targets.stow = [0.0] | REFUSED eef.composite_tool.actuators.wrist_mechanism.targets.stow: 2 numbers
+A32 | erase eef.composite_tool.actuators.linear_axis.goal_tolerance | REFUSED eef.composite_tool.actuators.linear_axis.goal_tolerance: required
+A33 | set eef.composite_tool.actuators.linear_axis.goal_tolerance = 0.0 | REFUSED eef.composite_tool.actuators.linear_axis.goal_tolerance: 1 numbers > 0 (or one scalar)
+A34 | set eef.composite_tool.actuators.wrist_mechanism.goal_tolerance = [0.01] | REFUSED eef.composite_tool.actuators.wrist_mechanism.goal_tolerance: 2 numbers > 0 (or one scalar)
+A35 | set eef.composite_tool.actuators.wrist_mechanism.goal_tolerance = 0.02 | ACCEPT 7cbfd7e7d231500060f67973b81ee3b1ae2d7e329499c5c2d473861ea50f9517
+A36 | erase eef.composite_tool.actuators.linear_axis.duration_s | REFUSED eef.composite_tool.actuators.linear_axis.duration_s: required
+A37 | set eef.composite_tool.actuators.linear_axis.duration_s = 0 | REFUSED eef.composite_tool.actuators.linear_axis.duration_s: a number > 0
+A38 | set eef.composite_tool.actuators.linear_axis.goal_time_tolerance_s = -0.5 | REFUSED eef.composite_tool.actuators.linear_axis.goal_time_tolerance_s: a number > 0
+A39 | erase eef.composite_tool.actuators.linear_axis.goal_time_tolerance_s | ACCEPT 1f6bd1d2ac2fb18865ee67a815877483537d0a325fbc9a5400cf2977710d242c
+A40 | set eef.composite_tool.actuators.rotary_axis.path_tolerance = [0.2, 0.3] | REFUSED eef.composite_tool.actuators.rotary_axis.path_tolerance: 1 numbers > 0 (or one scalar)
+A41 | set eef.composite_tool.actuators.rotary_axis.path_tolerance = 0.25 | ACCEPT a54182b22cf1a21a89dabc2a36cd81a98982185b686ce0c18405924f5ccb8133
+A42 | set eef.composite_tool.actuators.linear_axis.result_policy = "succeeded" | REFUSED eef.composite_tool.actuators.linear_axis.result_policy: unknown key
+A43 | set eef.composite_tool.actuators.linear_axis.targets.home.extra = [0.0] | REFUSED eef.composite_tool.actuators.linear_axis.targets.extra: 1 numbers
+A44 | set eef.composite_tool.actuators.gripper_a.command_interface = "follow_joint_trajectory" | REFUSED eef.composite_tool.actuators.gripper_a.targets.closed: 1 numbers
+A45 | set eef.composite_tool.actuators.wrist_mechanism.duration_s = 2 | ACCEPT 3af51c9792634f3d4ae36ecd1969668081cffaeb51efcd99659df13b4bf41bcc
+A46 | set eef.jaw_simple.actuators.gripper.targets.pinch = 0.7 | REFUSED eef.jaw_simple.actuators.gripper.targets: distinct values (a command is told by its position)
+A47 | set eef.composite_tool.actuators.gripper_a.targets.open = 0.0 | REFUSED eef.composite_tool.actuators.gripper_a.targets: distinct values (a command is told by its position)
+A48 | set eef.jaw_simple.actuators.gripper.targets.half = 0 | REFUSED eef.jaw_simple.actuators.gripper.targets: distinct values (a command is told by its position)
+A49 | set eef.jaw_simple.actuators.gripper.targets.closed = -0.0 | REFUSED eef.jaw_simple.actuators.gripper.targets: distinct values (a command is told by its position)
+A50 | set eef.jaw_simple.actuators.gripper.targets.half = 0.35 | ACCEPT 33ffbe9bc094a3a441bf31b40e654a336788a913b49a6917f79e8cb9ffe21ad0
+A51 | set eef.jaw_simple.actuators.gripper.targets.pinch = 0.7 ; set eef.jaw_simple.actuators.gripper.targets.zz = "x" | REFUSED eef.jaw_simple.actuators.gripper.targets.zz: a number
+A52 | set eef.jaw_simple.actuators.gripper.targets.pinch = 0.7 ; set eef.jaw_simple.actuators.gripper.result_policy = "any_result" | REFUSED eef.jaw_simple.actuators.gripper.targets: distinct values (a command is told by its position)
+A53 | set eef.composite_tool.actuators.gripper_a.targets.open = 0.0 ; set eef.composite_tool.actuators.gripper_a.max_effort = 0 | REFUSED eef.composite_tool.actuators.gripper_a.targets: distinct values (a command is told by its position)
+A54 | set eef.jaw_simple.actuators.gripper.targets.pinch = 0.700000001 | ACCEPT 0d7e416b9a7e6e60a88acd87fa6aad7aa758b520c88ded7fe52d46601f12c84e
+A55 | set eef.composite_tool.actuators.linear_axis.targets.park = [0.0] | ACCEPT f2ebc036daf4ed8cf6cf8e4746733f27de0afd9791837773650683e634ce4bf9
+S01 | erase eef.suction_simple.sites.main.grip | REFUSED eef.suction_simple.sites.main.grip: required
+S02 | set eef.suction_simple.sites.main.grip = "pump" | REFUSED eef.suction_simple.sites.main.grip: an actuator of this device
+S03 | set eef.composite_tool.sites.site_a.grip = "linear_axis" | REFUSED eef.composite_tool.sites.site_a.grip: a follow_joint_trajectory actuator never grips
+S04 | set eef.composite_tool.sites.site_b.grip = "gripper_a" | REFUSED eef.composite_tool.sites.site_b.grip: already grips site_a
+S05 | erase eef.suction_simple.sites.main.engage | REFUSED eef.suction_simple.sites.main.engage: required
+S06 | erase eef.suction_simple.sites.main.release | REFUSED eef.suction_simple.sites.main.release: required
+S07 | set eef.jaw_simple.sites.main.engage = "half" | REFUSED eef.jaw_simple.sites.main.engage: a target of gripper
+S08 | set eef.suction_simple.sites.main.release = "off" | REFUSED eef.suction_simple.sites.main.release: a target of vacuum
+S09 | set eef.suction_simple.sites.main.release = "engage" | REFUSED eef.suction_simple.sites.main.release: differs from engage
+S10 | set eef.suction_simple.sites.main.engage = "release" ; set eef.suction_simple.sites.main.release = "engage" | REFUSED eef.suction_simple.sites.main.engage: engage for a set_bool grip (its polarity is the adapter's)
+S11 | set eef.composite_tool.sites.site_a.grip = "binary_lock" ; set eef.composite_tool.sites.site_a.engage = "engage" ; set eef.composite_tool.sites.site_a.release = "release" | REFUSED eef.composite_tool.actuators.gripper_a: a gripper_command actuator must grip a site
+S12 | set eef.suction_simple.sites.main.grip = 7 | REFUSED eef.suction_simple.sites.main.grip: an actuator of this device
+S13 | set eef.suction_simple.sites.main.engage = 1 | REFUSED eef.suction_simple.sites.main.engage: a target of vacuum
+S14 | set eef.suction_simple.sites.main.grip = ["vacuum"] | REFUSED eef.suction_simple.sites.main.grip: an actuator of this device
+S15 | set eef.jaw_simple.sites.main.engage = ["closed"] | REFUSED eef.jaw_simple.sites.main.engage: a target of gripper
+S16 | set eef.composite_tool.sites.site_b.release = ["release", "engage"] | REFUSED eef.composite_tool.sites.site_b.release: a target of gripper_b
+S17 | set eef.composite_tool.sites.site_b.engage = "release" ; set eef.composite_tool.sites.site_b.release = "engage" | REFUSED eef.composite_tool.sites.site_b.engage: engage for a set_bool grip (its polarity is the adapter's)
+S18 | set eef.jaw_binary.sites.main.engage = "release" ; set eef.jaw_binary.sites.main.release = "engage" | REFUSED eef.jaw_binary.sites.main.engage: engage for a set_bool grip (its polarity is the adapter's)
+S19 | set eef.suction_simple.sites.main.engage = "release" ; set eef.suction_simple.sites.main.release = "engage" ; set eef.suction_simple.verification.timeout_ms = 0 | REFUSED eef.suction_simple.sites.main.engage: engage for a set_bool grip (its polarity is the adapter's)
+S20 | set eef.suction_simple.sites.main.engage = "release" ; set eef.suction_simple.sites.main.release = "release" | REFUSED eef.suction_simple.sites.main.release: differs from engage
+S21 | set eef.jaw_simple.sites.main.engage = "open" ; set eef.jaw_simple.sites.main.release = "closed" | ACCEPT b6c13275de27e8bd5abf7881edef91ef35af9c3d101a55a3fa96f19d548cc6f2
+V01 | erase eef.suction_simple.verification.require_grasp_confirmation | REFUSED eef.suction_simple.verification.require_grasp_confirmation: required
+V02 | set eef.suction_simple.verification.require_grasp_confirmation = "false" | REFUSED eef.suction_simple.verification.require_grasp_confirmation: a bool
+V03 | erase eef.suction_simple.verification.require_release_confirmation | REFUSED eef.suction_simple.verification.require_release_confirmation: required
+V04 | set eef.suction_simple.verification.require_release_confirmation = 1 | REFUSED eef.suction_simple.verification.require_release_confirmation: a bool
+V05 | set eef.suction_simple.verification.accepted_evidence = ["command_echo"] | REFUSED eef.suction_simple.verification.accepted_evidence: unique values of ('sensor', 'sim_ground_truth', 'actuation_inference')
+V06 | set eef.suction_simple.verification.accepted_evidence = ["sensor", "sensor"] | REFUSED eef.suction_simple.verification.accepted_evidence: unique values of ('sensor', 'sim_ground_truth', 'actuation_inference')
+V07 | set eef.suction_simple.verification.accepted_evidence = "sensor" | REFUSED eef.suction_simple.verification.accepted_evidence: unique values of ('sensor', 'sim_ground_truth', 'actuation_inference')
+V08 | set eef.suction_simple.verification.accepted_evidence = ["sim_attachment"] | REFUSED eef.suction_simple.verification.accepted_evidence: unique values of ('sensor', 'sim_ground_truth', 'actuation_inference')
+V09 | erase eef.suction_simple.verification.accepted_evidence | ACCEPT 1f6bd1d2ac2fb18865ee67a815877483537d0a325fbc9a5400cf2977710d242c
+V10 | set eef.suction_simple.verification.accepted_evidence = ["actuation_inference"] | ACCEPT ea987f5c88f62be06238c6f131df42f3c0eb9442555d7ee6af413aec493a0119
+V11 | set eef.suction_simple.verification.timeout_ms = 0 | REFUSED eef.suction_simple.verification.timeout_ms: a positive integer
+V12 | set eef.suction_simple.verification.max_age_ms = 500.0 | REFUSED eef.suction_simple.verification.max_age_ms: a positive integer
+V13 | set eef.suction_simple.verification.clock_tolerance_ms = "100" | REFUSED eef.suction_simple.verification.clock_tolerance_ms: a positive integer
+V14 | erase eef.suction_simple.verification.timeout_ms ; erase eef.suction_simple.verification.max_age_ms ; erase eef.suction_simple.verification.clock_tolerance_ms | ACCEPT 1f6bd1d2ac2fb18865ee67a815877483537d0a325fbc9a5400cf2977710d242c
+U01 | set eef.suction_simple.colour = "red" | REFUSED eef.suction_simple.colour: unknown key
+U02 | set eef.extra = 1 | REFUSED eef.extra: unknown key
+U03 | set eef.zz_device.actuator_ids = ["a"] | REFUSED eef.zz_device.actuator_ids: unknown key
+U04 | set eef.suction_simple.actuators.pump.command_interface = "set_bool" | REFUSED eef.suction_simple.actuators.pump.command_interface: unknown key
+U05 | set eef.suction_simple.colour = "red" ; set eef.suction_simple.command_timeout_ms = 0 | REFUSED eef.suction_simple.command_timeout_ms: a positive integer
+U06 | set eef.composite_tool.zzz = 1 ; set eef.jaw_binary.command_timeout_ms = -1 | REFUSED eef.jaw_binary.command_timeout_ms: a positive integer

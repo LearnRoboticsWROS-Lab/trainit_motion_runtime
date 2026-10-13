@@ -1,0 +1,12 @@
+# vNext M2.5 test path that names its OWN frame and link (the cartesian backend honours them,
+# the Pilz sequence backend does not)
+path_name: m25_world_l3
+reference_frame: world
+tcp_link: l3
+collision_checking: false
+waypoint_resolution: 0.01
+orientation: [1.0, 0.0, 0.0, 0.0]
+waypoints:
+  - {position: [0.40, 0.10, 0.40], velocity: 0.07, acceleration: 0.05}
+  - {position: [0.40, 0.15, 0.40]}
+  - {position: [0.45, 0.15, 0.40]}

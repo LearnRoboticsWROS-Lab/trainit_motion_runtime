@@ -2,6 +2,7 @@
 // trajectory_validator.cpp
 // =============================================================================
 #include "trainit_motion_runtime/trajectory_validator.hpp"
+#include "trainit_motion_runtime/motion_failure.hpp"
 
 #include <cmath>
 #include <vector>
@@ -109,6 +110,7 @@ ValidationReport TrajectoryValidator::validate(
     r.collision_free = scene->isPathValid(rt, group_, false, &invalid);
     if (!r.collision_free)
     {
+      if (!invalid.empty()) r.first_colliding_waypoint = invalid.front();
       r.reason = "collision at waypoint(s) starting " +
                  (invalid.empty() ? std::string("?") : std::to_string(invalid.front()));
       return r;
@@ -118,6 +120,23 @@ ValidationReport TrajectoryValidator::validate(
   r.valid = true;
   r.reason = "ok";
   return r;
+}
+
+// vNext M2.7: the cause token of a refused trajectory, in validate()'s own order (trajectory_validator.hpp).
+const char* validationCause(const ValidationReport& vr)
+{
+  if (vr.reason.rfind("unknown planning group", 0) == 0) return kCauseUnknownGroup;
+  if (!vr.non_empty) return kCauseEmptyTrajectory;
+  if (!vr.finite) return kCauseNonFinite;
+  if (!vr.within_joint_limits) return kCauseJointLimits;
+  if (vr.joint_jump) return kCauseJointJump;
+  if (!vr.timestamps_monotonic) return kCauseNonMonotonicTime;
+  // Waypoint 0 is the start. MoveIt plans from a colliding start without refusing it: move_group
+  // accepts a path whose only invalid waypoint is 0, Pilz never checks the start for collision, and
+  // FixStartStateCollision puts the colliding start back as waypoint 0. So every target fails alike.
+  if (vr.collision_checked && !vr.collision_free && vr.first_colliding_waypoint)
+    return *vr.first_colliding_waypoint == 0 ? kCauseStartStateCollision : kCauseCollision;
+  return kCauseValidationFailed;
 }
 
 }  // namespace trainit

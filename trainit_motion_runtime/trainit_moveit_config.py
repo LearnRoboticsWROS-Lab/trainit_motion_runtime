@@ -1,9 +1,10 @@
 # =============================================================================
 # trainit_moveit_config.py — assemble a complete MoveIt configuration from a
 # robot-specific moveit_config package PLUS the framework's GENERIC planning
-# pipelines (ompl / pilz / chomp). This is how a robot application "pulls" the
-# moveit pipelines from the TrainIt Motion Runtime framework: it owns only the
-# robot-specific data (URDF/SRDF/limits/controllers); the planners come here.
+# pipelines (those TMR's planner registry loads: today ompl / pilz / chomp). This is
+# how a robot application "pulls" the moveit pipelines from the TrainIt Motion
+# Runtime framework: it owns only the robot-specific data (URDF/SRDF/limits/
+# controllers); the planners come here.
 #
 # Usage in a launch file:
 #   from trainit_motion_runtime.trainit_moveit_config import build_move_group_params
@@ -13,28 +14,63 @@
 import os
 
 import yaml
-from ament_index_python.packages import get_package_share_directory
+from ament_index_python.packages import PackageNotFoundError, get_package_share_directory
 from moveit_configs_utils import MoveItConfigsBuilder
 
-# Generic, robot-agnostic pipeline configs shipped by this framework.
-PIPELINE_FILES = {
-    "ompl": "ompl_planning.yaml",
-    "pilz_industrial_motion_planner": "pilz_industrial_motion_planner_planning.yaml",
-    "chomp": "chomp_planning.yaml",
-}
+# The planner registry this helper reads (config/planner_profiles.yaml, ADR-0021).
+REGISTRY_SCHEMA_VERSION = 1
 
-DEFAULT_PIPELINES = ("ompl", "pilz_industrial_motion_planner", "chomp")
+
+def _load_yaml(path):
+    with open(path, "r") as handle:
+        return yaml.safe_load(handle)
+
+
+def planner_registry_path() -> str:
+    try:
+        share = get_package_share_directory("trainit_motion_runtime")
+    except PackageNotFoundError as exc:
+        raise RuntimeError(
+            "cannot read TMR's planner registry: trainit_motion_runtime must be installed and "
+            "its workspace sourced before this helper is imported") from exc
+    return os.path.join(share, "config", "planner_profiles.yaml")
+
+
+def planner_registry() -> dict:
+    """TMR's planner registry, as data: which pipelines exist, which are loaded, the modes.
+
+    Read from this package's installed share (found through the ament index), never from a
+    variable of the launch that imports this module.
+    """
+    path = planner_registry_path()
+    registry = _load_yaml(path) or {}
+    version = registry.get("schema_version")
+    if version != REGISTRY_SCHEMA_VERSION:
+        raise RuntimeError(
+            f"{path}: planner registry schema_version {version!r}; "
+            f"this trainit_moveit_config reads schema {REGISTRY_SCHEMA_VERSION}")
+    return registry
+
+
+_REGISTRY = planner_registry()
+
+# Generic, robot-agnostic pipeline configs shipped by this framework: every registry
+# pipeline that has a parameters file.
+PIPELINE_FILES = {name: spec["parameters"]
+                  for name, spec in _REGISTRY["pipelines"].items() if spec.get("parameters")}
+
+# The default loaded set, in registry order: what move_group loads, and what the
+# runtime's availability guard is told is available.
+DEFAULT_PIPELINES = tuple(name for name, spec in _REGISTRY["pipelines"].items()
+                          if spec.get("loaded"))
+
+DEFAULT_PIPELINE = _REGISTRY["default_pipeline"]
 
 # move_group capability plugins required for the Pilz sequence (process path) backend.
 PILZ_SEQUENCE_CAPABILITIES = (
     "pilz_industrial_motion_planner/MoveGroupSequenceAction "
     "pilz_industrial_motion_planner/MoveGroupSequenceService"
 )
-
-
-def _load_yaml(path):
-    with open(path, "r") as handle:
-        return yaml.safe_load(handle)
 
 
 def generic_pipelines_dir():
@@ -112,7 +148,7 @@ def build_move_group_params(robot_name="fr3wml",
                             use_isaac=False,
                             backend=None,
                             pipelines=DEFAULT_PIPELINES,
-                            default_pipeline="ompl",
+                            default_pipeline=DEFAULT_PIPELINE,
                             trajectory_execution=None):
     """Full move_group parameter dict (robot config + generic pipelines + Pilz sequence).
 

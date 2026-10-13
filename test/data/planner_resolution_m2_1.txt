@@ -1,0 +1,139 @@
+default pilz PTP -> eff=pilz pipeline=pilz_industrial_motion_planner planner=PTP two_stage=0 optimizer=
+default pilz LINEAR -> eff=pilz pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+default pilz CIRCULAR -> eff=pilz pipeline=pilz_industrial_motion_planner planner=CIRC two_stage=0 optimizer=
+default pilz COLLISION_FREE -> eff=pilz pipeline=pilz_industrial_motion_planner planner=PTP two_stage=0 optimizer=
+default pilz COLLISION_FREE_OPTIMIZED -> eff=pilz pipeline=pilz_industrial_motion_planner planner=PTP two_stage=0 optimizer=
+default pilz CARTESIAN_PROCESS_PATH -> eff=pilz pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+default pilz ONLINE_SERVO -> eff=pilz pipeline=pilz_industrial_motion_planner planner=PTP two_stage=0 optimizer=
+default pilz setMode -> eff=pilz
+default ompl PTP -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=0 optimizer=
+default ompl LINEAR -> eff=ompl pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+default ompl CIRCULAR -> eff=ompl pipeline=pilz_industrial_motion_planner planner=CIRC two_stage=0 optimizer=
+default ompl COLLISION_FREE -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=0 optimizer=
+default ompl COLLISION_FREE_OPTIMIZED -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=1 optimizer=chomp
+default ompl CARTESIAN_PROCESS_PATH -> eff=ompl pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+default ompl ONLINE_SERVO -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=0 optimizer=
+default ompl setMode -> eff=ompl
+default ompl_chomp PTP -> eff=ompl_chomp pipeline=ompl planner=RRTConnectkConfigDefault two_stage=1 optimizer=chomp
+default ompl_chomp LINEAR -> eff=ompl_chomp pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+default ompl_chomp CIRCULAR -> eff=ompl_chomp pipeline=pilz_industrial_motion_planner planner=CIRC two_stage=0 optimizer=
+default ompl_chomp COLLISION_FREE -> eff=ompl_chomp pipeline=ompl planner=RRTConnectkConfigDefault two_stage=1 optimizer=chomp
+default ompl_chomp COLLISION_FREE_OPTIMIZED -> eff=ompl_chomp pipeline=ompl planner=RRTConnectkConfigDefault two_stage=1 optimizer=chomp
+default ompl_chomp CARTESIAN_PROCESS_PATH -> eff=ompl_chomp pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+default ompl_chomp ONLINE_SERVO -> eff=ompl_chomp pipeline=ompl planner=RRTConnectkConfigDefault two_stage=1 optimizer=chomp
+default ompl_chomp setMode -> eff=ompl_chomp
+default stomp PTP -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=0 optimizer=
+default stomp LINEAR -> eff=ompl pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+default stomp CIRCULAR -> eff=ompl pipeline=pilz_industrial_motion_planner planner=CIRC two_stage=0 optimizer=
+default stomp COLLISION_FREE -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=0 optimizer=
+default stomp COLLISION_FREE_OPTIMIZED -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=1 optimizer=chomp
+default stomp CARTESIAN_PROCESS_PATH -> eff=ompl pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+default stomp ONLINE_SERVO -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=0 optimizer=
+default stomp setMode -> eff=ompl
+all_plus_stomp pilz PTP -> eff=pilz pipeline=pilz_industrial_motion_planner planner=PTP two_stage=0 optimizer=
+all_plus_stomp pilz LINEAR -> eff=pilz pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+all_plus_stomp pilz CIRCULAR -> eff=pilz pipeline=pilz_industrial_motion_planner planner=CIRC two_stage=0 optimizer=
+all_plus_stomp pilz COLLISION_FREE -> eff=pilz pipeline=pilz_industrial_motion_planner planner=PTP two_stage=0 optimizer=
+all_plus_stomp pilz COLLISION_FREE_OPTIMIZED -> eff=pilz pipeline=pilz_industrial_motion_planner planner=PTP two_stage=0 optimizer=
+all_plus_stomp pilz CARTESIAN_PROCESS_PATH -> eff=pilz pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+all_plus_stomp pilz ONLINE_SERVO -> eff=pilz pipeline=pilz_industrial_motion_planner planner=PTP two_stage=0 optimizer=
+all_plus_stomp pilz setMode -> eff=pilz
+all_plus_stomp ompl PTP -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=0 optimizer=
+all_plus_stomp ompl LINEAR -> eff=ompl pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+all_plus_stomp ompl CIRCULAR -> eff=ompl pipeline=pilz_industrial_motion_planner planner=CIRC two_stage=0 optimizer=
+all_plus_stomp ompl COLLISION_FREE -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=0 optimizer=
+all_plus_stomp ompl COLLISION_FREE_OPTIMIZED -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=1 optimizer=chomp
+all_plus_stomp ompl CARTESIAN_PROCESS_PATH -> eff=ompl pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+all_plus_stomp ompl ONLINE_SERVO -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=0 optimizer=
+all_plus_stomp ompl setMode -> eff=ompl
+all_plus_stomp ompl_chomp PTP -> eff=ompl_chomp pipeline=ompl planner=RRTConnectkConfigDefault two_stage=1 optimizer=chomp
+all_plus_stomp ompl_chomp LINEAR -> eff=ompl_chomp pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+all_plus_stomp ompl_chomp CIRCULAR -> eff=ompl_chomp pipeline=pilz_industrial_motion_planner planner=CIRC two_stage=0 optimizer=
+all_plus_stomp ompl_chomp COLLISION_FREE -> eff=ompl_chomp pipeline=ompl planner=RRTConnectkConfigDefault two_stage=1 optimizer=chomp
+all_plus_stomp ompl_chomp COLLISION_FREE_OPTIMIZED -> eff=ompl_chomp pipeline=ompl planner=RRTConnectkConfigDefault two_stage=1 optimizer=chomp
+all_plus_stomp ompl_chomp CARTESIAN_PROCESS_PATH -> eff=ompl_chomp pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+all_plus_stomp ompl_chomp ONLINE_SERVO -> eff=ompl_chomp pipeline=ompl planner=RRTConnectkConfigDefault two_stage=1 optimizer=chomp
+all_plus_stomp ompl_chomp setMode -> eff=ompl_chomp
+all_plus_stomp stomp PTP -> eff=stomp pipeline=stomp planner=STOMP two_stage=0 optimizer=
+all_plus_stomp stomp LINEAR -> eff=stomp pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+all_plus_stomp stomp CIRCULAR -> eff=stomp pipeline=pilz_industrial_motion_planner planner=CIRC two_stage=0 optimizer=
+all_plus_stomp stomp COLLISION_FREE -> eff=stomp pipeline=stomp planner=STOMP two_stage=0 optimizer=
+all_plus_stomp stomp COLLISION_FREE_OPTIMIZED -> eff=stomp pipeline=stomp planner=STOMP two_stage=0 optimizer=
+all_plus_stomp stomp CARTESIAN_PROCESS_PATH -> eff=stomp pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+all_plus_stomp stomp ONLINE_SERVO -> eff=stomp pipeline=stomp planner=STOMP two_stage=0 optimizer=
+all_plus_stomp stomp setMode -> eff=stomp
+no_chomp pilz PTP -> eff=pilz pipeline=pilz_industrial_motion_planner planner=PTP two_stage=0 optimizer=
+no_chomp pilz LINEAR -> eff=pilz pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+no_chomp pilz CIRCULAR -> eff=pilz pipeline=pilz_industrial_motion_planner planner=CIRC two_stage=0 optimizer=
+no_chomp pilz COLLISION_FREE -> eff=pilz pipeline=pilz_industrial_motion_planner planner=PTP two_stage=0 optimizer=
+no_chomp pilz COLLISION_FREE_OPTIMIZED -> eff=pilz pipeline=pilz_industrial_motion_planner planner=PTP two_stage=0 optimizer=
+no_chomp pilz CARTESIAN_PROCESS_PATH -> eff=pilz pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+no_chomp pilz ONLINE_SERVO -> eff=pilz pipeline=pilz_industrial_motion_planner planner=PTP two_stage=0 optimizer=
+no_chomp pilz setMode -> eff=pilz
+no_chomp ompl PTP -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=0 optimizer=
+no_chomp ompl LINEAR -> eff=ompl pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+no_chomp ompl CIRCULAR -> eff=ompl pipeline=pilz_industrial_motion_planner planner=CIRC two_stage=0 optimizer=
+no_chomp ompl COLLISION_FREE -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=0 optimizer=
+no_chomp ompl COLLISION_FREE_OPTIMIZED -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=0 optimizer=
+no_chomp ompl CARTESIAN_PROCESS_PATH -> eff=ompl pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+no_chomp ompl ONLINE_SERVO -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=0 optimizer=
+no_chomp ompl setMode -> eff=ompl
+no_chomp ompl_chomp PTP -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=0 optimizer=
+no_chomp ompl_chomp LINEAR -> eff=ompl pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+no_chomp ompl_chomp CIRCULAR -> eff=ompl pipeline=pilz_industrial_motion_planner planner=CIRC two_stage=0 optimizer=
+no_chomp ompl_chomp COLLISION_FREE -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=0 optimizer=
+no_chomp ompl_chomp COLLISION_FREE_OPTIMIZED -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=0 optimizer=
+no_chomp ompl_chomp CARTESIAN_PROCESS_PATH -> eff=ompl pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+no_chomp ompl_chomp ONLINE_SERVO -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=0 optimizer=
+no_chomp ompl_chomp setMode -> eff=ompl
+no_chomp stomp PTP -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=0 optimizer=
+no_chomp stomp LINEAR -> eff=ompl pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+no_chomp stomp CIRCULAR -> eff=ompl pipeline=pilz_industrial_motion_planner planner=CIRC two_stage=0 optimizer=
+no_chomp stomp COLLISION_FREE -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=0 optimizer=
+no_chomp stomp COLLISION_FREE_OPTIMIZED -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=0 optimizer=
+no_chomp stomp CARTESIAN_PROCESS_PATH -> eff=ompl pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+no_chomp stomp ONLINE_SERVO -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=0 optimizer=
+no_chomp stomp setMode -> eff=ompl
+empty_list pilz PTP -> eff=pilz pipeline=pilz_industrial_motion_planner planner=PTP two_stage=0 optimizer=
+empty_list pilz LINEAR -> eff=pilz pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+empty_list pilz CIRCULAR -> eff=pilz pipeline=pilz_industrial_motion_planner planner=CIRC two_stage=0 optimizer=
+empty_list pilz COLLISION_FREE -> eff=pilz pipeline=pilz_industrial_motion_planner planner=PTP two_stage=0 optimizer=
+empty_list pilz COLLISION_FREE_OPTIMIZED -> eff=pilz pipeline=pilz_industrial_motion_planner planner=PTP two_stage=0 optimizer=
+empty_list pilz CARTESIAN_PROCESS_PATH -> eff=pilz pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+empty_list pilz ONLINE_SERVO -> eff=pilz pipeline=pilz_industrial_motion_planner planner=PTP two_stage=0 optimizer=
+empty_list pilz setMode -> eff=pilz
+empty_list ompl PTP -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=0 optimizer=
+empty_list ompl LINEAR -> eff=ompl pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+empty_list ompl CIRCULAR -> eff=ompl pipeline=pilz_industrial_motion_planner planner=CIRC two_stage=0 optimizer=
+empty_list ompl COLLISION_FREE -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=0 optimizer=
+empty_list ompl COLLISION_FREE_OPTIMIZED -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=1 optimizer=chomp
+empty_list ompl CARTESIAN_PROCESS_PATH -> eff=ompl pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+empty_list ompl ONLINE_SERVO -> eff=ompl pipeline=ompl planner=RRTConnectkConfigDefault two_stage=0 optimizer=
+empty_list ompl setMode -> eff=ompl
+empty_list ompl_chomp PTP -> eff=ompl_chomp pipeline=ompl planner=RRTConnectkConfigDefault two_stage=1 optimizer=chomp
+empty_list ompl_chomp LINEAR -> eff=ompl_chomp pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+empty_list ompl_chomp CIRCULAR -> eff=ompl_chomp pipeline=pilz_industrial_motion_planner planner=CIRC two_stage=0 optimizer=
+empty_list ompl_chomp COLLISION_FREE -> eff=ompl_chomp pipeline=ompl planner=RRTConnectkConfigDefault two_stage=1 optimizer=chomp
+empty_list ompl_chomp COLLISION_FREE_OPTIMIZED -> eff=ompl_chomp pipeline=ompl planner=RRTConnectkConfigDefault two_stage=1 optimizer=chomp
+empty_list ompl_chomp CARTESIAN_PROCESS_PATH -> eff=ompl_chomp pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+empty_list ompl_chomp ONLINE_SERVO -> eff=ompl_chomp pipeline=ompl planner=RRTConnectkConfigDefault two_stage=1 optimizer=chomp
+empty_list ompl_chomp setMode -> eff=ompl_chomp
+empty_list stomp PTP -> eff=stomp pipeline=stomp planner=STOMP two_stage=0 optimizer=
+empty_list stomp LINEAR -> eff=stomp pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+empty_list stomp CIRCULAR -> eff=stomp pipeline=pilz_industrial_motion_planner planner=CIRC two_stage=0 optimizer=
+empty_list stomp COLLISION_FREE -> eff=stomp pipeline=stomp planner=STOMP two_stage=0 optimizer=
+empty_list stomp COLLISION_FREE_OPTIMIZED -> eff=stomp pipeline=stomp planner=STOMP two_stage=0 optimizer=
+empty_list stomp CARTESIAN_PROCESS_PATH -> eff=stomp pipeline=pilz_industrial_motion_planner planner=LIN two_stage=0 optimizer=
+empty_list stomp ONLINE_SERVO -> eff=stomp pipeline=stomp planner=STOMP two_stage=0 optimizer=
+empty_list stomp setMode -> eff=stomp
+parse 'pilz' -> pilz
+parse 'ompl' -> ompl
+parse 'ompl_chomp' -> ompl_chomp
+parse 'stomp' -> stomp
+parse '' -> <none>
+parse 'bogus' -> <none>
+parse 'PILZ' -> <none>
+parse 'chomp' -> <none>
+parse 'Pilz' -> <none>
+parse 'cumotion' -> <none>
+parse 'curobo' -> <none>

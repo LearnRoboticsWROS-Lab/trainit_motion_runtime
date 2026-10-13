@@ -1,0 +1,71 @@
+m2_6 capture eef_check_robot_state
+behaviortree_cpp 4.10.0 | rmw rmw_fastrtps_cpp | moveit_ros_planning_interface 2.5.10
+
+=== scenario CRS-01
+pins: require_attached="true" with no attached_topic: FAILURE before any wait
+provider: none
+--- tick 1: <CheckRobotState require_attached="true" attached_topic=""/>
+bt: FAILURE
+the tree node subscribes to (no topic) after the tick: no
+semantic: command sent=none (a state check sends nothing) | ack=none | state=tick 1: no provider | grasp confirmation=tick 1: no subscription made (no check reached the topic) | BT result=tick 1: CheckRobotState=FAILURE | timeout=tick 1: none (failed before any wait) | release result=none
+
+=== scenario CRS-02
+pins: a topic nobody publishes, timeout_ms 300: FAILURE when the wait expires
+provider: none
+--- tick 1: <CheckRobotState require_attached="true" attached_topic="/m26_crs02/attached" timeout_ms="300"/>
+bt: FAILURE
+the tree node subscribes to /m26_crs02/attached after the tick: yes
+semantic: command sent=none (a state check sends nothing) | ack=none | state=tick 1: provider published during the tick: nothing | grasp confirmation=tick 1: checked through a Bool subscription on /m26_crs02/attached | BT result=tick 1: CheckRobotState=FAILURE | timeout=tick 1: attached wait expired (nothing arrived during the tick) | release result=none
+
+=== scenario CRS-03
+pins: a provider publishing true every 50 ms: SUCCESS on the first fresh sample
+provider: /m26_crs03/attached (volatile reliable depth 1): true every 50 ms, started before the tick
+--- tick 1: <CheckRobotState require_attached="true" attached_topic="/m26_crs03/attached"/>
+bt: SUCCESS
+the tree node subscribes to /m26_crs03/attached after the tick: yes
+semantic: command sent=none (a state check sends nothing) | ack=none | state=tick 1: provider published during the tick: true | grasp confirmation=tick 1: checked through a Bool subscription on /m26_crs03/attached | BT result=tick 1: CheckRobotState=SUCCESS | timeout=none | release result=none
+
+=== scenario CRS-04
+pins: a provider publishing false every 50 ms: FAILURE (object NOT attached)
+provider: /m26_crs04/attached (volatile reliable depth 1): false every 50 ms, started before the tick
+--- tick 1: <CheckRobotState require_attached="true" attached_topic="/m26_crs04/attached"/>
+bt: FAILURE
+the tree node subscribes to /m26_crs04/attached after the tick: yes
+semantic: command sent=none (a state check sends nothing) | ack=none | state=tick 1: provider published during the tick: false | grasp confirmation=tick 1: checked through a Bool subscription on /m26_crs04/attached | BT result=tick 1: CheckRobotState=FAILURE | timeout=tick 1: none (a sample arrived and was not true) | release result=none
+
+=== scenario CRS-05
+pins: a LATCHED provider that published true ONCE before the tick: its sample never reaches the volatile feed -- FAILURE when the wait expires
+provider: /m26_crs05/attached (transient_local reliable depth 1): ONE true published before the tick, then silent
+--- tick 1: <CheckRobotState require_attached="true" attached_topic="/m26_crs05/attached" timeout_ms="500"/>
+bt: FAILURE
+the tree node subscribes to /m26_crs05/attached after the tick: yes
+semantic: command sent=none (a state check sends nothing) | ack=none | state=tick 1: provider published during the tick: nothing | grasp confirmation=tick 1: checked through a Bool subscription on /m26_crs05/attached | BT result=tick 1: CheckRobotState=FAILURE | timeout=tick 1: attached wait expired (nothing arrived during the tick) | release result=none
+
+=== scenario CRS-06
+pins: the fresh-arrival rule: tick 1 succeeds on a periodic provider; a true that ARRIVED before tick 2 does not count -- tick 2 FAILS when its wait expires
+provider: /m26_crs06/attached (volatile reliable depth 1): true every 50 ms, started before the tick
+--- tick 1: <CheckRobotState require_attached="true" attached_topic="/m26_crs06/attached"/>
+bt: SUCCESS
+the tree node subscribes to /m26_crs06/attached after the tick: yes
+between the ticks: the periodic provider stopped, then ONE true was published and had 500 ms to arrive
+--- tick 2: <CheckRobotState require_attached="true" attached_topic="/m26_crs06/attached" timeout_ms="500"/>
+bt: FAILURE
+the tree node subscribes to /m26_crs06/attached after the tick: yes
+semantic: command sent=none (a state check sends nothing) | ack=none | state=tick 1: provider published during the tick: true; tick 2: provider published during the tick: nothing | grasp confirmation=tick 1: checked through a Bool subscription on /m26_crs06/attached; tick 2: checked through a Bool subscription on /m26_crs06/attached | BT result=tick 1: CheckRobotState=SUCCESS; tick 2: CheckRobotState=FAILURE | timeout=tick 2: attached wait expired (nothing arrived during the tick) | release result=none
+
+=== scenario CRS-07
+pins: require_attached="True" (not the exact "true"): the check is SKIPPED -- SUCCESS although the provider says false
+provider: /m26_crs07/attached (volatile reliable depth 1): false every 50 ms, started before the tick
+--- tick 1: <CheckRobotState require_attached="True" attached_topic="/m26_crs07/attached"/>
+bt: SUCCESS
+the tree node subscribes to /m26_crs07/attached after the tick: no
+semantic: command sent=none (a state check sends nothing) | ack=none | state=tick 1: provider not read | grasp confirmation=tick 1: no subscription made (no check reached the topic) | BT result=tick 1: CheckRobotState=SUCCESS | timeout=none | release result=none
+
+=== scenario CRS-08
+pins: require_attached="1": SKIPPED too -- SUCCESS although the provider says false
+provider: /m26_crs08/attached (volatile reliable depth 1): false every 50 ms, started before the tick
+--- tick 1: <CheckRobotState require_attached="1" attached_topic="/m26_crs08/attached"/>
+bt: SUCCESS
+the tree node subscribes to /m26_crs08/attached after the tick: no
+semantic: command sent=none (a state check sends nothing) | ack=none | state=tick 1: provider not read | grasp confirmation=tick 1: no subscription made (no check reached the topic) | BT result=tick 1: CheckRobotState=SUCCESS | timeout=none | release result=none
+

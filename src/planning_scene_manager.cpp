@@ -12,7 +12,12 @@ namespace trainit
 
 PlanningSceneManager::PlanningSceneManager(rclcpp::Node::SharedPtr node,
                                            std::string robot_description)
-: node_(std::move(node))
+: node_(std::move(node)),
+  // vNext M2.7 (namespace fix): the PlanningSceneInterface's own node joins THIS node's namespace
+  // and resolves get/apply_planning_scene and planning_scene there. Default-constructed (ns "") it
+  // took the root unless a process-wide __ns remap moved it; "" and "/" are the same root and the
+  // remap applies to both, so a root or a launch-remapped runtime is unchanged.
+  psi_(node_->get_namespace())
 {
   // The monitor is best-effort: if it fails to initialise (e.g. robot_description
   // not on this node), validation degrades to the model-only checks and we log it.

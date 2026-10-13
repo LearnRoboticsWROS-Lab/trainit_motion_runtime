@@ -1,0 +1,17 @@
+# vNext M2.5 TaskRunner fixture: every step kind TaskRunner has, on the inline test arm.
+name: m25_task
+group: arm
+base_frame: base_link
+tip_link: tcp
+orientation: [1.0, 0.0, 0.0, 0.0]
+defaults: {velocity_scaling: 0.3, acceleration_scaling: 0.2, planning_time: 4.0, planning_attempts: 2}
+scene:
+  - {id: table, frame: base_link, dims: [0.5, 0.5, 0.02], position: [0.4, 0.0, -0.05]}
+steps:
+  - {name: home, motion: ptp, named: home}
+  - {name: approach, motion: linear, position: [0.40, 0.10, 0.30]}
+  - {name: arc, motion: circular, position: [0.45, 0.15, 0.30], circ_interim: [0.43, 0.12, 0.32]}
+  - {name: transfer, motion: free, planner: ompl, joints: [0.1, -0.2, 0.3]}
+  - {name: grip, motion: ptp, named: ready, eef: {gripper: 0.8}, attach: {id: part, dims: [0.05, 0.05, 0.05]}}
+  - {name: weld, motion: process_path, velocity_scaling: 0.05, path: {type: polyline, points: [[0.40, 0.0, 0.30], [0.45, 0.0, 0.30], [0.45, 0.05, 0.30]], velocity: 0.04, acceleration: 0.03}}
+  - {name: release, motion: ptp, named: home, detach: {id: part}}

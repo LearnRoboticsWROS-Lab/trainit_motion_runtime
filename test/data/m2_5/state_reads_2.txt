@@ -1,0 +1,135 @@
+m2_5 capture state_reads_2
+moveit_ros_planning_interface 2.5.10 | behaviortree_cpp 4.10.0 | rmw rmw_fastrtps_cpp
+
+=== scenario READ-06
+pins: a configured tip that is not the tcp: the read measures that link (l3), not tcp
+config: ns=/ group=arm base=base_link tip=l3 mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[-0.5, 0.25, -0.75]
+blackboard: (none)
+script: default (SUCCEED; chomp refuses a pose goal with -16)
+--- tick 1: <StoreCurrentPose pose_key="cur"/>
+events:
+bt: SUCCESS
+stored: cur=Pose(0.25509019358766982,-0.13935640789167855,0.32577881222364313 | -0.061208719054813641,-0.2397127693021015,-0.23971276930210153,0.93879128094518638)
+planner_mode_after: ompl
+counts: none
+--- tick 2: <CheckRobotState position="0.3;0;0.4"/>
+events:
+bt: FAILURE
+stored: cur=Pose(0.25509019358766982,-0.13935640789167855,0.32577881222364313 | -0.061208719054813641,-0.2397127693021015,-0.23971276930210153,0.93879128094518638)
+planner_mode_after: ompl
+counts: none
+
+=== scenario READ-07
+pins: after a cartesian path left MoveGroup's end-effector link at l3, a read still measures the configured tcp
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=cartesian_waypoints pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[-0.5, 0.25, -0.75]
+blackboard: (none)
+script: default (SUCCEED; chomp refuses a pose goal with -16)
+--- tick 1: <StoreCurrentPose pose_key="before"/>
+events:
+bt: SUCCESS
+stored: before=Pose(0.4091204241744838,-0.22350350637246821,0.42166391994448371 | -0.061208719054813641,-0.2397127693021015,-0.23971276930210153,0.93879128094518638)
+stored: after=(none)
+stored: target=(none)
+planner_mode_after: ompl
+counts: none
+--- tick 2: <ExecuteProcessPath path_file="${PATHS}/p_world_l3.yaml"/>
+events:
+[1] SERVICE /compute_cartesian_path GetCartesianPath.request #1 -> SUCCEED(1)
+  | group=arm link=l3 frame=world waypoints=3 max_step=0.01 jump=0 avoid_collisions=0 vel=0.10000000000000001 acc=0.10000000000000001
+  header:
+    frame_id: "world"
+  start_state:
+    joint_state:
+      header:
+        frame_id: ""
+      name: []
+      position: []
+      velocity: []
+      effort: []
+    multi_dof_joint_state:
+      header:
+        frame_id: ""
+      joint_names: []
+      transforms: []
+      twist: []
+      wrench: []
+    attached_collision_objects: []
+    is_diff: true
+  group_name: "arm"
+  link_name: "l3"
+  waypoints:
+  -
+    position:
+      x: 0.40000000000000002
+      y: 0.10000000000000001
+      z: 0.40000000000000002
+    orientation:
+      x: 1.0000000000000000
+      y: 0.0000000000000000
+      z: 0.0000000000000000
+      w: 0.0000000000000000
+  -
+    position:
+      x: 0.40000000000000002
+      y: 0.14999999999999999
+      z: 0.40000000000000002
+    orientation:
+      x: 1.0000000000000000
+      y: 0.0000000000000000
+      z: 0.0000000000000000
+      w: 0.0000000000000000
+  -
+    position:
+      x: 0.45000000000000001
+      y: 0.14999999999999999
+      z: 0.40000000000000002
+    orientation:
+      x: 1.0000000000000000
+      y: 0.0000000000000000
+      z: 0.0000000000000000
+      w: 0.0000000000000000
+  max_step: 0.010000000000000000
+  jump_threshold: 0.0000000000000000
+  prismatic_jump_threshold: 0.0000000000000000
+  revolute_jump_threshold: 0.0000000000000000
+  avoid_collisions: false
+  path_constraints:
+    name: ""
+    joint_constraints: []
+    position_constraints: []
+    orientation_constraints: []
+    visibility_constraints: []
+  max_velocity_scaling_factor: 0.10000000000000001
+  max_acceleration_scaling_factor: 0.10000000000000001
+[2] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+    joint_trajectory: frame=world joints=[j1,j2,j3] points=87
+      first: positions=[0, -0, 0] velocities=[0, -0, 0] accelerations=[0, 0, 0] t=0s+0ns
+      last:  positions=[0.20000000000000001, -0.29999999999999999, 0.40100000000000002] velocities=[8.7458410952799021e-18, -1.3118761642919851e-17, 1.7535411396036206e-17] accelerations=[-0.0083212602483470482, 0.012481890372520571, -0.016684126797935833] t=9s+371999999ns
+    multi_dof_points=0
+    sha256(precision-17 block)=7d4b247a217285d5c065075969cc4e24af80acfcb3bf4dd7839feefe59b63411
+bt: SUCCESS
+stored: before=Pose(0.4091204241744838,-0.22350350637246821,0.42166391994448371 | -0.061208719054813641,-0.2397127693021015,-0.23971276930210153,0.93879128094518638)
+stored: after=(none)
+stored: target=(none)
+planner_mode_after: ompl
+counts: /compute_cartesian_path=1 /execute_trajectory=1
+--- tick 3: <StoreCurrentPose pose_key="after"/>
+events:
+bt: SUCCESS
+stored: before=Pose(0.4091204241744838,-0.22350350637246821,0.42166391994448371 | -0.061208719054813641,-0.2397127693021015,-0.23971276930210153,0.93879128094518638)
+stored: after=Pose(0.4091204241744838,-0.22350350637246821,0.42166391994448371 | -0.061208719054813641,-0.2397127693021015,-0.23971276930210153,0.93879128094518638)
+stored: target=(none)
+planner_mode_after: ompl
+counts: none
+--- tick 4: <ComputeTcpTarget target_xyz="0.4;0.1;0.3" out_key="target"/>
+events:
+bt: SUCCESS
+stored: before=Pose(0.4091204241744838,-0.22350350637246821,0.42166391994448371 | -0.061208719054813641,-0.2397127693021015,-0.23971276930210153,0.93879128094518638)
+stored: after=Pose(0.4091204241744838,-0.22350350637246821,0.42166391994448371 | -0.061208719054813641,-0.2397127693021015,-0.23971276930210153,0.93879128094518638)
+stored: target=Pose(0.40000000000000002,0.10000000000000001,0.29999999999999999 | -0.061208719054813655,-0.23971276930210153,-0.23971276930210156,0.93879128094518638)
+planner_mode_after: ompl
+counts: none
+

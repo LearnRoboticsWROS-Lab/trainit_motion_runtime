@@ -48,13 +48,13 @@ PlannerProfile ManualMotionStrategySelector::selectPlanner(
 {
   // --- Cartesian-critical intents: deterministic Pilz, mode-independent -------
   if (intent == MotionIntent::LINEAR)
-    return PlannerProfile{PIPELINE_PILZ, "LIN", false, ""};
+    return PlannerProfile{PIPELINE_PILZ, PILZ_LIN, false, ""};
   if (intent == MotionIntent::CIRCULAR)
-    return PlannerProfile{PIPELINE_PILZ, "CIRC", false, ""};
+    return PlannerProfile{PIPELINE_PILZ, PILZ_CIRC, false, ""};
   // CARTESIAN_PROCESS_PATH is handled by a process-path backend, not a single
   // planner; default a process LIN segment if a profile is requested.
   if (intent == MotionIntent::CARTESIAN_PROCESS_PATH)
-    return PlannerProfile{PIPELINE_PILZ, "LIN", false, ""};
+    return PlannerProfile{PIPELINE_PILZ, PILZ_LIN, false, ""};
 
   // --- Free-space transfer (PTP / COLLISION_FREE[_OPTIMIZED]) by mode ---------
   const bool force_optimize = (intent == MotionIntent::COLLISION_FREE_OPTIMIZED);
@@ -63,7 +63,7 @@ PlannerProfile ManualMotionStrategySelector::selectPlanner(
   {
     case PlannerMode::PILZ:
       // Pilz PTP: joint-space, collision-checked (no avoidance routing).
-      return PlannerProfile{PIPELINE_PILZ, "PTP", false, ""};
+      return PlannerProfile{PIPELINE_PILZ, PILZ_PTP, false, ""};
 
     case PlannerMode::OMPL:
       if (force_optimize && pipelineAvailable(PIPELINE_CHOMP))
@@ -75,9 +75,9 @@ PlannerProfile ManualMotionStrategySelector::selectPlanner(
 
     case PlannerMode::STOMP:
       // Reached only if STOMP pipeline is available (else effectiveMode degraded it).
-      return PlannerProfile{PIPELINE_STOMP, "STOMP", false, ""};
+      return PlannerProfile{PIPELINE_STOMP, STOMP_PLANNER, false, ""};
   }
-  return PlannerProfile{PIPELINE_PILZ, "PTP", false, ""};
+  return PlannerProfile{PIPELINE_PILZ, PILZ_PTP, false, ""};
 }
 
 }  // namespace trainit

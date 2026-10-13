@@ -1,0 +1,228 @@
+m2_6 capture eef_runner_child
+behaviortree_cpp 4.10.0 | rmw rmw_fastrtps_cpp | moveit_ros_planning_interface 2.5.10
+
+=== scenario RC-01
+pins: golden-style keys (gripper_action only) against a shim-like server that ABORTS every goal: the runner exits 0 and publishes no grasp Bool
+child /trainit_run_bt: trainit_run_bt --ros-args --params-file <RC-01 params> (tree test/data/m2_6/eef_tree.xml)
+  end-effector keys:
+    gripper_action: "/suctioncup_controller/gripper_command"
+  harness keys: bt_tree_file bt_tree_id group=arm base_frame=base_link tip_link=tcp planner_mode=ompl process_controller=mock enforce_validation=true groot_monitor=false robot_description(_semantic)=the inline M2.5 test arm
+server /suctioncup_controller/gripper_command: script ABORT(reached_goal=0,stalled=0,position=shim(1 if goal>=0.5 else 0),effort=0), ABORT(reached_goal=0,stalled=0,position=shim(1 if goal>=0.5 else 0),effort=0) (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+recorder: /gripper_cmd (volatile reliable depth 10), made before the children
+events /suctioncup_controller/gripper_command:
+[1] ACTION /suctioncup_controller/gripper_command GripperCommand.goal #1 -> ABORT(reached_goal=0,stalled=0,position=shim(1 if goal>=0.5 else 0),effort=0)
+  | position=1 max_effort=0
+  command:
+    position: 1.0000000000000000
+    max_effort: 0.0000000000000000
+[2] ACTION /suctioncup_controller/gripper_command goal #1 response ACCEPT_AND_EXECUTE
+[3] ACTION /suctioncup_controller/gripper_command goal #1 result ABORTED
+  | reached_goal=0 stalled=0 position=1 effort=0
+[4] ACTION /suctioncup_controller/gripper_command GripperCommand.goal #2 -> ABORT(reached_goal=0,stalled=0,position=shim(1 if goal>=0.5 else 0),effort=0)
+  | position=0 max_effort=0
+  command:
+    position: 0.0000000000000000
+    max_effort: 0.0000000000000000
+[5] ACTION /suctioncup_controller/gripper_command goal #2 response ACCEPT_AND_EXECUTE
+[6] ACTION /suctioncup_controller/gripper_command goal #2 result ABORTED
+  | reached_goal=0 stalled=0 position=0 effort=0
+events of the root move_group fakes (summaries):
+[1] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+recorder received: (none)
+child /trainit_run_bt: exit code 0, 'BT finished: SUCCESS', Bool publishers none, Bool subscriptions none
+semantic: command sent=/suctioncup_controller/gripper_command CloseGripper: GripperCommand(position=1,max_effort=0); /suctioncup_controller/gripper_command OpenGripper: GripperCommand(position=0,max_effort=0); Bool on /gripper_cmd: (none) | ack=/suctioncup_controller/gripper_command CloseGripper: ACCEPTED; /suctioncup_controller/gripper_command OpenGripper: ACCEPTED | state=/suctioncup_controller/gripper_command CloseGripper: ABORTED{reached_goal=0 stalled=0 position=1 effort=0}; /suctioncup_controller/gripper_command OpenGripper: ABORTED{reached_goal=0 stalled=0 position=0 effort=0} | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=/trainit_run_bt: BT finished SUCCESS, exit code 0 | timeout=none | release result=/suctioncup_controller/gripper_command OpenGripper: ABORTED | result code=/suctioncup_controller/gripper_command CloseGripper: ABORTED; /suctioncup_controller/gripper_command OpenGripper: ABORTED
+
+=== scenario RC-02
+pins: ROS2ML-style keys (action + joint targets + gripper_cmd_topic) against a ros2_control-like server (close stalls SUCCEEDED, open reaches): goals 0.7691/0, Bool true then false, exit 0
+child /trainit_run_bt: trainit_run_bt --ros-args --params-file <RC-02 params> (tree test/data/m2_6/eef_tree.xml)
+  end-effector keys:
+    gripper_action: "/gripper_position_controller/gripper_cmd"
+    gripper_close_position: 0.7691
+    gripper_open_position: 0.0
+    gripper_cmd_topic: "/gripper_cmd"
+  harness keys: bt_tree_file bt_tree_id group=arm base_frame=base_link tip_link=tcp planner_mode=ompl process_controller=mock enforce_validation=true groot_monitor=false robot_description(_semantic)=the inline M2.5 test arm
+server /gripper_position_controller/gripper_cmd: script SUCCEED(reached_goal=0,stalled=1,position=0.5,effort=0), SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0) (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+recorder: /gripper_cmd (volatile reliable depth 10), made before the children
+events /gripper_position_controller/gripper_cmd:
+[1] ACTION /gripper_position_controller/gripper_cmd GripperCommand.goal #1 -> SUCCEED(reached_goal=0,stalled=1,position=0.5,effort=0)
+  | position=0.76910000000000001 max_effort=0
+  command:
+    position: 0.76910000000000001
+    max_effort: 0.0000000000000000
+[2] ACTION /gripper_position_controller/gripper_cmd goal #1 response ACCEPT_AND_EXECUTE
+[3] ACTION /gripper_position_controller/gripper_cmd goal #1 result SUCCEEDED
+  | reached_goal=0 stalled=1 position=0.5 effort=0
+[4] ACTION /gripper_position_controller/gripper_cmd GripperCommand.goal #2 -> SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0)
+  | position=0 max_effort=0
+  command:
+    position: 0.0000000000000000
+    max_effort: 0.0000000000000000
+[5] ACTION /gripper_position_controller/gripper_cmd goal #2 response ACCEPT_AND_EXECUTE
+[6] ACTION /gripper_position_controller/gripper_cmd goal #2 result SUCCEEDED
+  | reached_goal=1 stalled=0 position=0 effort=0
+events of the root move_group fakes (summaries):
+[1] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+recorder received: /trainit_run_bt: true, false
+child /trainit_run_bt: exit code 0, 'BT finished: SUCCESS', Bool publishers [/gripper_cmd], Bool subscriptions none
+semantic: command sent=/gripper_position_controller/gripper_cmd CloseGripper: GripperCommand(position=0.76910000000000001,max_effort=0); /gripper_position_controller/gripper_cmd OpenGripper: GripperCommand(position=0,max_effort=0); Bool on /gripper_cmd: /trainit_run_bt: true, false | ack=/gripper_position_controller/gripper_cmd CloseGripper: ACCEPTED; /gripper_position_controller/gripper_cmd OpenGripper: ACCEPTED | state=/gripper_position_controller/gripper_cmd CloseGripper: SUCCEEDED{reached_goal=0 stalled=1 position=0.5 effort=0}; /gripper_position_controller/gripper_cmd OpenGripper: SUCCEEDED{reached_goal=1 stalled=0 position=0 effort=0} | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=/trainit_run_bt: BT finished SUCCESS, exit code 0 | timeout=none | release result=/gripper_position_controller/gripper_cmd OpenGripper: SUCCEEDED | result code=/gripper_position_controller/gripper_cmd CloseGripper: SUCCEEDED; /gripper_position_controller/gripper_cmd OpenGripper: SUCCEEDED
+
+=== scenario RC-03
+pins: MISSPELT keys (gripper_close_positon, gripper_cmd_topc) are accepted silently: the close sends the 1.0 default and no grasp Bool is published; exit 0
+child /trainit_run_bt: trainit_run_bt --ros-args --params-file <RC-03 params> (tree test/data/m2_6/eef_tree.xml)
+  end-effector keys:
+    gripper_action: "/gripper_position_controller/gripper_cmd"
+    gripper_close_positon: 0.7691
+    gripper_open_position: 0.0
+    gripper_cmd_topc: "/gripper_cmd"
+  harness keys: bt_tree_file bt_tree_id group=arm base_frame=base_link tip_link=tcp planner_mode=ompl process_controller=mock enforce_validation=true groot_monitor=false robot_description(_semantic)=the inline M2.5 test arm
+server /gripper_position_controller/gripper_cmd: script default (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+recorder: /gripper_cmd (volatile reliable depth 10), made before the children
+events /gripper_position_controller/gripper_cmd:
+[1] ACTION /gripper_position_controller/gripper_cmd GripperCommand.goal #1 -> SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0)
+  | position=1 max_effort=0
+  command:
+    position: 1.0000000000000000
+    max_effort: 0.0000000000000000
+[2] ACTION /gripper_position_controller/gripper_cmd goal #1 response ACCEPT_AND_EXECUTE
+[3] ACTION /gripper_position_controller/gripper_cmd goal #1 result SUCCEEDED
+  | reached_goal=1 stalled=0 position=1 effort=0
+[4] ACTION /gripper_position_controller/gripper_cmd GripperCommand.goal #2 -> SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0)
+  | position=0 max_effort=0
+  command:
+    position: 0.0000000000000000
+    max_effort: 0.0000000000000000
+[5] ACTION /gripper_position_controller/gripper_cmd goal #2 response ACCEPT_AND_EXECUTE
+[6] ACTION /gripper_position_controller/gripper_cmd goal #2 result SUCCEEDED
+  | reached_goal=1 stalled=0 position=0 effort=0
+events of the root move_group fakes (summaries):
+[1] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+recorder received: (none)
+child /trainit_run_bt: exit code 0, 'BT finished: SUCCESS', Bool publishers none, Bool subscriptions none
+semantic: command sent=/gripper_position_controller/gripper_cmd CloseGripper: GripperCommand(position=1,max_effort=0); /gripper_position_controller/gripper_cmd OpenGripper: GripperCommand(position=0,max_effort=0); Bool on /gripper_cmd: (none) | ack=/gripper_position_controller/gripper_cmd CloseGripper: ACCEPTED; /gripper_position_controller/gripper_cmd OpenGripper: ACCEPTED | state=/gripper_position_controller/gripper_cmd CloseGripper: SUCCEEDED{reached_goal=1 stalled=0 position=1 effort=0}; /gripper_position_controller/gripper_cmd OpenGripper: SUCCEEDED{reached_goal=1 stalled=0 position=0 effort=0} | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=/trainit_run_bt: BT finished SUCCESS, exit code 0 | timeout=none | release result=/gripper_position_controller/gripper_cmd OpenGripper: SUCCEEDED | result code=/gripper_position_controller/gripper_cmd CloseGripper: SUCCEEDED; /gripper_position_controller/gripper_cmd OpenGripper: SUCCEEDED
+
+=== scenario RC-04
+pins: two children in /r1 and /r3 (TSA-style namespaced actions, ONE global gripper_cmd_topic): each reaches its own server; both robots' Bools land on the one topic
+child /r1/trainit_run_bt: trainit_run_bt --ros-args --params-file <RC-04 params> -r __ns:=/r1 (tree test/data/m2_6/eef_tree.xml)
+  end-effector keys:
+    gripper_action: "/r1/gripper_position_controller/gripper_cmd"
+    gripper_close_position: 0.7691
+    gripper_open_position: 0.0
+    gripper_cmd_topic: "/gripper_cmd"
+  harness keys: bt_tree_file bt_tree_id group=arm base_frame=base_link tip_link=tcp planner_mode=ompl process_controller=mock enforce_validation=true groot_monitor=false robot_description(_semantic)=the inline M2.5 test arm
+child /r3/trainit_run_bt: trainit_run_bt --ros-args --params-file <RC-04 params> -r __ns:=/r3 (tree test/data/m2_6/eef_tree.xml)
+  end-effector keys:
+    gripper_action: "/r3/gripper_position_controller/gripper_cmd"
+    gripper_close_position: 0.7691
+    gripper_open_position: 0.0
+    gripper_cmd_topic: "/gripper_cmd"
+  harness keys: bt_tree_file bt_tree_id group=arm base_frame=base_link tip_link=tcp planner_mode=ompl process_controller=mock enforce_validation=true groot_monitor=false robot_description(_semantic)=the inline M2.5 test arm
+server /r1/gripper_position_controller/gripper_cmd: script default (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+server /r3/gripper_position_controller/gripper_cmd: script default (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+recorder: /gripper_cmd (volatile reliable depth 10), made before the children
+events /r1/gripper_position_controller/gripper_cmd:
+[1] ACTION /r1/gripper_position_controller/gripper_cmd GripperCommand.goal #1 -> SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0)
+  | position=0.76910000000000001 max_effort=0
+  command:
+    position: 0.76910000000000001
+    max_effort: 0.0000000000000000
+[2] ACTION /r1/gripper_position_controller/gripper_cmd goal #1 response ACCEPT_AND_EXECUTE
+[3] ACTION /r1/gripper_position_controller/gripper_cmd goal #1 result SUCCEEDED
+  | reached_goal=1 stalled=0 position=0.76910000000000001 effort=0
+[4] ACTION /r1/gripper_position_controller/gripper_cmd GripperCommand.goal #2 -> SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0)
+  | position=0 max_effort=0
+  command:
+    position: 0.0000000000000000
+    max_effort: 0.0000000000000000
+[5] ACTION /r1/gripper_position_controller/gripper_cmd goal #2 response ACCEPT_AND_EXECUTE
+[6] ACTION /r1/gripper_position_controller/gripper_cmd goal #2 result SUCCEEDED
+  | reached_goal=1 stalled=0 position=0 effort=0
+events /r3/gripper_position_controller/gripper_cmd:
+[1] ACTION /r3/gripper_position_controller/gripper_cmd GripperCommand.goal #1 -> SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0)
+  | position=0.76910000000000001 max_effort=0
+  command:
+    position: 0.76910000000000001
+    max_effort: 0.0000000000000000
+[2] ACTION /r3/gripper_position_controller/gripper_cmd goal #1 response ACCEPT_AND_EXECUTE
+[3] ACTION /r3/gripper_position_controller/gripper_cmd goal #1 result SUCCEEDED
+  | reached_goal=1 stalled=0 position=0.76910000000000001 effort=0
+[4] ACTION /r3/gripper_position_controller/gripper_cmd GripperCommand.goal #2 -> SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0)
+  | position=0 max_effort=0
+  command:
+    position: 0.0000000000000000
+    max_effort: 0.0000000000000000
+[5] ACTION /r3/gripper_position_controller/gripper_cmd goal #2 response ACCEPT_AND_EXECUTE
+[6] ACTION /r3/gripper_position_controller/gripper_cmd goal #2 result SUCCEEDED
+  | reached_goal=1 stalled=0 position=0 effort=0
+events of the root move_group fakes (summaries):
+(none)
+events of the /r1 scene fakes (summaries):
+[1] SERVICE /r1/get_planning_scene GetPlanningScene.request components=1023
+events of the /r3 scene fakes (summaries):
+[1] SERVICE /r3/get_planning_scene GetPlanningScene.request components=1023
+recorder received: /r1/trainit_run_bt: true, false; /r3/trainit_run_bt: true, false
+child /r1/trainit_run_bt: exit code 0, 'BT finished: SUCCESS', Bool publishers [/gripper_cmd], Bool subscriptions none
+child /r3/trainit_run_bt: exit code 0, 'BT finished: SUCCESS', Bool publishers [/gripper_cmd], Bool subscriptions none
+semantic: command sent=/r1/gripper_position_controller/gripper_cmd CloseGripper: GripperCommand(position=0.76910000000000001,max_effort=0); /r1/gripper_position_controller/gripper_cmd OpenGripper: GripperCommand(position=0,max_effort=0); /r3/gripper_position_controller/gripper_cmd CloseGripper: GripperCommand(position=0.76910000000000001,max_effort=0); /r3/gripper_position_controller/gripper_cmd OpenGripper: GripperCommand(position=0,max_effort=0); Bool on /gripper_cmd: /r1/trainit_run_bt: true, false; /r3/trainit_run_bt: true, false | ack=/r1/gripper_position_controller/gripper_cmd CloseGripper: ACCEPTED; /r1/gripper_position_controller/gripper_cmd OpenGripper: ACCEPTED; /r3/gripper_position_controller/gripper_cmd CloseGripper: ACCEPTED; /r3/gripper_position_controller/gripper_cmd OpenGripper: ACCEPTED | state=/r1/gripper_position_controller/gripper_cmd CloseGripper: SUCCEEDED{reached_goal=1 stalled=0 position=0.76910000000000001 effort=0}; /r1/gripper_position_controller/gripper_cmd OpenGripper: SUCCEEDED{reached_goal=1 stalled=0 position=0 effort=0}; /r3/gripper_position_controller/gripper_cmd CloseGripper: SUCCEEDED{reached_goal=1 stalled=0 position=0.76910000000000001 effort=0}; /r3/gripper_position_controller/gripper_cmd OpenGripper: SUCCEEDED{reached_goal=1 stalled=0 position=0 effort=0} | grasp confirmation=Bool state subscriptions of /r1/trainit_run_bt: none; Bool state subscriptions of /r3/trainit_run_bt: none | BT result=/r1/trainit_run_bt: BT finished SUCCESS, exit code 0; /r3/trainit_run_bt: BT finished SUCCESS, exit code 0 | timeout=none | release result=/r1/gripper_position_controller/gripper_cmd OpenGripper: SUCCEEDED; /r3/gripper_position_controller/gripper_cmd OpenGripper: SUCCEEDED | result code=/r1/gripper_position_controller/gripper_cmd CloseGripper: SUCCEEDED; /r1/gripper_position_controller/gripper_cmd OpenGripper: SUCCEEDED; /r3/gripper_position_controller/gripper_cmd CloseGripper: SUCCEEDED; /r3/gripper_position_controller/gripper_cmd OpenGripper: SUCCEEDED
+
+=== scenario RC-05
+pins: two children in /r1 and /r3 close and HOLD: a late joiner on the global grasp topic receives BOTH robots' latched true
+child /r1/trainit_run_bt: trainit_run_bt --ros-args --params-file <RC-05 params> -r __ns:=/r1 (tree test/data/m2_6/eef_tree_hold.xml)
+  end-effector keys:
+    gripper_action: "/r1/gripper_position_controller/gripper_cmd"
+    gripper_close_position: 0.7691
+    gripper_open_position: 0.0
+    gripper_cmd_topic: "/gripper_cmd"
+  harness keys: bt_tree_file bt_tree_id group=arm base_frame=base_link tip_link=tcp planner_mode=ompl process_controller=mock enforce_validation=true groot_monitor=false robot_description(_semantic)=the inline M2.5 test arm
+child /r3/trainit_run_bt: trainit_run_bt --ros-args --params-file <RC-05 params> -r __ns:=/r3 (tree test/data/m2_6/eef_tree_hold.xml)
+  end-effector keys:
+    gripper_action: "/r3/gripper_position_controller/gripper_cmd"
+    gripper_close_position: 0.7691
+    gripper_open_position: 0.0
+    gripper_cmd_topic: "/gripper_cmd"
+  harness keys: bt_tree_file bt_tree_id group=arm base_frame=base_link tip_link=tcp planner_mode=ompl process_controller=mock enforce_validation=true groot_monitor=false robot_description(_semantic)=the inline M2.5 test arm
+server /r1/gripper_position_controller/gripper_cmd: script default (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+server /r3/gripper_position_controller/gripper_cmd: script default (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+recorder: /gripper_cmd (volatile reliable depth 10), made before the children
+events /r1/gripper_position_controller/gripper_cmd:
+[1] ACTION /r1/gripper_position_controller/gripper_cmd GripperCommand.goal #1 -> SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0)
+  | position=0.76910000000000001 max_effort=0
+  command:
+    position: 0.76910000000000001
+    max_effort: 0.0000000000000000
+[2] ACTION /r1/gripper_position_controller/gripper_cmd goal #1 response ACCEPT_AND_EXECUTE
+[3] ACTION /r1/gripper_position_controller/gripper_cmd goal #1 result SUCCEEDED
+  | reached_goal=1 stalled=0 position=0.76910000000000001 effort=0
+events /r3/gripper_position_controller/gripper_cmd:
+[1] ACTION /r3/gripper_position_controller/gripper_cmd GripperCommand.goal #1 -> SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0)
+  | position=0.76910000000000001 max_effort=0
+  command:
+    position: 0.76910000000000001
+    max_effort: 0.0000000000000000
+[2] ACTION /r3/gripper_position_controller/gripper_cmd goal #1 response ACCEPT_AND_EXECUTE
+[3] ACTION /r3/gripper_position_controller/gripper_cmd goal #1 result SUCCEEDED
+  | reached_goal=1 stalled=0 position=0.76910000000000001 effort=0
+events of the root move_group fakes (summaries):
+(none)
+events of the /r1 scene fakes (summaries):
+[1] SERVICE /r1/get_planning_scene GetPlanningScene.request components=1023
+events of the /r3 scene fakes (summaries):
+[1] SERVICE /r3/get_planning_scene GetPlanningScene.request components=1023
+recorder received: /r1/trainit_run_bt: true; /r3/trainit_run_bt: true
+late joiner (transient_local reliable depth 10, made once every child had closed) received: {/r1/trainit_run_bt:true, /r3/trainit_run_bt:true}
+child /r1/trainit_run_bt: exit code 0, 'BT finished: SUCCESS', Bool publishers [/gripper_cmd], Bool subscriptions none
+child /r3/trainit_run_bt: exit code 0, 'BT finished: SUCCESS', Bool publishers [/gripper_cmd], Bool subscriptions none
+semantic: command sent=/r1/gripper_position_controller/gripper_cmd CloseGripper: GripperCommand(position=0.76910000000000001,max_effort=0); /r3/gripper_position_controller/gripper_cmd CloseGripper: GripperCommand(position=0.76910000000000001,max_effort=0); Bool on /gripper_cmd: /r1/trainit_run_bt: true; /r3/trainit_run_bt: true | ack=/r1/gripper_position_controller/gripper_cmd CloseGripper: ACCEPTED; /r3/gripper_position_controller/gripper_cmd CloseGripper: ACCEPTED | state=/r1/gripper_position_controller/gripper_cmd CloseGripper: SUCCEEDED{reached_goal=1 stalled=0 position=0.76910000000000001 effort=0}; /r3/gripper_position_controller/gripper_cmd CloseGripper: SUCCEEDED{reached_goal=1 stalled=0 position=0.76910000000000001 effort=0}; late joiner on /gripper_cmd: {/r1/trainit_run_bt:true, /r3/trainit_run_bt:true} | grasp confirmation=Bool state subscriptions of /r1/trainit_run_bt: none; Bool state subscriptions of /r3/trainit_run_bt: none | BT result=/r1/trainit_run_bt: BT finished SUCCESS, exit code 0; /r3/trainit_run_bt: BT finished SUCCESS, exit code 0 | timeout=none | release result=none | result code=/r1/gripper_position_controller/gripper_cmd CloseGripper: SUCCEEDED; /r3/gripper_position_controller/gripper_cmd CloseGripper: SUCCEEDED
+
+=== scenario RC-06
+pins: golden-style keys and NO end-effector server (the golden's real mode): the first CloseGripper fails after the 5 s server wait; exit 1
+child /trainit_run_bt: trainit_run_bt --ros-args --params-file <RC-06 params> (tree test/data/m2_6/eef_tree.xml)
+  end-effector keys:
+    gripper_action: "/suctioncup_controller/gripper_command"
+  harness keys: bt_tree_file bt_tree_id group=arm base_frame=base_link tip_link=tcp planner_mode=ompl process_controller=mock enforce_validation=true groot_monitor=false robot_description(_semantic)=the inline M2.5 test arm
+recorder: /gripper_cmd (volatile reliable depth 10), made before the children
+events of the root move_group fakes (summaries):
+[1] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+recorder received: (none)
+child /trainit_run_bt: exit code 1, 'BT finished: FAILURE', Bool publishers none, Bool subscriptions none
+semantic: command sent=Bool on /gripper_cmd: (none) | ack=no server: none serves the configured gripper_action | state=none | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=/trainit_run_bt: BT finished FAILURE, exit code 1 | timeout=/trainit_run_bt: server wait (no server) | release result=none
+

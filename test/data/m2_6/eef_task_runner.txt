@@ -1,0 +1,130 @@
+m2_6 capture eef_task_runner
+behaviortree_cpp 4.10.0 | rmw rmw_fastrtps_cpp | moveit_ros_planning_interface 2.5.10
+
+=== scenario TR-01
+pins: both gripper steps SUCCEEDED: run true
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0, 0, 0]
+task: test/data/m2_6/eef_task.yaml (grip: ptp ready + gripper 1.0; release: ptp home + gripper 0.0)
+gripper: GripperController(/m26_tr_01/gripper_command); server: /m26_tr_01/gripper_command script: SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0), SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0) (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+events (MoveIt summaries only):
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.10000000000000001 acc=0.10000000000000001 time=5 attempts=1 plan_only=1
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+[3] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+    joint_trajectory: frame= joints=[j1,j2,j3] points=4
+      first: positions=[0, -0, 0] velocities=[] accelerations=[] t=0s+0ns
+      last:  positions=[0.29999999999999999, -0.40000000000000008, 0.60099999999999998] velocities=[] accelerations=[] t=0s+300000000ns
+    multi_dof_points=0
+    sha256(precision-17 block)=ef35c4ba3f0360f59ce8192714c808f0af2a9ab544e0af7019b0d3280cb8e9b6
+[4] ACTION /m26_tr_01/gripper_command GripperCommand.goal #1 -> SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0)
+  | position=1 max_effort=0
+[5] ACTION /m26_tr_01/gripper_command goal #1 response ACCEPT_AND_EXECUTE
+[6] ACTION /m26_tr_01/gripper_command goal #1 result SUCCEEDED
+  | reached_goal=1 stalled=0 position=1 effort=0
+[7] ACTION /move_action MoveGroup.goal #2 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.10000000000000001 acc=0.10000000000000001 time=5 attempts=1 plan_only=1
+[8] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+[9] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+    joint_trajectory: frame= joints=[j1,j2,j3] points=2
+      first: positions=[0, 0, 0] velocities=[] accelerations=[] t=0s+0ns
+      last:  positions=[0, 0, 0.002] velocities=[] accelerations=[] t=0s+100000000ns
+    multi_dof_points=0
+    sha256(precision-17 block)=dc2b0aee5aaf52364f2dedfffea5bd5b90ae73962ea82ba8325bf4b6be741cdc
+[10] ACTION /m26_tr_01/gripper_command GripperCommand.goal #2 -> SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0)
+  | position=0 max_effort=0
+[11] ACTION /m26_tr_01/gripper_command goal #2 response ACCEPT_AND_EXECUTE
+[12] ACTION /m26_tr_01/gripper_command goal #2 result SUCCEEDED
+  | reached_goal=1 stalled=0 position=0 effort=0
+run: true
+semantic: command sent=grip: GripperCommand(position=1,max_effort=0); release: GripperCommand(position=0,max_effort=0) | ack=grip: ACCEPTED; release: ACCEPTED | state=grip: SUCCEEDED{reached_goal=1 stalled=0 position=1 effort=0}; release: SUCCEEDED{reached_goal=1 stalled=0 position=0 effort=0} | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=TaskRunner::run=true | timeout=none | release result=release step: GripperCommand SUCCEEDED | result code=grip: SUCCEEDED; release: SUCCEEDED
+counts: /execute_trajectory=2 /get_planning_scene=2 /m26_tr_01/gripper_command=6 /move_action=2
+
+=== scenario TR-02
+pins: the grip ABORTED (the shim's answer): counted as done, the run goes on to the release and ends true
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0, 0, 0]
+task: test/data/m2_6/eef_task.yaml (grip: ptp ready + gripper 1.0; release: ptp home + gripper 0.0)
+gripper: GripperController(/m26_tr_02/gripper_command); server: /m26_tr_02/gripper_command script: ABORT(reached_goal=0,stalled=0,position=shim(1 if goal>=0.5 else 0),effort=0), ABORT(reached_goal=0,stalled=0,position=shim(1 if goal>=0.5 else 0),effort=0) (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+events (MoveIt summaries only):
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.10000000000000001 acc=0.10000000000000001 time=5 attempts=1 plan_only=1
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+[3] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+    joint_trajectory: frame= joints=[j1,j2,j3] points=4
+      first: positions=[0, -0, 0] velocities=[] accelerations=[] t=0s+0ns
+      last:  positions=[0.29999999999999999, -0.40000000000000008, 0.60099999999999998] velocities=[] accelerations=[] t=0s+300000000ns
+    multi_dof_points=0
+    sha256(precision-17 block)=ef35c4ba3f0360f59ce8192714c808f0af2a9ab544e0af7019b0d3280cb8e9b6
+[4] ACTION /m26_tr_02/gripper_command GripperCommand.goal #1 -> ABORT(reached_goal=0,stalled=0,position=shim(1 if goal>=0.5 else 0),effort=0)
+  | position=1 max_effort=0
+[5] ACTION /m26_tr_02/gripper_command goal #1 response ACCEPT_AND_EXECUTE
+[6] ACTION /m26_tr_02/gripper_command goal #1 result ABORTED
+  | reached_goal=0 stalled=0 position=1 effort=0
+[7] ACTION /move_action MoveGroup.goal #2 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.10000000000000001 acc=0.10000000000000001 time=5 attempts=1 plan_only=1
+[8] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+[9] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+    joint_trajectory: frame= joints=[j1,j2,j3] points=2
+      first: positions=[0, 0, 0] velocities=[] accelerations=[] t=0s+0ns
+      last:  positions=[0, 0, 0.002] velocities=[] accelerations=[] t=0s+100000000ns
+    multi_dof_points=0
+    sha256(precision-17 block)=dc2b0aee5aaf52364f2dedfffea5bd5b90ae73962ea82ba8325bf4b6be741cdc
+[10] ACTION /m26_tr_02/gripper_command GripperCommand.goal #2 -> ABORT(reached_goal=0,stalled=0,position=shim(1 if goal>=0.5 else 0),effort=0)
+  | position=0 max_effort=0
+[11] ACTION /m26_tr_02/gripper_command goal #2 response ACCEPT_AND_EXECUTE
+[12] ACTION /m26_tr_02/gripper_command goal #2 result ABORTED
+  | reached_goal=0 stalled=0 position=0 effort=0
+run: true
+semantic: command sent=grip: GripperCommand(position=1,max_effort=0); release: GripperCommand(position=0,max_effort=0) | ack=grip: ACCEPTED; release: ACCEPTED | state=grip: ABORTED{reached_goal=0 stalled=0 position=1 effort=0}; release: ABORTED{reached_goal=0 stalled=0 position=0 effort=0} | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=TaskRunner::run=true | timeout=none | release result=release step: GripperCommand ABORTED | result code=grip: ABORTED; release: ABORTED
+counts: /execute_trajectory=2 /get_planning_scene=2 /m26_tr_02/gripper_command=6 /move_action=2
+
+=== scenario TR-03
+pins: the grip REJECTED: the run ends false at the grip step, the release never runs
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0, 0, 0]
+task: test/data/m2_6/eef_task.yaml (grip: ptp ready + gripper 1.0; release: ptp home + gripper 0.0)
+gripper: GripperController(/m26_tr_03/gripper_command); server: /m26_tr_03/gripper_command script: REJECT (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+events (MoveIt summaries only):
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.10000000000000001 acc=0.10000000000000001 time=5 attempts=1 plan_only=1
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+[3] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+    joint_trajectory: frame= joints=[j1,j2,j3] points=4
+      first: positions=[0, -0, 0] velocities=[] accelerations=[] t=0s+0ns
+      last:  positions=[0.29999999999999999, -0.40000000000000008, 0.60099999999999998] velocities=[] accelerations=[] t=0s+300000000ns
+    multi_dof_points=0
+    sha256(precision-17 block)=ef35c4ba3f0360f59ce8192714c808f0af2a9ab544e0af7019b0d3280cb8e9b6
+[4] ACTION /m26_tr_03/gripper_command GripperCommand.goal #1 -> REJECT
+  | position=1 max_effort=0
+[5] ACTION /m26_tr_03/gripper_command goal #1 response REJECT
+run: false
+semantic: command sent=grip: GripperCommand(position=1,max_effort=0) | ack=grip: REJECTED | state=grip: - | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=TaskRunner::run=false | timeout=none | release result=release step not reached | result code=grip: REJECTED
+counts: /execute_trajectory=1 /get_planning_scene=1 /m26_tr_03/gripper_command=2 /move_action=1
+
+=== scenario TR-04
+pins: no gripper configured (nullptr): the run ends false at the grip step, after its move
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0, 0, 0]
+task: test/data/m2_6/eef_task.yaml (grip: ptp ready + gripper 1.0; release: ptp home + gripper 0.0)
+gripper: none (TaskRunner gets nullptr); server: none
+events (MoveIt summaries only):
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.10000000000000001 acc=0.10000000000000001 time=5 attempts=1 plan_only=1
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+[3] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+    joint_trajectory: frame= joints=[j1,j2,j3] points=4
+      first: positions=[0, -0, 0] velocities=[] accelerations=[] t=0s+0ns
+      last:  positions=[0.29999999999999999, -0.40000000000000008, 0.60099999999999998] velocities=[] accelerations=[] t=0s+300000000ns
+    multi_dof_points=0
+    sha256(precision-17 block)=ef35c4ba3f0360f59ce8192714c808f0af2a9ab544e0af7019b0d3280cb8e9b6
+run: false
+semantic: command sent=none | ack=no GripperCommand (no gripper) | state=none | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=TaskRunner::run=false | timeout=none | release result=release step not reached
+counts: /execute_trajectory=1 /get_planning_scene=1 /move_action=1
+

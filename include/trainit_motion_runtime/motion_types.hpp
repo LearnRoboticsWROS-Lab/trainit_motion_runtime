@@ -9,6 +9,7 @@
 #ifndef TRAINIT_MOTION_RUNTIME__MOTION_TYPES_HPP_
 #define TRAINIT_MOTION_RUNTIME__MOTION_TYPES_HPP_
 
+#include <array>
 #include <optional>
 #include <string>
 #include <vector>
@@ -27,19 +28,29 @@ enum class MotionIntent
   LINEAR,                     // cartesian straight line (MoveL)
   CIRCULAR,                   // cartesian arc (MoveC)
   COLLISION_FREE,             // free-space with collision avoidance
-  COLLISION_FREE_OPTIMIZED,   // free-space + optimization (OMPL then CHOMP)
+  COLLISION_FREE_OPTIMIZED,   // free-space with the optimizer stage (CHOMP first, OMPL fallback)
   CARTESIAN_PROCESS_PATH,     // dense cartesian process path
   ONLINE_SERVO                // online cartesian/joint servoing (future)
 };
 
 // --- Planner mode: HOW free-space motions are planned (Section 14) -----------
+// The vocabulary is TMR's planner registry, config/planner_profiles.yaml (ADR-0021).
+// This enum, kPlannerModes and ManualMotionStrategySelector are its MAPPING onto
+// MoveIt, in code; test_planner_registry checks them against it, entry by entry.
 enum class PlannerMode
 {
   PILZ,
   OMPL,
   OMPL_CHOMP,
-  STOMP   // experimental / guarded (not installed in MoveIt 2.5.9 by default)
+  STOMP   // declared, never loaded: MoveIt on Humble has no STOMP plugin (degrades to OMPL)
 };
+
+// Every PlannerMode, in registry order: the parser accepts exactly toString() of these.
+inline constexpr std::array<PlannerMode, 4> kPlannerModes{
+  PlannerMode::PILZ, PlannerMode::OMPL, PlannerMode::OMPL_CHOMP, PlannerMode::STOMP};
+
+// The mode when nothing sets planner_mode (registry: default_planner_mode).
+inline constexpr PlannerMode kDefaultPlannerMode = PlannerMode::PILZ;
 
 // --- Process-path backend selection (Section 14) -----------------------------
 enum class ProcessPathBackend
@@ -69,8 +80,11 @@ struct PlannerProfile
 {
   std::string pipeline_id;      // e.g. "ompl", "pilz_industrial_motion_planner", "chomp"
   std::string planner_id;       // e.g. "RRTConnectkConfigDefault", "PTP", "LIN", "CIRC"
-  // True only for OMPL_CHOMP: plan with `pipeline_id` (ompl) then re-optimize
-  // with `optimizer_pipeline_id` (chomp), seeding CHOMP with the OMPL result.
+  // True for OMPL_CHOMP, and for OMPL under intent COLLISION_FREE_OPTIMIZED (the
+  // selector's upgrade; the runtime asks for that intent only in ompl_chomp mode). MoveIt
+  // 2.5 ships no CHOMP optimizer adapter, so the runtime does not chain OMPL into CHOMP:
+  // it tries `optimizer_pipeline_id` (chomp) FIRST, standalone, and falls back to
+  // pipeline_id/planner_id (ompl) when it fails.
   bool two_stage_optimize{false};
   std::string optimizer_pipeline_id;   // e.g. "chomp"
 };
@@ -94,7 +108,7 @@ struct MotionOptions
 struct PlanningOptions
 {
   MotionOptions motion;
-  PlannerMode   mode{PlannerMode::PILZ};
+  PlannerMode   mode{kDefaultPlannerMode};
 };
 
 // --- Targets (Section 13) ----------------------------------------------------
@@ -216,6 +230,20 @@ struct ProcessPathMetrics
   bool   execution_success{false};
 };
 
+// --- Where a motion failed (vNext M2.7, ADR-0015 amendment M2.7) ----------------------------------
+// FACTS the runtime records on a FAILED MotionResult (NONE on success). Whose failure it is -- this
+// target's, or the motion infrastructure's -- is decided from them by classifyMotionFailure()
+// (motion_failure.hpp), never here.
+enum class MotionPhase
+{
+  NONE,              // success, or a failure no phase was recorded for
+  REQUEST,           // refused before MoveIt was asked (MoveWaypoint's own checks)
+  PLAN,              // the planning request (MoveGroupInterface::plan, every retry)
+  VALIDATE,          // TMR's TrajectoryValidator refused the plan MoveIt returned
+  EXECUTE,           // the execution request
+  PLAN_AND_EXECUTE,  // ONE request that plans and executes (the Pilz sequence action)
+};
+
 // --- Unified result ----------------------------------------------------------
 struct MotionResult
 {
@@ -224,6 +252,10 @@ struct MotionResult
   std::string stage;                    // human-readable failing/last stage
   FreeSpaceMetrics   free_space;
   ProcessPathMetrics process;
+  // vNext M2.7: where a failed motion failed, and a cause token when error_code is not the cause
+  // (motion_failure.hpp kCause*). Both stay empty on success.
+  MotionPhase phase{MotionPhase::NONE};
+  std::string cause;
 
   static MotionResult failure(const std::string& stage_msg, int code = 0)
   {
@@ -246,6 +278,7 @@ struct MotionResult
 // --- String <-> enum helpers (used by launch-parameter parsing) --------------
 std::optional<PlannerMode>        plannerModeFromString(const std::string& s);
 std::string                       toString(PlannerMode m);
+std::string                       plannerModeList(const std::string& separator = " | ");
 std::optional<ProcessPathBackend> processPathBackendFromString(const std::string& s);
 std::string                       toString(ProcessPathBackend b);
 

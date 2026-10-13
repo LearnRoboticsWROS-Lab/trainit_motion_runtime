@@ -1,0 +1,7 @@
+# vNext M2.5 TaskRunner fixture: a CIRCULAR step given by its centre (the known CIRC-centre throw).
+name: m25_task_center
+group: arm
+base_frame: base_link
+tip_link: tcp
+steps:
+  - {name: arc_center, motion: circular, position: [0.45, 0.15, 0.30], circ_center: [0.43, 0.12, 0.30]}

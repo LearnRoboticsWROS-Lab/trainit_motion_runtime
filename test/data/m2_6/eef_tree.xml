@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<!-- vNext M2.6 family eef_runner_child: the tiny tree trainit_run_bt runs as a child process. -->
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence>
+      <CloseGripper/>
+      <OpenGripper/>
+    </Sequence>
+  </BehaviorTree>
+</root>

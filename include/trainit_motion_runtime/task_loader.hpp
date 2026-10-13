@@ -10,7 +10,8 @@
 //   orientation: [x, y, z, w]            # default TCP orientation for pose steps
 //   defaults: { velocity_scaling, acceleration_scaling, planning_time, planning_attempts }
 //   scene:  [ { id, frame, dims:[x,y,z], position:[x,y,z] }, ... ]
-//   steps:  [ { name, motion: free|ptp|linear|circular, planner: pilz|ompl|ompl_chomp,
+//   steps:  [ { name, motion: free|ptp|linear|circular, planner: <a planner_mode of the
+//               registry, config/planner_profiles.yaml>,
 //               position:[x,y,z], orientation:[x,y,z,w], named:<state>, joints:[...],
 //               circ_interim:[x,y,z] | circ_center:[x,y,z],
 //               eef: { gripper:<0..1> } | { process:{type,channel,value} },

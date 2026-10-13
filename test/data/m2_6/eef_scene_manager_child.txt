@@ -1,0 +1,2809 @@
+m2_6 capture eef_scene_manager_child
+behaviortree_cpp 4.10.0 | rmw rmw_fastrtps_cpp | moveit_ros_planning_interface 2.5.10
+
+=== scenario SM-01
+pins: grasp_attach_mode remove: true REMOVES the part, a second true is not an edge, false re-ADDS it at the tool pose and re-allows it, reset puts it back and pulses the reset topic
+params (every manager):
+  /**:
+    ros__parameters:
+      frame_id: base_link
+      force_republish_hz: 0.0
+      scene_update_wait_ms: 100
+      gripper_cmd_topic: "/m26_SM_01/grasp"
+      scene_reset_topic: "/m26_SM_01/scene_reset"
+      attach_link: tcp
+      attached_collision_check: false
+      grasp_attach_mode: remove
+      touch_links: [tcp]
+      attach_object_ids: [part]
+      object_ids: [table, part]
+      objects:
+        table:
+          type: box
+          size: [0.6, 0.6, 0.02]
+          position: [0.4, 0.0, -0.01]
+          orientation: [0.0, 0.0, 0.0, 1.0]
+          dynamic: false
+        part:
+          type: box
+          size: [0.04, 0.04, 0.04]
+          position: [0.4, 0.0, 0.02]
+          orientation: [0.0, 0.0, 0.0, 1.0]
+          dynamic: true
+          grasp_box: [0.04, 0.04, 0.04]
+          grasp_box_center: [0.0, 0.0, 0.0]
+tf: base_link -> tcp static, translation (0.4, 0, 0.3), rotation (x=1, y=0, z=0, w=0)
+grasp Bool: /m26_SM_01/grasp (transient_local reliable depth 1) published by /m26_grasp_cmd
+reset recorder: /m26_SM_01/scene_reset (volatile reliable depth 10)
+manager /scene_manager_node: scene_manager_node --ros-args --params-file <SM-01 params>; scene services served at /
+--- step 1: start the manager(s); wait for the initial scene load
+requests from /scene_manager_node:
+  ApplyPlanningScene world=[ADD table, ADD part] attached=[] -> success=true
+  GetPlanningScene components=128
+  ApplyPlanningScene world=[] attached=[] acm(entries=[] defaults=[part=1]) -> success=true
+--- step 2: the harness publishes true on /m26_SM_01/grasp
+requests from /scene_manager_node:
+  ApplyPlanningScene world=[REMOVE part] attached=[] -> success=true
+--- step 3: the harness publishes true on /m26_SM_01/grasp
+requests from /scene_manager_node: (none)
+--- step 4: the harness publishes false on /m26_SM_01/grasp
+requests from /scene_manager_node:
+  ApplyPlanningScene world=[ADD part] attached=[] -> success=true
+  GetPlanningScene components=128
+  ApplyPlanningScene world=[] attached=[] acm(entries=[part, table] defaults=[part=1]) -> success=true
+--- step 5: the harness calls /scene_manager_node/reset_scene -> success=true message='scene reset: 1 dynamic object(s) back to initial poses'
+requests from /scene_manager_node:
+  ApplyPlanningScene world=[ADD part] attached=[] -> success=true
+  GetPlanningScene components=128
+  ApplyPlanningScene world=[] attached=[] acm(entries=[] defaults=[part=1]) -> success=true
+whole requests, per manager:
+events /scene_manager_node:
+[1] SERVICE /apply_planning_scene ApplyPlanningScene.request #1 -> success=true
+  | world=[ADD table, ADD part] attached=[]
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects: []
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names: []
+      entry_values: []
+      default_entry_names: []
+      default_entry_values: []
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects:
+      -
+        header:
+          frame_id: "base_link"
+        pose:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        id: "table"
+        type:
+          key: ""
+          db: ""
+        primitives:
+        -
+          type: 1
+          dimensions:
+          - 0.59999999999999998
+          - 0.59999999999999998
+          - 0.020000000000000000
+          polygon:
+            points: []
+        primitive_poses:
+        -
+          position:
+            x: 0.40000000000000002
+            y: 0.0000000000000000
+            z: -0.010000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        meshes: []
+        mesh_poses: []
+        planes: []
+        plane_poses: []
+        subframe_names: []
+        subframe_poses: []
+        operation: 0x00
+      -
+        header:
+          frame_id: "base_link"
+        pose:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        id: "part"
+        type:
+          key: ""
+          db: ""
+        primitives:
+        -
+          type: 1
+          dimensions:
+          - 0.040000000000000001
+          - 0.040000000000000001
+          - 0.040000000000000001
+          polygon:
+            points: []
+        primitive_poses:
+        -
+          position:
+            x: 0.40000000000000002
+            y: 0.0000000000000000
+            z: 0.020000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        meshes: []
+        mesh_poses: []
+        planes: []
+        plane_poses: []
+        subframe_names: []
+        subframe_poses: []
+        operation: 0x00
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=128
+[3] SERVICE /apply_planning_scene ApplyPlanningScene.request #2 -> success=true
+  | world=[] attached=[] acm(entries=[] defaults=[part=1])
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects: []
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names: []
+      entry_values: []
+      default_entry_names:
+      - "part"
+      default_entry_values:
+      - true
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects: []
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+[4] SERVICE /apply_planning_scene ApplyPlanningScene.request #3 -> success=true
+  | world=[REMOVE part] attached=[]
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects: []
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names: []
+      entry_values: []
+      default_entry_names: []
+      default_entry_values: []
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects:
+      -
+        header:
+          frame_id: "base_link"
+        pose:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        id: "part"
+        type:
+          key: ""
+          db: ""
+        primitives: []
+        primitive_poses: []
+        meshes: []
+        mesh_poses: []
+        planes: []
+        plane_poses: []
+        subframe_names: []
+        subframe_poses: []
+        operation: 0x01
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+[5] SERVICE /apply_planning_scene ApplyPlanningScene.request #4 -> success=true
+  | world=[ADD part] attached=[]
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects: []
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names: []
+      entry_values: []
+      default_entry_names: []
+      default_entry_values: []
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects:
+      -
+        header:
+          frame_id: "base_link"
+        pose:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        id: "part"
+        type:
+          key: ""
+          db: ""
+        primitives:
+        -
+          type: 1
+          dimensions:
+          - 0.040000000000000001
+          - 0.040000000000000001
+          - 0.040000000000000001
+          polygon:
+            points: []
+        primitive_poses:
+        -
+          position:
+            x: 0.40000000000000002
+            y: 0.0000000000000000
+            z: 0.020000000000000018
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        meshes: []
+        mesh_poses: []
+        planes: []
+        plane_poses: []
+        subframe_names: []
+        subframe_poses: []
+        operation: 0x00
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+[6] SERVICE /get_planning_scene GetPlanningScene.request components=128
+[7] SERVICE /apply_planning_scene ApplyPlanningScene.request #5 -> success=true
+  | world=[] attached=[] acm(entries=[part, table] defaults=[part=1])
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects: []
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names:
+      - "part"
+      - "table"
+      entry_values:
+      -
+        enabled:
+        - false
+        - true
+      -
+        enabled:
+        - true
+        - false
+      default_entry_names:
+      - "part"
+      default_entry_values:
+      - true
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects: []
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+[8] SERVICE /apply_planning_scene ApplyPlanningScene.request #6 -> success=true
+  | world=[ADD part] attached=[]
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects: []
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names: []
+      entry_values: []
+      default_entry_names: []
+      default_entry_values: []
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects:
+      -
+        header:
+          frame_id: "base_link"
+        pose:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        id: "part"
+        type:
+          key: ""
+          db: ""
+        primitives:
+        -
+          type: 1
+          dimensions:
+          - 0.040000000000000001
+          - 0.040000000000000001
+          - 0.040000000000000001
+          polygon:
+            points: []
+        primitive_poses:
+        -
+          position:
+            x: 0.40000000000000002
+            y: 0.0000000000000000
+            z: 0.020000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        meshes: []
+        mesh_poses: []
+        planes: []
+        plane_poses: []
+        subframe_names: []
+        subframe_poses: []
+        operation: 0x00
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+[9] SERVICE /get_planning_scene GetPlanningScene.request components=128
+[10] SERVICE /apply_planning_scene ApplyPlanningScene.request #7 -> success=true
+  | world=[] attached=[] acm(entries=[] defaults=[part=1])
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects: []
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names: []
+      entry_values: []
+      default_entry_names:
+      - "part"
+      default_entry_values:
+      - true
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects: []
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+reset recorder received: /scene_manager_node: true, false
+manager /scene_manager_node after SIGINT: exit code 0
+semantic: command sent=grasp Bool on /m26_SM_01/grasp: true, true, false | ack=reset_scene: success=true message='scene reset: 1 dynamic object(s) back to initial poses' | state=step 1 /scene_manager_node: 3 request(s); step 2 /scene_manager_node: 1 request(s); step 3 /scene_manager_node: no request; step 4 /scene_manager_node: 3 request(s); step 5 /scene_manager_node: 3 request(s); reset pulse on /m26_SM_01/scene_reset: /scene_manager_node: true, false | grasp confirmation=Bool subscriptions of /scene_manager_node: [/m26_SM_01/grasp] -- its only Bool input is the command topic the harness drives | BT result=none (no tree: the scene manager is driven by the topic) | timeout=none | release result=step 4 /scene_manager_node: ApplyPlanningScene world=[ADD part] attached=[] -> success=true + GetPlanningScene components=128 + ApplyPlanningScene world=[] attached=[] acm(entries=[part, table] defaults=[part=1]) -> success=true | result code=/scene_manager_node: ApplyPlanningScene success=true x7, success=false x0
+
+=== scenario SM-02
+pins: grasp_attach_mode attach_box with move_group REFUSING the attach diff (EMULATED by the fake): nothing is committed, so the following false finds nothing to release and sends nothing
+params (every manager):
+  /**:
+    ros__parameters:
+      frame_id: base_link
+      force_republish_hz: 0.0
+      scene_update_wait_ms: 100
+      gripper_cmd_topic: "/m26_SM_02/grasp"
+      scene_reset_topic: "/m26_SM_02/scene_reset"
+      attach_link: tcp
+      attached_collision_check: false
+      grasp_attach_mode: attach_box
+      touch_links: [tcp]
+      attach_object_ids: [part]
+      object_ids: [table, part]
+      objects:
+        table:
+          type: box
+          size: [0.6, 0.6, 0.02]
+          position: [0.4, 0.0, -0.01]
+          orientation: [0.0, 0.0, 0.0, 1.0]
+          dynamic: false
+        part:
+          type: box
+          size: [0.04, 0.04, 0.04]
+          position: [0.4, 0.0, 0.02]
+          orientation: [0.0, 0.0, 0.0, 1.0]
+          dynamic: true
+          grasp_box: [0.04, 0.04, 0.04]
+          grasp_box_center: [0.0, 0.0, 0.0]
+tf: base_link -> tcp static, translation (0.4, 0, 0.3), rotation (x=1, y=0, z=0, w=0)
+grasp Bool: /m26_SM_02/grasp (transient_local reliable depth 1) published by /m26_grasp_cmd
+reset recorder: /m26_SM_02/scene_reset (volatile reliable depth 10)
+manager /scene_manager_node: scene_manager_node --ros-args --params-file <SM-02 params>; scene services served at / (EMULATING a move_group that refuses an attach_box diff)
+--- step 1: start the manager(s); wait for the initial scene load
+requests from /scene_manager_node:
+  ApplyPlanningScene world=[ADD table, ADD part] attached=[] -> success=true
+  GetPlanningScene components=128
+  ApplyPlanningScene world=[] attached=[] acm(entries=[] defaults=[part=1]) -> success=true
+--- step 2: the harness publishes true on /m26_SM_02/grasp
+requests from /scene_manager_node:
+  ApplyPlanningScene world=[REMOVE part] attached=[ADD part@tcp] -> success=false (EMULATED REFUSAL: this fake refuses a diff that ADDs an attached object)
+--- step 3: the harness publishes false on /m26_SM_02/grasp
+requests from /scene_manager_node: (none)
+whole requests, per manager:
+events /scene_manager_node:
+[1] SERVICE /apply_planning_scene ApplyPlanningScene.request #1 -> success=true
+  | world=[ADD table, ADD part] attached=[]
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects: []
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names: []
+      entry_values: []
+      default_entry_names: []
+      default_entry_values: []
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects:
+      -
+        header:
+          frame_id: "base_link"
+        pose:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        id: "table"
+        type:
+          key: ""
+          db: ""
+        primitives:
+        -
+          type: 1
+          dimensions:
+          - 0.59999999999999998
+          - 0.59999999999999998
+          - 0.020000000000000000
+          polygon:
+            points: []
+        primitive_poses:
+        -
+          position:
+            x: 0.40000000000000002
+            y: 0.0000000000000000
+            z: -0.010000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        meshes: []
+        mesh_poses: []
+        planes: []
+        plane_poses: []
+        subframe_names: []
+        subframe_poses: []
+        operation: 0x00
+      -
+        header:
+          frame_id: "base_link"
+        pose:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        id: "part"
+        type:
+          key: ""
+          db: ""
+        primitives:
+        -
+          type: 1
+          dimensions:
+          - 0.040000000000000001
+          - 0.040000000000000001
+          - 0.040000000000000001
+          polygon:
+            points: []
+        primitive_poses:
+        -
+          position:
+            x: 0.40000000000000002
+            y: 0.0000000000000000
+            z: 0.020000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        meshes: []
+        mesh_poses: []
+        planes: []
+        plane_poses: []
+        subframe_names: []
+        subframe_poses: []
+        operation: 0x00
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=128
+[3] SERVICE /apply_planning_scene ApplyPlanningScene.request #2 -> success=true
+  | world=[] attached=[] acm(entries=[] defaults=[part=1])
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects: []
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names: []
+      entry_values: []
+      default_entry_names:
+      - "part"
+      default_entry_values:
+      - true
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects: []
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+[4] SERVICE /apply_planning_scene ApplyPlanningScene.request #3 -> success=false (EMULATED REFUSAL: this fake refuses a diff that ADDs an attached object)
+  | world=[REMOVE part] attached=[ADD part@tcp]
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects:
+      -
+        link_name: "tcp"
+        object:
+          header:
+            frame_id: "tcp"
+          pose:
+            position:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+            orientation:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+              w: 1.0000000000000000
+          id: "part"
+          type:
+            key: ""
+            db: ""
+          primitives:
+          -
+            type: 1
+            dimensions:
+            - 0.040000000000000001
+            - 0.040000000000000001
+            - 0.040000000000000001
+            polygon:
+              points: []
+          primitive_poses:
+          -
+            position:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.27999999999999997
+            orientation:
+              x: 1.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+              w: 0.0000000000000000
+          meshes: []
+          mesh_poses: []
+          planes: []
+          plane_poses: []
+          subframe_names: []
+          subframe_poses: []
+          operation: 0x00
+        touch_links:
+        - "tcp"
+        detach_posture:
+          header:
+            frame_id: ""
+          joint_names: []
+          points: []
+        weight: 0.0000000000000000
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names: []
+      entry_values: []
+      default_entry_names: []
+      default_entry_values: []
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects:
+      -
+        header:
+          frame_id: "base_link"
+        pose:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        id: "part"
+        type:
+          key: ""
+          db: ""
+        primitives: []
+        primitive_poses: []
+        meshes: []
+        mesh_poses: []
+        planes: []
+        plane_poses: []
+        subframe_names: []
+        subframe_poses: []
+        operation: 0x01
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+reset recorder received: (none)
+manager /scene_manager_node after SIGINT: exit code 0
+semantic: command sent=grasp Bool on /m26_SM_02/grasp: true, false | ack=none (a topic has no ack) | state=step 1 /scene_manager_node: 3 request(s); step 2 /scene_manager_node: 1 request(s); step 3 /scene_manager_node: no request | grasp confirmation=Bool subscriptions of /scene_manager_node: [/m26_SM_02/grasp] -- its only Bool input is the command topic the harness drives | BT result=none (no tree: the scene manager is driven by the topic) | timeout=none | release result=step 3 /scene_manager_node: no request | result code=/scene_manager_node: ApplyPlanningScene success=true x2, success=false x1
+
+=== scenario SM-03
+pins: grasp_attach_mode attach_box accepted: true REMOVES the world part and ATTACHES its box, then the ACM; false DETACHES and re-ADDS it, then the ACM
+params (every manager):
+  /**:
+    ros__parameters:
+      frame_id: base_link
+      force_republish_hz: 0.0
+      scene_update_wait_ms: 100
+      gripper_cmd_topic: "/m26_SM_03/grasp"
+      scene_reset_topic: "/m26_SM_03/scene_reset"
+      attach_link: tcp
+      attached_collision_check: false
+      grasp_attach_mode: attach_box
+      touch_links: [tcp]
+      attach_object_ids: [part]
+      object_ids: [table, part]
+      objects:
+        table:
+          type: box
+          size: [0.6, 0.6, 0.02]
+          position: [0.4, 0.0, -0.01]
+          orientation: [0.0, 0.0, 0.0, 1.0]
+          dynamic: false
+        part:
+          type: box
+          size: [0.04, 0.04, 0.04]
+          position: [0.4, 0.0, 0.02]
+          orientation: [0.0, 0.0, 0.0, 1.0]
+          dynamic: true
+          grasp_box: [0.04, 0.04, 0.04]
+          grasp_box_center: [0.0, 0.0, 0.0]
+tf: base_link -> tcp static, translation (0.4, 0, 0.3), rotation (x=1, y=0, z=0, w=0)
+grasp Bool: /m26_SM_03/grasp (transient_local reliable depth 1) published by /m26_grasp_cmd
+reset recorder: /m26_SM_03/scene_reset (volatile reliable depth 10)
+manager /scene_manager_node: scene_manager_node --ros-args --params-file <SM-03 params>; scene services served at /
+--- step 1: start the manager(s); wait for the initial scene load
+requests from /scene_manager_node:
+  ApplyPlanningScene world=[ADD table, ADD part] attached=[] -> success=true
+  GetPlanningScene components=128
+  ApplyPlanningScene world=[] attached=[] acm(entries=[] defaults=[part=1]) -> success=true
+--- step 2: the harness publishes true on /m26_SM_03/grasp
+requests from /scene_manager_node:
+  ApplyPlanningScene world=[REMOVE part] attached=[ADD part@tcp] -> success=true
+  GetPlanningScene components=128
+  ApplyPlanningScene world=[] attached=[] acm(entries=[part, table] defaults=[part=1]) -> success=true
+--- step 3: the harness publishes false on /m26_SM_03/grasp
+requests from /scene_manager_node:
+  ApplyPlanningScene world=[ADD part] attached=[REMOVE part@tcp] -> success=true
+  GetPlanningScene components=128
+  ApplyPlanningScene world=[] attached=[] acm(entries=[part, table] defaults=[part=1]) -> success=true
+whole requests, per manager:
+events /scene_manager_node:
+[1] SERVICE /apply_planning_scene ApplyPlanningScene.request #1 -> success=true
+  | world=[ADD table, ADD part] attached=[]
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects: []
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names: []
+      entry_values: []
+      default_entry_names: []
+      default_entry_values: []
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects:
+      -
+        header:
+          frame_id: "base_link"
+        pose:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        id: "table"
+        type:
+          key: ""
+          db: ""
+        primitives:
+        -
+          type: 1
+          dimensions:
+          - 0.59999999999999998
+          - 0.59999999999999998
+          - 0.020000000000000000
+          polygon:
+            points: []
+        primitive_poses:
+        -
+          position:
+            x: 0.40000000000000002
+            y: 0.0000000000000000
+            z: -0.010000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        meshes: []
+        mesh_poses: []
+        planes: []
+        plane_poses: []
+        subframe_names: []
+        subframe_poses: []
+        operation: 0x00
+      -
+        header:
+          frame_id: "base_link"
+        pose:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        id: "part"
+        type:
+          key: ""
+          db: ""
+        primitives:
+        -
+          type: 1
+          dimensions:
+          - 0.040000000000000001
+          - 0.040000000000000001
+          - 0.040000000000000001
+          polygon:
+            points: []
+        primitive_poses:
+        -
+          position:
+            x: 0.40000000000000002
+            y: 0.0000000000000000
+            z: 0.020000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        meshes: []
+        mesh_poses: []
+        planes: []
+        plane_poses: []
+        subframe_names: []
+        subframe_poses: []
+        operation: 0x00
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=128
+[3] SERVICE /apply_planning_scene ApplyPlanningScene.request #2 -> success=true
+  | world=[] attached=[] acm(entries=[] defaults=[part=1])
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects: []
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names: []
+      entry_values: []
+      default_entry_names:
+      - "part"
+      default_entry_values:
+      - true
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects: []
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+[4] SERVICE /apply_planning_scene ApplyPlanningScene.request #3 -> success=true
+  | world=[REMOVE part] attached=[ADD part@tcp]
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects:
+      -
+        link_name: "tcp"
+        object:
+          header:
+            frame_id: "tcp"
+          pose:
+            position:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+            orientation:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+              w: 1.0000000000000000
+          id: "part"
+          type:
+            key: ""
+            db: ""
+          primitives:
+          -
+            type: 1
+            dimensions:
+            - 0.040000000000000001
+            - 0.040000000000000001
+            - 0.040000000000000001
+            polygon:
+              points: []
+          primitive_poses:
+          -
+            position:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.27999999999999997
+            orientation:
+              x: 1.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+              w: 0.0000000000000000
+          meshes: []
+          mesh_poses: []
+          planes: []
+          plane_poses: []
+          subframe_names: []
+          subframe_poses: []
+          operation: 0x00
+        touch_links:
+        - "tcp"
+        detach_posture:
+          header:
+            frame_id: ""
+          joint_names: []
+          points: []
+        weight: 0.0000000000000000
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names: []
+      entry_values: []
+      default_entry_names: []
+      default_entry_values: []
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects:
+      -
+        header:
+          frame_id: "base_link"
+        pose:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        id: "part"
+        type:
+          key: ""
+          db: ""
+        primitives: []
+        primitive_poses: []
+        meshes: []
+        mesh_poses: []
+        planes: []
+        plane_poses: []
+        subframe_names: []
+        subframe_poses: []
+        operation: 0x01
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+[5] SERVICE /get_planning_scene GetPlanningScene.request components=128
+[6] SERVICE /apply_planning_scene ApplyPlanningScene.request #4 -> success=true
+  | world=[] attached=[] acm(entries=[part, table] defaults=[part=1])
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects: []
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names:
+      - "part"
+      - "table"
+      entry_values:
+      -
+        enabled:
+        - false
+        - true
+      -
+        enabled:
+        - true
+        - false
+      default_entry_names:
+      - "part"
+      default_entry_values:
+      - true
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects: []
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+[7] SERVICE /apply_planning_scene ApplyPlanningScene.request #5 -> success=true
+  | world=[ADD part] attached=[REMOVE part@tcp]
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects:
+      -
+        link_name: "tcp"
+        object:
+          header:
+            frame_id: ""
+          pose:
+            position:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+            orientation:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+              w: 1.0000000000000000
+          id: "part"
+          type:
+            key: ""
+            db: ""
+          primitives: []
+          primitive_poses: []
+          meshes: []
+          mesh_poses: []
+          planes: []
+          plane_poses: []
+          subframe_names: []
+          subframe_poses: []
+          operation: 0x01
+        touch_links: []
+        detach_posture:
+          header:
+            frame_id: ""
+          joint_names: []
+          points: []
+        weight: 0.0000000000000000
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names: []
+      entry_values: []
+      default_entry_names: []
+      default_entry_values: []
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects:
+      -
+        header:
+          frame_id: "base_link"
+        pose:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        id: "part"
+        type:
+          key: ""
+          db: ""
+        primitives:
+        -
+          type: 1
+          dimensions:
+          - 0.040000000000000001
+          - 0.040000000000000001
+          - 0.040000000000000001
+          polygon:
+            points: []
+        primitive_poses:
+        -
+          position:
+            x: 0.40000000000000002
+            y: 0.0000000000000000
+            z: 0.020000000000000018
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        meshes: []
+        mesh_poses: []
+        planes: []
+        plane_poses: []
+        subframe_names: []
+        subframe_poses: []
+        operation: 0x00
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+[8] SERVICE /get_planning_scene GetPlanningScene.request components=128
+[9] SERVICE /apply_planning_scene ApplyPlanningScene.request #6 -> success=true
+  | world=[] attached=[] acm(entries=[part, table] defaults=[part=1])
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects: []
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names:
+      - "part"
+      - "table"
+      entry_values:
+      -
+        enabled:
+        - false
+        - true
+      -
+        enabled:
+        - true
+        - false
+      default_entry_names:
+      - "part"
+      default_entry_values:
+      - true
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects: []
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+reset recorder received: (none)
+manager /scene_manager_node after SIGINT: exit code 0
+semantic: command sent=grasp Bool on /m26_SM_03/grasp: true, false | ack=none (a topic has no ack) | state=step 1 /scene_manager_node: 3 request(s); step 2 /scene_manager_node: 3 request(s); step 3 /scene_manager_node: 3 request(s) | grasp confirmation=Bool subscriptions of /scene_manager_node: [/m26_SM_03/grasp] -- its only Bool input is the command topic the harness drives | BT result=none (no tree: the scene manager is driven by the topic) | timeout=none | release result=step 3 /scene_manager_node: ApplyPlanningScene world=[ADD part] attached=[REMOVE part@tcp] -> success=true + GetPlanningScene components=128 + ApplyPlanningScene world=[] attached=[] acm(entries=[part, table] defaults=[part=1]) -> success=true | result code=/scene_manager_node: ApplyPlanningScene success=true x6, success=false x0
+
+=== scenario SM-04
+pins: a LATCHED true published before the manager starts arrives before the scene is loaded: it is consumed (no grasp); the next false is an edge with nothing to release; only the following true grasps
+params (every manager):
+  /**:
+    ros__parameters:
+      frame_id: base_link
+      force_republish_hz: 0.0
+      scene_update_wait_ms: 100
+      gripper_cmd_topic: "/m26_SM_04/grasp"
+      scene_reset_topic: "/m26_SM_04/scene_reset"
+      attach_link: tcp
+      attached_collision_check: false
+      grasp_attach_mode: remove
+      touch_links: [tcp]
+      attach_object_ids: [part]
+      object_ids: [table, part]
+      objects:
+        table:
+          type: box
+          size: [0.6, 0.6, 0.02]
+          position: [0.4, 0.0, -0.01]
+          orientation: [0.0, 0.0, 0.0, 1.0]
+          dynamic: false
+        part:
+          type: box
+          size: [0.04, 0.04, 0.04]
+          position: [0.4, 0.0, 0.02]
+          orientation: [0.0, 0.0, 0.0, 1.0]
+          dynamic: true
+          grasp_box: [0.04, 0.04, 0.04]
+          grasp_box_center: [0.0, 0.0, 0.0]
+tf: base_link -> tcp static, translation (0.4, 0, 0.3), rotation (x=1, y=0, z=0, w=0)
+grasp Bool: /m26_SM_04/grasp (transient_local reliable depth 1) published by /m26_grasp_cmd
+reset recorder: /m26_SM_04/scene_reset (volatile reliable depth 10)
+manager /scene_manager_node: scene_manager_node --ros-args --params-file <SM-04 params>; scene services served at /
+before the managers start: the harness publishes true (latched)
+--- step 1: start the manager(s); wait for the initial scene load
+requests from /scene_manager_node:
+  ApplyPlanningScene world=[ADD table, ADD part] attached=[] -> success=true
+  GetPlanningScene components=128
+  ApplyPlanningScene world=[] attached=[] acm(entries=[] defaults=[part=1]) -> success=true
+--- step 2: the harness publishes false on /m26_SM_04/grasp
+requests from /scene_manager_node: (none)
+--- step 3: the harness publishes true on /m26_SM_04/grasp
+requests from /scene_manager_node:
+  ApplyPlanningScene world=[REMOVE part] attached=[] -> success=true
+whole requests, per manager:
+events /scene_manager_node:
+[1] SERVICE /apply_planning_scene ApplyPlanningScene.request #1 -> success=true
+  | world=[ADD table, ADD part] attached=[]
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects: []
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names: []
+      entry_values: []
+      default_entry_names: []
+      default_entry_values: []
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects:
+      -
+        header:
+          frame_id: "base_link"
+        pose:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        id: "table"
+        type:
+          key: ""
+          db: ""
+        primitives:
+        -
+          type: 1
+          dimensions:
+          - 0.59999999999999998
+          - 0.59999999999999998
+          - 0.020000000000000000
+          polygon:
+            points: []
+        primitive_poses:
+        -
+          position:
+            x: 0.40000000000000002
+            y: 0.0000000000000000
+            z: -0.010000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        meshes: []
+        mesh_poses: []
+        planes: []
+        plane_poses: []
+        subframe_names: []
+        subframe_poses: []
+        operation: 0x00
+      -
+        header:
+          frame_id: "base_link"
+        pose:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        id: "part"
+        type:
+          key: ""
+          db: ""
+        primitives:
+        -
+          type: 1
+          dimensions:
+          - 0.040000000000000001
+          - 0.040000000000000001
+          - 0.040000000000000001
+          polygon:
+            points: []
+        primitive_poses:
+        -
+          position:
+            x: 0.40000000000000002
+            y: 0.0000000000000000
+            z: 0.020000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        meshes: []
+        mesh_poses: []
+        planes: []
+        plane_poses: []
+        subframe_names: []
+        subframe_poses: []
+        operation: 0x00
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=128
+[3] SERVICE /apply_planning_scene ApplyPlanningScene.request #2 -> success=true
+  | world=[] attached=[] acm(entries=[] defaults=[part=1])
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects: []
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names: []
+      entry_values: []
+      default_entry_names:
+      - "part"
+      default_entry_values:
+      - true
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects: []
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+[4] SERVICE /apply_planning_scene ApplyPlanningScene.request #3 -> success=true
+  | world=[REMOVE part] attached=[]
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects: []
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names: []
+      entry_values: []
+      default_entry_names: []
+      default_entry_values: []
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects:
+      -
+        header:
+          frame_id: "base_link"
+        pose:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        id: "part"
+        type:
+          key: ""
+          db: ""
+        primitives: []
+        primitive_poses: []
+        meshes: []
+        mesh_poses: []
+        planes: []
+        plane_poses: []
+        subframe_names: []
+        subframe_poses: []
+        operation: 0x01
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+reset recorder received: (none)
+manager /scene_manager_node after SIGINT: exit code 0
+semantic: command sent=grasp Bool on /m26_SM_04/grasp: true (latched, before the managers started), false, true | ack=none (a topic has no ack) | state=step 1 /scene_manager_node: 3 request(s); step 2 /scene_manager_node: no request; step 3 /scene_manager_node: 1 request(s) | grasp confirmation=Bool subscriptions of /scene_manager_node: [/m26_SM_04/grasp] -- its only Bool input is the command topic the harness drives | BT result=none (no tree: the scene manager is driven by the topic) | timeout=none | release result=step 2 /scene_manager_node: no request | result code=/scene_manager_node: ApplyPlanningScene success=true x3, success=false x0
+
+=== scenario SM-05
+pins: two managers in /r1 and /r3 with the DEFAULT topics (absolute): one true from /r1 makes BOTH scenes grasp; /r1's reset pulses the one global reset topic
+params (every manager):
+  /**:
+    ros__parameters:
+      frame_id: base_link
+      force_republish_hz: 0.0
+      scene_update_wait_ms: 100
+      attach_link: tcp
+      attached_collision_check: false
+      grasp_attach_mode: remove
+      touch_links: [tcp]
+      attach_object_ids: [part]
+      object_ids: [table, part]
+      objects:
+        table:
+          type: box
+          size: [0.6, 0.6, 0.02]
+          position: [0.4, 0.0, -0.01]
+          orientation: [0.0, 0.0, 0.0, 1.0]
+          dynamic: false
+        part:
+          type: box
+          size: [0.04, 0.04, 0.04]
+          position: [0.4, 0.0, 0.02]
+          orientation: [0.0, 0.0, 0.0, 1.0]
+          dynamic: true
+          grasp_box: [0.04, 0.04, 0.04]
+          grasp_box_center: [0.0, 0.0, 0.0]
+tf: base_link -> tcp static, translation (0.4, 0, 0.3), rotation (x=1, y=0, z=0, w=0)
+grasp Bool: /isaac_gripper_cmd (transient_local reliable depth 1) published by /r1/m26_grasp_cmd
+reset recorder: /isaac_scene_reset (volatile reliable depth 10)
+manager /r1/scene_manager_node: scene_manager_node --ros-args --params-file <SM-05 params> -r __ns:=/r1; scene services served at /r1
+manager /r3/scene_manager_node: scene_manager_node --ros-args --params-file <SM-05 params> -r __ns:=/r3; scene services served at /r3
+--- step 1: start the manager(s); wait for the initial scene load
+requests from /r1/scene_manager_node:
+  ApplyPlanningScene world=[ADD table, ADD part] attached=[] -> success=true
+  GetPlanningScene components=128
+  ApplyPlanningScene world=[] attached=[] acm(entries=[] defaults=[part=1]) -> success=true
+requests from /r3/scene_manager_node:
+  ApplyPlanningScene world=[ADD table, ADD part] attached=[] -> success=true
+  GetPlanningScene components=128
+  ApplyPlanningScene world=[] attached=[] acm(entries=[] defaults=[part=1]) -> success=true
+--- step 2: the harness publishes true on /isaac_gripper_cmd
+requests from /r1/scene_manager_node:
+  ApplyPlanningScene world=[REMOVE part] attached=[] -> success=true
+requests from /r3/scene_manager_node:
+  ApplyPlanningScene world=[REMOVE part] attached=[] -> success=true
+--- step 3: the harness calls /r1/scene_manager_node/reset_scene -> success=true message='scene reset: 1 dynamic object(s) back to initial poses'
+requests from /r1/scene_manager_node:
+  ApplyPlanningScene world=[ADD part] attached=[] -> success=true
+  GetPlanningScene components=128
+  ApplyPlanningScene world=[] attached=[] acm(entries=[] defaults=[part=1]) -> success=true
+requests from /r3/scene_manager_node: (none)
+whole requests, per manager:
+events /r1/scene_manager_node:
+[1] SERVICE /r1/apply_planning_scene ApplyPlanningScene.request #1 -> success=true
+  | world=[ADD table, ADD part] attached=[]
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects: []
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names: []
+      entry_values: []
+      default_entry_names: []
+      default_entry_values: []
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects:
+      -
+        header:
+          frame_id: "base_link"
+        pose:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        id: "table"
+        type:
+          key: ""
+          db: ""
+        primitives:
+        -
+          type: 1
+          dimensions:
+          - 0.59999999999999998
+          - 0.59999999999999998
+          - 0.020000000000000000
+          polygon:
+            points: []
+        primitive_poses:
+        -
+          position:
+            x: 0.40000000000000002
+            y: 0.0000000000000000
+            z: -0.010000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        meshes: []
+        mesh_poses: []
+        planes: []
+        plane_poses: []
+        subframe_names: []
+        subframe_poses: []
+        operation: 0x00
+      -
+        header:
+          frame_id: "base_link"
+        pose:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        id: "part"
+        type:
+          key: ""
+          db: ""
+        primitives:
+        -
+          type: 1
+          dimensions:
+          - 0.040000000000000001
+          - 0.040000000000000001
+          - 0.040000000000000001
+          polygon:
+            points: []
+        primitive_poses:
+        -
+          position:
+            x: 0.40000000000000002
+            y: 0.0000000000000000
+            z: 0.020000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        meshes: []
+        mesh_poses: []
+        planes: []
+        plane_poses: []
+        subframe_names: []
+        subframe_poses: []
+        operation: 0x00
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+[2] SERVICE /r1/get_planning_scene GetPlanningScene.request components=128
+[3] SERVICE /r1/apply_planning_scene ApplyPlanningScene.request #2 -> success=true
+  | world=[] attached=[] acm(entries=[] defaults=[part=1])
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects: []
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names: []
+      entry_values: []
+      default_entry_names:
+      - "part"
+      default_entry_values:
+      - true
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects: []
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+[4] SERVICE /r1/apply_planning_scene ApplyPlanningScene.request #3 -> success=true
+  | world=[REMOVE part] attached=[]
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects: []
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names: []
+      entry_values: []
+      default_entry_names: []
+      default_entry_values: []
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects:
+      -
+        header:
+          frame_id: "base_link"
+        pose:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        id: "part"
+        type:
+          key: ""
+          db: ""
+        primitives: []
+        primitive_poses: []
+        meshes: []
+        mesh_poses: []
+        planes: []
+        plane_poses: []
+        subframe_names: []
+        subframe_poses: []
+        operation: 0x01
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+[5] SERVICE /r1/apply_planning_scene ApplyPlanningScene.request #4 -> success=true
+  | world=[ADD part] attached=[]
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects: []
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names: []
+      entry_values: []
+      default_entry_names: []
+      default_entry_values: []
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects:
+      -
+        header:
+          frame_id: "base_link"
+        pose:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        id: "part"
+        type:
+          key: ""
+          db: ""
+        primitives:
+        -
+          type: 1
+          dimensions:
+          - 0.040000000000000001
+          - 0.040000000000000001
+          - 0.040000000000000001
+          polygon:
+            points: []
+        primitive_poses:
+        -
+          position:
+            x: 0.40000000000000002
+            y: 0.0000000000000000
+            z: 0.020000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        meshes: []
+        mesh_poses: []
+        planes: []
+        plane_poses: []
+        subframe_names: []
+        subframe_poses: []
+        operation: 0x00
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+[6] SERVICE /r1/get_planning_scene GetPlanningScene.request components=128
+[7] SERVICE /r1/apply_planning_scene ApplyPlanningScene.request #5 -> success=true
+  | world=[] attached=[] acm(entries=[] defaults=[part=1])
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects: []
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names: []
+      entry_values: []
+      default_entry_names:
+      - "part"
+      default_entry_values:
+      - true
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects: []
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+events /r3/scene_manager_node:
+[1] SERVICE /r3/apply_planning_scene ApplyPlanningScene.request #1 -> success=true
+  | world=[ADD table, ADD part] attached=[]
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects: []
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names: []
+      entry_values: []
+      default_entry_names: []
+      default_entry_values: []
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects:
+      -
+        header:
+          frame_id: "base_link"
+        pose:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        id: "table"
+        type:
+          key: ""
+          db: ""
+        primitives:
+        -
+          type: 1
+          dimensions:
+          - 0.59999999999999998
+          - 0.59999999999999998
+          - 0.020000000000000000
+          polygon:
+            points: []
+        primitive_poses:
+        -
+          position:
+            x: 0.40000000000000002
+            y: 0.0000000000000000
+            z: -0.010000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        meshes: []
+        mesh_poses: []
+        planes: []
+        plane_poses: []
+        subframe_names: []
+        subframe_poses: []
+        operation: 0x00
+      -
+        header:
+          frame_id: "base_link"
+        pose:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        id: "part"
+        type:
+          key: ""
+          db: ""
+        primitives:
+        -
+          type: 1
+          dimensions:
+          - 0.040000000000000001
+          - 0.040000000000000001
+          - 0.040000000000000001
+          polygon:
+            points: []
+        primitive_poses:
+        -
+          position:
+            x: 0.40000000000000002
+            y: 0.0000000000000000
+            z: 0.020000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        meshes: []
+        mesh_poses: []
+        planes: []
+        plane_poses: []
+        subframe_names: []
+        subframe_poses: []
+        operation: 0x00
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+[2] SERVICE /r3/get_planning_scene GetPlanningScene.request components=128
+[3] SERVICE /r3/apply_planning_scene ApplyPlanningScene.request #2 -> success=true
+  | world=[] attached=[] acm(entries=[] defaults=[part=1])
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects: []
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names: []
+      entry_values: []
+      default_entry_names:
+      - "part"
+      default_entry_values:
+      - true
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects: []
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+[4] SERVICE /r3/apply_planning_scene ApplyPlanningScene.request #3 -> success=true
+  | world=[REMOVE part] attached=[]
+  scene:
+    name: ""
+    robot_state:
+      joint_state:
+        header:
+          frame_id: ""
+        name: []
+        position: []
+        velocity: []
+        effort: []
+      multi_dof_joint_state:
+        header:
+          frame_id: ""
+        joint_names: []
+        transforms: []
+        twist: []
+        wrench: []
+      attached_collision_objects: []
+      is_diff: true
+    robot_model_name: ""
+    fixed_frame_transforms: []
+    allowed_collision_matrix:
+      entry_names: []
+      entry_values: []
+      default_entry_names: []
+      default_entry_values: []
+    link_padding: []
+    link_scale: []
+    object_colors: []
+    world:
+      collision_objects:
+      -
+        header:
+          frame_id: "base_link"
+        pose:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        id: "part"
+        type:
+          key: ""
+          db: ""
+        primitives: []
+        primitive_poses: []
+        meshes: []
+        mesh_poses: []
+        planes: []
+        plane_poses: []
+        subframe_names: []
+        subframe_poses: []
+        operation: 0x01
+      octomap:
+        header:
+          frame_id: ""
+        origin:
+          position:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          orientation:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+            w: 1.0000000000000000
+        octomap:
+          header:
+            frame_id: ""
+          binary: false
+          id: ""
+          resolution: 0.0000000000000000
+          data: []
+    is_diff: true
+reset recorder received: /r1/scene_manager_node: true, false
+manager /r1/scene_manager_node after SIGINT: exit code 0
+manager /r3/scene_manager_node after SIGINT: exit code 0
+semantic: command sent=grasp Bool on /isaac_gripper_cmd: true | ack=reset_scene: success=true message='scene reset: 1 dynamic object(s) back to initial poses' | state=step 1 /r1/scene_manager_node: 3 request(s); step 1 /r3/scene_manager_node: 3 request(s); step 2 /r1/scene_manager_node: 1 request(s); step 2 /r3/scene_manager_node: 1 request(s); step 3 /r1/scene_manager_node: 3 request(s); step 3 /r3/scene_manager_node: no request; reset pulse on /isaac_scene_reset: /r1/scene_manager_node: true, false | grasp confirmation=Bool subscriptions of /r1/scene_manager_node: [/isaac_gripper_cmd] -- its only Bool input is the command topic the harness drives; Bool subscriptions of /r3/scene_manager_node: [/isaac_gripper_cmd] -- its only Bool input is the command topic the harness drives | BT result=none (no tree: the scene manager is driven by the topic) | timeout=none | release result=none | result code=/r1/scene_manager_node: ApplyPlanningScene success=true x5, success=false x0; /r3/scene_manager_node: ApplyPlanningScene success=true x3, success=false x0
+

@@ -1,0 +1,220 @@
+m2_6 capture eef_grasp_signal
+behaviortree_cpp 4.10.0 | rmw rmw_fastrtps_cpp | moveit_ros_planning_interface 2.5.10
+
+=== scenario GS-01
+pins: SUCCEEDED close and open: true then false, on the configured name; a late joiner receives the last sample only
+runner keys: gripper_action=/m26_gs01/gripper_command gripper_close_position=1 gripper_open_position=0 gripper_cmd_topic=/m26_gs01/gripper_cmd
+server: /m26_gs01/gripper_command script: SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0), SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0) (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+recorder 0: /m26_gs01/gripper_cmd (volatile reliable depth 10), made before the ticks
+recorder 1: /m26_gs01/gripper_cmd (transient_local reliable depth 10), made before the ticks
+--- tick 1: <CloseGripper/>
+events:
+[1] ACTION /m26_gs01/gripper_command GripperCommand.goal #1 -> SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0)
+  | position=1 max_effort=0
+  command:
+    position: 1.0000000000000000
+    max_effort: 0.0000000000000000
+[2] ACTION /m26_gs01/gripper_command goal #1 response ACCEPT_AND_EXECUTE
+[3] ACTION /m26_gs01/gripper_command goal #1 result SUCCEEDED
+  | reached_goal=1 stalled=0 position=1 effort=0
+bt: SUCCESS
+--- tick 2: <OpenGripper/>
+events:
+[4] ACTION /m26_gs01/gripper_command GripperCommand.goal #2 -> SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0)
+  | position=0 max_effort=0
+  command:
+    position: 0.0000000000000000
+    max_effort: 0.0000000000000000
+[5] ACTION /m26_gs01/gripper_command goal #2 response ACCEPT_AND_EXECUTE
+[6] ACTION /m26_gs01/gripper_command goal #2 result SUCCEEDED
+  | reached_goal=1 stalled=0 position=0 effort=0
+bt: SUCCESS
+--- after the last tick (watched 300 ms more):
+events:
+(none)
+recorder 0 received: /trainit_run_bt: true, false
+recorder 1 received: /trainit_run_bt: true, false
+late joiner (transient_local reliable depth 10, made after the ticks) received: /trainit_run_bt: false
+semantic: command sent=CloseGripper: GripperCommand(position=1,max_effort=0); OpenGripper: GripperCommand(position=0,max_effort=0); Bool on /m26_gs01/gripper_cmd: true, false | ack=CloseGripper: ACCEPTED; OpenGripper: ACCEPTED | state=CloseGripper: SUCCEEDED{reached_goal=1 stalled=0 position=1 effort=0}; OpenGripper: SUCCEEDED{reached_goal=1 stalled=0 position=0 effort=0}; late joiner on /m26_gs01/gripper_cmd: false | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=CloseGripper=SUCCESS; OpenGripper=SUCCESS | timeout=none | release result=OpenGripper=SUCCESS (goal SUCCEEDED) | result code=CloseGripper: SUCCEEDED; OpenGripper: SUCCEEDED
+counts: /m26_gs01/gripper_command=6
+
+=== scenario GS-02
+pins: ABORTED close and open (the shim's answer): command() returned true, so true and false are STILL published
+runner keys: gripper_action=/m26_gs02/gripper_command gripper_close_position=1 gripper_open_position=0 gripper_cmd_topic=/m26_gs02/gripper_cmd
+server: /m26_gs02/gripper_command script: ABORT(reached_goal=0,stalled=0,position=shim(1 if goal>=0.5 else 0),effort=0), ABORT(reached_goal=0,stalled=0,position=shim(1 if goal>=0.5 else 0),effort=0) (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+recorder 0: /m26_gs02/gripper_cmd (volatile reliable depth 10), made before the ticks
+recorder 1: /m26_gs02/gripper_cmd (transient_local reliable depth 10), made before the ticks
+--- tick 1: <CloseGripper/>
+events:
+[1] ACTION /m26_gs02/gripper_command GripperCommand.goal #1 -> ABORT(reached_goal=0,stalled=0,position=shim(1 if goal>=0.5 else 0),effort=0)
+  | position=1 max_effort=0
+  command:
+    position: 1.0000000000000000
+    max_effort: 0.0000000000000000
+[2] ACTION /m26_gs02/gripper_command goal #1 response ACCEPT_AND_EXECUTE
+[3] ACTION /m26_gs02/gripper_command goal #1 result ABORTED
+  | reached_goal=0 stalled=0 position=1 effort=0
+bt: SUCCESS
+--- tick 2: <OpenGripper/>
+events:
+[4] ACTION /m26_gs02/gripper_command GripperCommand.goal #2 -> ABORT(reached_goal=0,stalled=0,position=shim(1 if goal>=0.5 else 0),effort=0)
+  | position=0 max_effort=0
+  command:
+    position: 0.0000000000000000
+    max_effort: 0.0000000000000000
+[5] ACTION /m26_gs02/gripper_command goal #2 response ACCEPT_AND_EXECUTE
+[6] ACTION /m26_gs02/gripper_command goal #2 result ABORTED
+  | reached_goal=0 stalled=0 position=0 effort=0
+bt: SUCCESS
+--- after the last tick (watched 300 ms more):
+events:
+(none)
+recorder 0 received: /trainit_run_bt: true, false
+recorder 1 received: /trainit_run_bt: true, false
+late joiner (transient_local reliable depth 10, made after the ticks) received: /trainit_run_bt: false
+semantic: command sent=CloseGripper: GripperCommand(position=1,max_effort=0); OpenGripper: GripperCommand(position=0,max_effort=0); Bool on /m26_gs02/gripper_cmd: true, false | ack=CloseGripper: ACCEPTED; OpenGripper: ACCEPTED | state=CloseGripper: ABORTED{reached_goal=0 stalled=0 position=1 effort=0}; OpenGripper: ABORTED{reached_goal=0 stalled=0 position=0 effort=0}; late joiner on /m26_gs02/gripper_cmd: false | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=CloseGripper=SUCCESS; OpenGripper=SUCCESS | timeout=none | release result=OpenGripper=SUCCESS (goal ABORTED) | result code=CloseGripper: ABORTED; OpenGripper: ABORTED
+counts: /m26_gs02/gripper_command=6
+
+=== scenario GS-03
+pins: a REJECTED close publishes nothing; the following SUCCEEDED open publishes false
+runner keys: gripper_action=/m26_gs03/gripper_command gripper_close_position=1 gripper_open_position=0 gripper_cmd_topic=/m26_gs03/gripper_cmd
+server: /m26_gs03/gripper_command script: REJECT, SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0) (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+recorder 0: /m26_gs03/gripper_cmd (volatile reliable depth 10), made before the ticks
+recorder 1: /m26_gs03/gripper_cmd (transient_local reliable depth 10), made before the ticks
+--- tick 1: <CloseGripper/>
+events:
+[1] ACTION /m26_gs03/gripper_command GripperCommand.goal #1 -> REJECT
+  | position=1 max_effort=0
+  command:
+    position: 1.0000000000000000
+    max_effort: 0.0000000000000000
+[2] ACTION /m26_gs03/gripper_command goal #1 response REJECT
+bt: FAILURE
+--- tick 2: <OpenGripper/>
+events:
+[3] ACTION /m26_gs03/gripper_command GripperCommand.goal #2 -> SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0)
+  | position=0 max_effort=0
+  command:
+    position: 0.0000000000000000
+    max_effort: 0.0000000000000000
+[4] ACTION /m26_gs03/gripper_command goal #2 response ACCEPT_AND_EXECUTE
+[5] ACTION /m26_gs03/gripper_command goal #2 result SUCCEEDED
+  | reached_goal=1 stalled=0 position=0 effort=0
+bt: SUCCESS
+--- after the last tick (watched 300 ms more):
+events:
+(none)
+recorder 0 received: /trainit_run_bt: false
+recorder 1 received: /trainit_run_bt: false
+late joiner (transient_local reliable depth 10, made after the ticks) received: /trainit_run_bt: false
+semantic: command sent=CloseGripper: GripperCommand(position=1,max_effort=0); OpenGripper: GripperCommand(position=0,max_effort=0); Bool on /m26_gs03/gripper_cmd: false | ack=CloseGripper: REJECTED; OpenGripper: ACCEPTED | state=CloseGripper: -; OpenGripper: SUCCEEDED{reached_goal=1 stalled=0 position=0 effort=0}; late joiner on /m26_gs03/gripper_cmd: false | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=CloseGripper=FAILURE; OpenGripper=SUCCESS | timeout=none | release result=OpenGripper=SUCCESS (goal SUCCEEDED) | result code=CloseGripper: REJECTED; OpenGripper: SUCCEEDED
+counts: /m26_gs03/gripper_command=5
+
+=== scenario GS-04
+pins: a Bool-only cell (gripper_cmd_topic, no gripper_action): Close/Open publish unconditionally; SetGripper fails and publishes nothing
+runner keys: gripper_action=(unset) gripper_close_position=1 gripper_open_position=0 gripper_cmd_topic=/m26_gs04/gripper_cmd
+server: none
+recorder 0: /m26_gs04/gripper_cmd (volatile reliable depth 10), made before the ticks
+recorder 1: /m26_gs04/gripper_cmd (transient_local reliable depth 10), made before the ticks
+--- tick 1: <CloseGripper/>
+events:
+(none)
+bt: SUCCESS
+--- tick 2: <OpenGripper/>
+events:
+(none)
+bt: SUCCESS
+--- tick 3: <SetGripper position="0.5"/>
+events:
+(none)
+bt: FAILURE
+--- after the last tick (watched 300 ms more):
+events:
+(none)
+recorder 0 received: /trainit_run_bt: true, false
+recorder 1 received: /trainit_run_bt: true, false
+late joiner (transient_local reliable depth 10, made after the ticks) received: /trainit_run_bt: false
+semantic: command sent=Bool on /m26_gs04/gripper_cmd: true, false | ack=CloseGripper: no GripperCommand (no gripper_action); OpenGripper: no GripperCommand (no gripper_action); SetGripper: no GripperCommand (no gripper_action) | state=late joiner on /m26_gs04/gripper_cmd: false | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=CloseGripper=SUCCESS; OpenGripper=SUCCESS; SetGripper=FAILURE | timeout=none | release result=OpenGripper=SUCCESS
+counts: none
+
+=== scenario GS-05
+pins: no server at the gripper action: the close fails after the 5 s server wait and publishes nothing
+runner keys: gripper_action=/m26_gs05/gripper_command gripper_close_position=1 gripper_open_position=0 gripper_cmd_topic=/m26_gs05/gripper_cmd
+server: none
+recorder 0: /m26_gs05/gripper_cmd (volatile reliable depth 10), made before the ticks
+recorder 1: /m26_gs05/gripper_cmd (transient_local reliable depth 10), made before the ticks
+--- tick 1: <CloseGripper/>
+events:
+(none)
+bt: FAILURE
+--- after the last tick (watched 300 ms more):
+events:
+(none)
+recorder 0 received: (none)
+recorder 1 received: (none)
+late joiner (transient_local reliable depth 10, made after the ticks) received: (none)
+semantic: command sent=Bool on /m26_gs05/gripper_cmd: none | ack=CloseGripper: no goal reached a server (none serves /m26_gs05/gripper_command) | state=late joiner on /m26_gs05/gripper_cmd: nothing | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=CloseGripper=FAILURE | timeout=CloseGripper: server wait (no server) | release result=none
+counts: none
+
+=== scenario GS-06
+pins: latched vs volatile vs late joiner: close, open, close -- both early recorders receive all three, the late joiner the last (true)
+runner keys: gripper_action=/m26_gs06/gripper_command gripper_close_position=1 gripper_open_position=0 gripper_cmd_topic=/m26_gs06/gripper_cmd
+server: /m26_gs06/gripper_command script: default (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+recorder 0: /m26_gs06/gripper_cmd (volatile reliable depth 10), made before the ticks
+recorder 1: /m26_gs06/gripper_cmd (transient_local reliable depth 10), made before the ticks
+--- tick 1: <CloseGripper/>
+events:
+[1] ACTION /m26_gs06/gripper_command GripperCommand.goal #1 -> SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0)
+  | position=1 max_effort=0
+  command:
+    position: 1.0000000000000000
+    max_effort: 0.0000000000000000
+[2] ACTION /m26_gs06/gripper_command goal #1 response ACCEPT_AND_EXECUTE
+[3] ACTION /m26_gs06/gripper_command goal #1 result SUCCEEDED
+  | reached_goal=1 stalled=0 position=1 effort=0
+bt: SUCCESS
+--- tick 2: <OpenGripper/>
+events:
+[4] ACTION /m26_gs06/gripper_command GripperCommand.goal #2 -> SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0)
+  | position=0 max_effort=0
+  command:
+    position: 0.0000000000000000
+    max_effort: 0.0000000000000000
+[5] ACTION /m26_gs06/gripper_command goal #2 response ACCEPT_AND_EXECUTE
+[6] ACTION /m26_gs06/gripper_command goal #2 result SUCCEEDED
+  | reached_goal=1 stalled=0 position=0 effort=0
+bt: SUCCESS
+--- tick 3: <CloseGripper/>
+events:
+[7] ACTION /m26_gs06/gripper_command GripperCommand.goal #3 -> SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0)
+  | position=1 max_effort=0
+  command:
+    position: 1.0000000000000000
+    max_effort: 0.0000000000000000
+[8] ACTION /m26_gs06/gripper_command goal #3 response ACCEPT_AND_EXECUTE
+[9] ACTION /m26_gs06/gripper_command goal #3 result SUCCEEDED
+  | reached_goal=1 stalled=0 position=1 effort=0
+bt: SUCCESS
+--- after the last tick (watched 300 ms more):
+events:
+(none)
+recorder 0 received: /trainit_run_bt: true, false, true
+recorder 1 received: /trainit_run_bt: true, false, true
+late joiner (transient_local reliable depth 10, made after the ticks) received: /trainit_run_bt: true
+semantic: command sent=CloseGripper: GripperCommand(position=1,max_effort=0); OpenGripper: GripperCommand(position=0,max_effort=0); CloseGripper: GripperCommand(position=1,max_effort=0); Bool on /m26_gs06/gripper_cmd: true, false, true | ack=CloseGripper: ACCEPTED; OpenGripper: ACCEPTED; CloseGripper: ACCEPTED | state=CloseGripper: SUCCEEDED{reached_goal=1 stalled=0 position=1 effort=0}; OpenGripper: SUCCEEDED{reached_goal=1 stalled=0 position=0 effort=0}; CloseGripper: SUCCEEDED{reached_goal=1 stalled=0 position=1 effort=0}; late joiner on /m26_gs06/gripper_cmd: true | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=CloseGripper=SUCCESS; OpenGripper=SUCCESS; CloseGripper=SUCCESS | timeout=none | release result=OpenGripper=SUCCESS (goal SUCCEEDED) | result code=CloseGripper: SUCCEEDED; OpenGripper: SUCCEEDED; CloseGripper: SUCCEEDED
+counts: /m26_gs06/gripper_command=9
+
+=== scenario GS-07
+pins: cross-robot replay: two runners (/r1, /r3) publish the grasp Bool on ONE global name; a late joiner receives BOTH robots' last samples (sorted multiset, attributed to the publishing node)
+runner keys (both): gripper_action=(unset) gripper_close_position=1 gripper_open_position=0 gripper_cmd_topic=/m26_gs07/gripper_cmd
+recorder 0: /m26_gs07/gripper_cmd (volatile reliable depth 10), made before the ticks
+--- tick 1 on /r1/trainit_run_bt: <CloseGripper/>
+bt: SUCCESS
+--- tick 2 on /r3/trainit_run_bt: <CloseGripper/>
+bt: SUCCESS
+--- tick 3 on /r3/trainit_run_bt: <OpenGripper/>
+bt: SUCCESS
+recorder 0 received: /r1/trainit_run_bt: true; /r3/trainit_run_bt: true, false
+late joiner (transient_local reliable depth 10, made after the ticks) received: {/r1/trainit_run_bt:true, /r3/trainit_run_bt:false}
+semantic: command sent=Bool on /m26_gs07/gripper_cmd: /r1/trainit_run_bt: true; /r3/trainit_run_bt: true, false | ack=none (a topic has no ack) | state=late joiner on /m26_gs07/gripper_cmd: {/r1/trainit_run_bt:true, /r3/trainit_run_bt:false} | grasp confirmation=Bool state subscriptions of /r1/trainit_run_bt: none; Bool state subscriptions of /r3/trainit_run_bt: none | BT result=/r1/trainit_run_bt CloseGripper=SUCCESS; /r3/trainit_run_bt CloseGripper=SUCCESS; /r3/trainit_run_bt OpenGripper=SUCCESS | timeout=none | release result=/r3/trainit_run_bt OpenGripper=SUCCESS
+

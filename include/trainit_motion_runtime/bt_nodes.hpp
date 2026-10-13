@@ -35,12 +35,23 @@ TRAINIT_BT_NODE(MoveToJoint)
 TRAINIT_BT_NODE(MoveLinear)
 TRAINIT_BT_NODE(MoveCircular)
 TRAINIT_BT_NODE(MoveCollisionFree)
+// ADR-0015: `execution: servo` — the SAME waypoint data, streamed to an
+// out-of-process moveit_servo node instead of planned. TMR does NOT link
+// moveit_servo: this node is a std_srvs/Trigger client plus a TwistStamped
+// publisher, so the Community library's link line is unchanged.
+TRAINIT_BT_NODE(ServoTrack)
 TRAINIT_BT_NODE(ExecuteProcessPath)
 
 // --- end-effector ---
+// With the canonical contract (ADR-0022, BtContext::eefs set) Open/CloseGripper command a
+// SITE's grip actuator (ports eef, site) and report reason/fault/subject on FAILURE; without it
+// they run their legacy bodies, unchanged. CommandActuator drives any actuator to a named
+// target; VerifyGrasp judges the TOOL's grasp, never an actuator's command.
 TRAINIT_BT_NODE(OpenGripper)
 TRAINIT_BT_NODE(CloseGripper)
 TRAINIT_BT_NODE(SetGripper)
+TRAINIT_BT_NODE(CommandActuator)   // ADR-0022: one actuator -> one named target
+TRAINIT_BT_NODE(VerifyGrasp)       // ADR-0022: held / released, at a site or tool level
 TRAINIT_BT_NODE(EnableProcess)
 TRAINIT_BT_NODE(DisableProcess)
 
@@ -67,8 +78,15 @@ TRAINIT_BT_NODE(OffsetPoseInBaseFrame)
 // ANY detector and knows nothing about how the object was found. Because MoveWaypoint
 // reads "<wp>.position" as a blackboard string, a detection written there at runtime
 // drives the unchanged tree -- vision is a block, not a new application.
+// ADR-0016 Decision 2 adds the candidate LIST: DetectObject `keep` (default 1 — the
+// single best, exactly as before) publishes the first N candidates IN THE ORDER THE
+// DETECTOR PUBLISHED THEM, and SetWaypointFromDetection `index` (default 0) takes
+// the waypoint from the Nth. The runtime never re-ranks: the published order IS the
+// rank (ADR-0016 Decision 1). "Try the next candidate" is therefore a decorator over
+// an index, not a new control node.
 TRAINIT_BT_NODE(DetectObject)             // wait for a FRESH detection, TF it, write "<out_key>.*"
-TRAINIT_BT_NODE(SetWaypointFromDetection) // "<from>.position" (+offset) -> "<waypoint>.position"
+                                          // (keep>1: "<out_key>.<i>.*" + "<out_key>.count")
+TRAINIT_BT_NODE(SetWaypointFromDetection) // "<from>[.<index>].position" (+offset) -> "<waypoint>.position"
 TRAINIT_BT_NODE(SetWaypointRelative)      // "<from>" pose (+offset, +rpy delta) -> "<waypoint>" (D-017)
 
 // --- learned-policy execution (extension point; see docs POLICY_EXECUTION.md, ADR-0005) ---

@@ -5,6 +5,8 @@
   <TreeNodesModel>
     <Action ID="MoveWaypoint">
       <input_port name="waypoint"/>
+      <!-- vNext M2.7: written only when the move failed for a reason that is not the target's -->
+      <output_port name="fault">MOTION_FAULT: CAUSE during PHASE</output_port>
     </Action>
     <Action ID="MovePtp">
       <input_port name="joints" default=""/>
@@ -53,14 +55,71 @@
       <input_port name="tip_link" default=""/>
       <input_port name="profile" default="transit"/>
     </Action>
+    <!-- ADR-0015 `execution: servo`: the same waypoint data, STREAMED to an
+         out-of-process moveit_servo node instead of planned. See
+         docs/behavior_tree_migration_plan.md for what each default is derived from. -->
+    <Action ID="ServoTrack">
+      <input_port name="waypoint"/>
+      <input_port name="servo_node" default="servo_node"/>
+      <input_port name="command_frame" default=""/>
+      <input_port name="command_in_type" default="speed_units"/>
+      <input_port name="linear_scale" default="0.4"/>
+      <input_port name="angular_scale" default="0.8"/>
+      <input_port name="tolerance_m" default="0.002"/>
+      <input_port name="tolerance_deg" default="1.0"/>
+      <input_port name="timeout_ms" default="5000"/>
+      <input_port name="rate_hz" default="50"/>
+      <input_port name="max_linear_vel" default="0.05"/>
+      <input_port name="max_angular_vel" default="0.30"/>
+      <input_port name="gain" default="2.0"/>
+      <input_port name="execution_status_topic" default="execute_trajectory/_action/status"/>
+      <input_port name="start_servo" default="true"/>
+    </Action>
     <Action ID="ExecuteProcessPath">
       <input_port name="path_file"/>
       <input_port name="profile" default="process"/>
     </Action>
-    <Action ID="OpenGripper"/>
-    <Action ID="CloseGripper"/>
+    <!-- ADR-0022: with the canonical end-effector contract (an `eef` block in bt_params) the
+         gripper nodes command a SITE's grip actuator and report reason/fault/subject on
+         FAILURE; without it they run their legacy bodies and write nothing. -->
+    <Action ID="OpenGripper">
+      <input_port name="eef">ADR-0022: the device (default: the only one)</input_port>
+      <input_port name="site">ADR-0022: the site (required on a multi-site device)</input_port>
+      <output_port name="reason">on FAILURE: the ADR-0022 reason</output_port>
+      <output_port name="fault">on FAILURE: the reason, unless it is a VERDICT</output_port>
+      <output_port name="subject">on FAILURE: the identity the reason is about</output_port>
+    </Action>
+    <Action ID="CloseGripper">
+      <input_port name="eef">ADR-0022: the device (default: the only one)</input_port>
+      <input_port name="site">ADR-0022: the site (required on a multi-site device)</input_port>
+      <output_port name="reason">on FAILURE: the ADR-0022 reason</output_port>
+      <output_port name="fault">on FAILURE: the reason, unless it is a VERDICT</output_port>
+      <output_port name="subject">on FAILURE: the identity the reason is about</output_port>
+    </Action>
     <Action ID="SetGripper">
       <input_port name="position" default="1.0"/>
+    </Action>
+    <!-- ADR-0022: one actuator to one NAMED target, on its own standard interface. -->
+    <Action ID="CommandActuator">
+      <input_port name="eef">the device (default: the only one)</input_port>
+      <input_port name="actuator">the actuator id</input_port>
+      <input_port name="target">a NAMED target of the actuator</input_port>
+      <input_port name="timeout_ms">replaces the device's command_timeout_ms</input_port>
+      <output_port name="reason">on FAILURE: the ADR-0022 reason</output_port>
+      <output_port name="fault">on FAILURE: the reason, unless it is a VERDICT</output_port>
+      <output_port name="subject">on FAILURE: the identity the reason is about</output_port>
+    </Action>
+    <!-- ADR-0022 D4: the TOOL's grasp, at a site or tool level; never an actuator's command. -->
+    <Action ID="VerifyGrasp">
+      <input_port name="eef">the device (default: the only one)</input_port>
+      <input_port name="site">the site (empty: the only one, or tool level)</input_port>
+      <input_port name="expect">held | released</input_port>
+      <input_port name="timeout_ms">default: the project's verification.timeout_ms</input_port>
+      <input_port name="max_age_ms">default: the project's verification.max_age_ms</input_port>
+      <input_port name="accept">narrows the accepted evidence, e.g. sensor</input_port>
+      <output_port name="reason">on FAILURE: the ADR-0022 reason</output_port>
+      <output_port name="fault">on FAILURE: the reason, unless it is a VERDICT</output_port>
+      <output_port name="subject">on FAILURE: the identity the reason is about</output_port>
     </Action>
     <Action ID="EnableProcess">
       <input_port name="channel"/>
@@ -127,6 +186,42 @@
       <input_port name="dz" default="0.0"/>
       <input_port name="xyz" default=""/>
       <input_port name="out_key"/>
+    </Action>
+    <!-- perception: the Detection3DArray contract -> blackboard waypoints.
+         `keep` and `index` are the ADR-0016 candidate list; both defaults are
+         today's single-best behaviour, so an existing tree means the same thing. -->
+    <Action ID="DetectObject">
+      <input_port name="detector"/>
+      <input_port name="topic" default=""/>
+      <input_port name="class_id" default=""/>
+      <input_port name="target_frame" default="base_link"/>
+      <input_port name="timeout_ms" default="3000"/>
+      <input_port name="min_score" default="0"/>
+      <input_port name="keep" default="1"/>
+      <input_port name="out_key" default="detected"/>
+      <!-- ADR-0022: written only when no fresh message arrived or a TF lookup failed -->
+      <output_port name="fault">DETECTION_TIMEOUT | TF_LOOKUP_FAILED</output_port>
+    </Action>
+    <Action ID="SetWaypointFromDetection">
+      <input_port name="waypoint"/>
+      <input_port name="from" default="detected"/>
+      <input_port name="index" default="0"/>
+      <input_port name="dx" default="0"/>
+      <input_port name="dy" default="0"/>
+      <input_port name="dz" default="0"/>
+      <input_port name="orientation" default="keep"/>
+      <input_port name="type" default="tcp"/>
+    </Action>
+    <Action ID="SetWaypointRelative">
+      <input_port name="waypoint"/>
+      <input_port name="from"/>
+      <input_port name="dx" default="0"/>
+      <input_port name="dy" default="0"/>
+      <input_port name="dz" default="0"/>
+      <input_port name="droll" default="0"/>
+      <input_port name="dpitch" default="0"/>
+      <input_port name="dyaw" default="0"/>
+      <input_port name="type" default="tcp"/>
     </Action>
     <Action ID="Wait">
       <input_port name="duration_ms" default="100"/>

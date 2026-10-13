@@ -29,6 +29,8 @@
 #include "trainit_motion_runtime/bt_context.hpp"
 #include "trainit_motion_runtime/bt_nodes.hpp"
 #include "trainit_motion_runtime/bt_profiles.hpp"
+#include "trainit_motion_runtime/end_effector_contract.hpp"
+#include "trainit_motion_runtime/end_effector_registry.hpp"
 
 using namespace trainit;
 
@@ -119,7 +121,7 @@ int main(int argc, char** argv)
     return 2;
   }
   const std::string bt_tree_id = getStr(node, "bt_tree_id", "MainTree");
-  const std::string mode_str   = getStr(node, "planner_mode", "pilz");
+  const std::string mode_str   = getStr(node, "planner_mode", toString(kDefaultPlannerMode));
   const std::string backend_str= getStr(node, "process_path_backend", "pilz_sequence");
   auto mode = plannerModeFromString(mode_str);
   auto backend = processPathBackendFromString(backend_str);
@@ -131,14 +133,25 @@ int main(int argc, char** argv)
     return 2;
   }
 
+  // The MoveIt start-up wait (vNext M2.7, owner decision D1): a finite number of seconds > 0, or
+  // -1 for the legacy unbounded wait (which still WARNs every 5 s). Default 60.
+  std::string refused;
+  const auto moveit_wait_s = MoveItMotionRuntime::moveItWaitTimeout(node, refused);
+  if (!moveit_wait_s)
+  {
+    RCLCPP_FATAL(log, "invalid moveit_wait_timeout_s %s: a finite number of seconds > 0, or -1 to "
+                 "wait without a bound", refused.c_str());
+    rclcpp::shutdown();
+    return 2;
+  }
+
   MoveItMotionRuntime::Config cfg;
   cfg.group       = getStr(node, "group", "manipulator");
   cfg.base_frame  = getStr(node, "base_frame", "base_link");
   cfg.tip_link    = getStr(node, "tip_link", "tcp");
   cfg.mode        = *mode;
   cfg.process_backend = *backend;
-  cfg.available_pipelines = getStrArray(node, "available_pipelines",
-                                        {"ompl", "pilz_industrial_motion_planner", "chomp"});
+  cfg.available_pipelines = getStrArray(node, "available_pipelines", defaultAvailablePipelines());
   cfg.enforce_validation = getBool(node, "enforce_validation", true);
 
   const std::string gripper_action = getStr(node, "gripper_action", "");
@@ -147,14 +160,73 @@ int main(int argc, char** argv)
   const bool groot_monitor         = getBool(node, "groot_monitor", true);
   const int  groot_port            = getInt(node, "groot_port", 1667);
 
-  // Spinner FIRST (MoveGroupInterface needs the node spinning), on its own threads.
-  rclcpp::executors::MultiThreadedExecutor exec(rclcpp::ExecutorOptions(), 2);
+  // The end-effector contract (ADR-0022). An `eef` block makes the project canonical; without
+  // one the LEGACY contract runs exactly as before. It is read from the parameter OVERRIDES (the
+  // params files and -p arguments), so a key this runner declares with a default is never taken
+  // for one the project set. A malformed block is a configuration error: exit 2, naming the key.
+  eef::Contract contract;
+  try
+  {
+    contract = eef::parseContract(*node);
+  }
+  catch (const eef::Refused& refused)
+  {
+    RCLCPP_FATAL(log, "end-effector contract REFUSED %s: %s (ADR-0022)", refused.key.c_str(), refused.why.c_str());
+    rclcpp::shutdown();
+    return 2;
+  }
+  const bool canonical = contract.canonical();
+  RCLCPP_INFO(log, "%s", contractLine(contract).c_str());
+
+  // A namespaced robot's MoveIt, scene, joint-state, ServoTrack and end-effector names stay in its
+  // namespace (ADR-0023 Decision 5): a remap that sends one of them out of it, onto another robot, is
+  // refused here, once the contract is read and before any client exists. The root is not checked
+  // and does not change.
+  const auto escaped = MoveItMotionRuntime::crossNamespaceRemaps(node, contract);
+  if (!escaped.empty())
+  {
+    std::string all;
+    for (const auto& e : escaped) all += (all.empty() ? "" : ", ") + e;
+    RCLCPP_FATAL(log, "MoveIt start-up: a remap sends this robot's resources out of its namespace %s: %s "
+                 "(ADR-0023: a cross-namespace remap) -- exit 2", node->get_namespace(), all.c_str());
+    rclcpp::shutdown();
+    return 2;
+  }
+
+  // THIS robot's MoveIt, before anything blocks on it (vNext M2.7, D1): the runtime's constructor
+  // waits for ever and in silence. Silent when MoveIt is up; else named, every 5 s, and bounded.
+  switch (MoveItMotionRuntime::waitForMoveIt(node, *moveit_wait_s))
+  {
+    case MoveItMotionRuntime::MoveItWait::READY:
+      break;
+    case MoveItMotionRuntime::MoveItWait::TIMED_OUT:
+      rclcpp::shutdown();
+      return 2;
+    case MoveItMotionRuntime::MoveItWait::INTERRUPTED:
+      RCLCPP_INFO(log, "interrupted while waiting for MoveIt: exit 1");
+      rclcpp::shutdown();
+      return 1;
+  }
+
+  // The canonical end-effector devices: their clients, state subscriptions and scene signals,
+  // relative to this node's (cell) namespace (ADR-0022). Built BEFORE the executor adds the node,
+  // so their callback groups are collected with it (a group created later, once MoveIt's clients
+  // exist, was never served in this process).
+  std::unique_ptr<EndEffectorRegistry> eefs;
+  if (canonical) eefs = std::make_unique<EndEffectorRegistry>(node, contract);
+
+  // Spinner FIRST (MoveGroupInterface needs the node spinning), on its own threads: two, plus
+  // one per end-effector device (each device's clients and state share one callback group).
+  rclcpp::executors::MultiThreadedExecutor exec(rclcpp::ExecutorOptions(),
+                                                canonical ? 2 + contract.devices.size() : 2);
   exec.add_node(node);
   std::thread spinner([&exec]() { exec.spin(); });
 
   auto runtime = std::make_shared<MoveItMotionRuntime>(node, cfg);
+  // LEGACY (ADR-0022, ADR-0023): the gripper action is used as the project writes it (TSA writes it
+  // absolute, with the cell namespace in front).
   std::unique_ptr<GripperController> gripper;
-  if (!gripper_action.empty())
+  if (!canonical && !gripper_action.empty())   // a canonical run never builds the legacy client
     gripper = std::make_unique<GripperController>(node, gripper_action);
   std::unique_ptr<ProcessController> process;
   if (process_kind == "ros") process = std::make_unique<RosProcessController>(node);
@@ -162,6 +234,7 @@ int main(int argc, char** argv)
 
   MotionProfileRegistry profiles = loadMotionProfiles(profiles_file);
   BtContext ctx{runtime.get(), gripper.get(), process.get(), node};
+  ctx.scene = &runtime->scene();   // what the scene nodes write (vNext M2.7: the nodes see only the door)
 
   // End-effector actuation targets (ADR-0010). Default 1.0/0.0 == suction on/off, so a
   // TRIGGER cell (no override in bt_params) behaves exactly as before. A JOINT_POSITION
@@ -173,8 +246,10 @@ int main(int argc, char** argv)
   // the backend's sim adapter (Isaac SurfaceGripper / Gazebo LinkAttacher). Empty (the
   // default, and the deterministic golden) => no publisher => the adaptation-layer bridge
   // keeps driving the Bool, unchanged.
+  // LEGACY (ADR-0022, ADR-0023): the topic is used as the project writes it: an absolute name is
+  // GLOBAL, shared by every robot (M2.6 E2; E7 RC-04/RC-05).
   const std::string gripper_cmd_topic = getStr(node, "gripper_cmd_topic", "");
-  if (!gripper_cmd_topic.empty())
+  if (!canonical && !gripper_cmd_topic.empty())   // canonical: the scene signal is eef/<id>/engaged
   {
     auto qos = rclcpp::QoS(1).transient_local();  // latched, like the Isaac suction bridge
     ctx.gripper_cmd_pub = node->create_publisher<std_msgs::msg::Bool>(gripper_cmd_topic, qos);
@@ -183,9 +258,12 @@ int main(int argc, char** argv)
   }
   // TF for perception consumers (DetectObject). spin_thread=false: the executor above
   // already spins this node, so the listener's subscriptions ride on it.
+  // CELL-GLOBAL (ADR-0023): tf2 subscribes to the absolute /tf and /tf_static, one tree for the
+  // cell whatever this runner's namespace.
   auto tf_buffer = std::make_shared<tf2_ros::Buffer>(node->get_clock());
   auto tf_listener = std::make_shared<tf2_ros::TransformListener>(*tf_buffer, node, false);
   ctx.tf = tf_buffer;
+  ctx.eefs = eefs.get();   // null on the LEGACY contract
 
   BT::BehaviorTreeFactory factory;
   registerAllNodes(factory);
@@ -208,6 +286,18 @@ int main(int argc, char** argv)
     exec.cancel(); spinner.join(); rclcpp::shutdown();
     return 2;
   }
+  // A canonical tree's LITERAL end-effector ports are checked against the contract before any
+  // tick, and SetGripper is not part of it (ADR-0022 D2/D4): a configuration error, exit 2.
+  if (eefs)
+  {
+    const auto problems = eefs->checkTree(tree);
+    for (const auto& p : problems) RCLCPP_FATAL(log, "end-effector contract: %s (ADR-0022)", p.c_str());
+    if (!problems.empty())
+    {
+      exec.cancel(); spinner.join(); rclcpp::shutdown();
+      return 2;
+    }
+  }
 
 #ifdef BTCPP_GROOT2_SUPPORT
   std::unique_ptr<BT::Groot2Publisher> groot;
@@ -223,17 +313,57 @@ int main(int argc, char** argv)
   RCLCPP_INFO(log, "trainit_run_bt: tree='%s' id=%s planner_mode=%s backend=%s",
               bt_tree_file.c_str(), bt_tree_id.c_str(), mode_str.c_str(), backend_str.c_str());
   std::this_thread::sleep_for(std::chrono::seconds(3));  // let DDS action channels settle
+  // ONE writer per device state topic (ADR-0022 D3/D4): a second publisher is a wiring error.
+  if (eefs)
+  {
+    const auto writers = eefs->checkStateWriters();
+    for (const auto& w : writers) RCLCPP_FATAL(log, "end-effector contract: %s (ADR-0022)", w.c_str());
+    if (!writers.empty())
+    {
+      exec.cancel(); spinner.join(); rclcpp::shutdown();
+      return 2;
+    }
+  }
 
   BT::NodeStatus status = BT::NodeStatus::RUNNING;
-  while (rclcpp::ok() && status == BT::NodeStatus::RUNNING)
+  try
   {
-    status = tree.tickOnce();
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    while (rclcpp::ok() && status == BT::NodeStatus::RUNNING)
+    {
+      status = tree.tickOnce();
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+  }
+  catch (const std::exception& e)
+  {
+    if (!eefs) throw;   // LEGACY: unchanged, the exception ends the process as it always has (ADR-0022 D9)
+    // A canonical node threw (e.g. a ROS call once a shutdown has begun): the run FAILS and the
+    // tree is halted -- HOLD, no end-effector action -- never std::terminate (ADR-0022 D5).
+    RCLCPP_FATAL(log, "the tree threw: %s; it is halted and the run fails (ADR-0022)", e.what());
+    try
+    {
+      tree.haltTree();
+    }
+    catch (const std::exception& h)
+    {
+      RCLCPP_FATAL(log, "halting the tree threw: %s", h.what());
+    }
+    status = BT::NodeStatus::FAILURE;
   }
   RCLCPP_INFO(log, "BT finished: %s", BT::toStr(status).c_str());
+
+  int rc = (status == BT::NodeStatus::SUCCESS) ? 0 : 1;
+  // Exit code 3 (canonical projects only, ADR-0022 D5): the tree ended SUCCESS, but an
+  // end-effector FAULT was latched during the run (a tree absorbed it). No launch reacts to it.
+  if (eefs && status == BT::NodeStatus::SUCCESS && eefs->faultLatched())
+  {
+    for (const auto& f : eefs->latchedFaults()) RCLCPP_ERROR(log, "end-effector FAULT during the run: %s", f.c_str());
+    RCLCPP_ERROR(log, "the tree ended SUCCESS with an end-effector FAULT latched: exit code 3 (ADR-0022)");
+    rc = 3;
+  }
 
   exec.cancel();
   spinner.join();
   rclcpp::shutdown();
-  return (status == BT::NodeStatus::SUCCESS) ? 0 : 1;
+  return rc;
 }

@@ -6,13 +6,21 @@
 namespace trainit
 {
 
+// One token table: toString(). The parser accepts exactly the tokens of kPlannerModes,
+// so a token is never typed twice (test_planner_registry checks them against the registry).
 std::optional<PlannerMode> plannerModeFromString(const std::string& s)
 {
-  if (s == "pilz")       return PlannerMode::PILZ;
-  if (s == "ompl")       return PlannerMode::OMPL;
-  if (s == "ompl_chomp") return PlannerMode::OMPL_CHOMP;
-  if (s == "stomp")      return PlannerMode::STOMP;
+  for (const PlannerMode m : kPlannerModes)
+    if (s == toString(m)) return m;
   return std::nullopt;
+}
+
+std::string plannerModeList(const std::string& separator)
+{
+  std::string out;
+  for (const PlannerMode m : kPlannerModes)
+    out += (out.empty() ? std::string() : separator) + toString(m);
+  return out;
 }
 
 std::string toString(PlannerMode m)

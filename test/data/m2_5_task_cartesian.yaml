@@ -1,0 +1,14 @@
+# vNext M2.5 TaskRunner fixture for the CARTESIAN process-path backend: a generated polyline (the
+# runner's base frame and tcp), then a YAML path that names its own frame and link (world, l3),
+# then a linear move (which frame does it get after that path?).
+name: m25_task_cartesian
+group: arm
+base_frame: base_link
+tip_link: tcp
+orientation: [1.0, 0.0, 0.0, 0.0]
+defaults: {velocity_scaling: 0.3, acceleration_scaling: 0.2, planning_time: 4.0, planning_attempts: 2}
+steps:
+  - {name: home, motion: ptp, named: home}
+  - {name: weld, motion: process_path, velocity_scaling: 0.05, path: {type: polyline, points: [[0.40, 0.0, 0.30], [0.45, 0.0, 0.30], [0.45, 0.05, 0.30]], velocity: 0.04, acceleration: 0.03}}
+  - {name: seam, motion: process_path, path: {type: file, format: yaml, file: m2_5_paths/p_world_l3.yaml}}
+  - {name: leave, motion: linear, position: [0.40, 0.10, 0.30]}

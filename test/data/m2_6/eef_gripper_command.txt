@@ -1,0 +1,379 @@
+m2_6 capture eef_gripper_command
+behaviortree_cpp 4.10.0 | rmw rmw_fastrtps_cpp | moveit_ros_planning_interface 2.5.10
+
+=== scenario GC-01
+pins: the TSA bootstrap mock: every goal SUCCEEDED reached_goal=true; close 1.0 and open 0.0 (the suction defaults)
+runner keys: gripper_action=/m26_gc01/gripper_command gripper_close_position=1 gripper_open_position=0 gripper_cmd_topic=(unset)
+server: /m26_gc01/gripper_command script: SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0), SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0) (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+--- tick 1: <CloseGripper/>
+events:
+[1] ACTION /m26_gc01/gripper_command GripperCommand.goal #1 -> SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0)
+  | position=1 max_effort=0
+  command:
+    position: 1.0000000000000000
+    max_effort: 0.0000000000000000
+[2] ACTION /m26_gc01/gripper_command goal #1 response ACCEPT_AND_EXECUTE
+[3] ACTION /m26_gc01/gripper_command goal #1 result SUCCEEDED
+  | reached_goal=1 stalled=0 position=1 effort=0
+bt: SUCCESS
+--- tick 2: <OpenGripper/>
+events:
+[4] ACTION /m26_gc01/gripper_command GripperCommand.goal #2 -> SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0)
+  | position=0 max_effort=0
+  command:
+    position: 0.0000000000000000
+    max_effort: 0.0000000000000000
+[5] ACTION /m26_gc01/gripper_command goal #2 response ACCEPT_AND_EXECUTE
+[6] ACTION /m26_gc01/gripper_command goal #2 result SUCCEEDED
+  | reached_goal=1 stalled=0 position=0 effort=0
+bt: SUCCESS
+--- after the last tick (watched 1000 ms more):
+events:
+(none)
+semantic: command sent=CloseGripper: GripperCommand(position=1,max_effort=0); OpenGripper: GripperCommand(position=0,max_effort=0) | ack=CloseGripper: ACCEPTED; OpenGripper: ACCEPTED | state=CloseGripper: SUCCEEDED{reached_goal=1 stalled=0 position=1 effort=0}; OpenGripper: SUCCEEDED{reached_goal=1 stalled=0 position=0 effort=0} | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=CloseGripper=SUCCESS; OpenGripper=SUCCESS | timeout=none | release result=OpenGripper=SUCCESS (goal SUCCEEDED) | result code=CloseGripper: SUCCEEDED; OpenGripper: SUCCEEDED
+counts: /m26_gc01/gripper_command=6
+
+=== scenario GC-02
+pins: the FAIRINO suction shim: every goal ABORTED reached_goal=false; the BT still reports SUCCESS
+runner keys: gripper_action=/m26_gc02/gripper_command gripper_close_position=1 gripper_open_position=0 gripper_cmd_topic=(unset)
+server: /m26_gc02/gripper_command script: ABORT(reached_goal=0,stalled=0,position=shim(1 if goal>=0.5 else 0),effort=0), ABORT(reached_goal=0,stalled=0,position=shim(1 if goal>=0.5 else 0),effort=0) (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+--- tick 1: <CloseGripper/>
+events:
+[1] ACTION /m26_gc02/gripper_command GripperCommand.goal #1 -> ABORT(reached_goal=0,stalled=0,position=shim(1 if goal>=0.5 else 0),effort=0)
+  | position=1 max_effort=0
+  command:
+    position: 1.0000000000000000
+    max_effort: 0.0000000000000000
+[2] ACTION /m26_gc02/gripper_command goal #1 response ACCEPT_AND_EXECUTE
+[3] ACTION /m26_gc02/gripper_command goal #1 result ABORTED
+  | reached_goal=0 stalled=0 position=1 effort=0
+bt: SUCCESS
+--- tick 2: <OpenGripper/>
+events:
+[4] ACTION /m26_gc02/gripper_command GripperCommand.goal #2 -> ABORT(reached_goal=0,stalled=0,position=shim(1 if goal>=0.5 else 0),effort=0)
+  | position=0 max_effort=0
+  command:
+    position: 0.0000000000000000
+    max_effort: 0.0000000000000000
+[5] ACTION /m26_gc02/gripper_command goal #2 response ACCEPT_AND_EXECUTE
+[6] ACTION /m26_gc02/gripper_command goal #2 result ABORTED
+  | reached_goal=0 stalled=0 position=0 effort=0
+bt: SUCCESS
+--- after the last tick (watched 1000 ms more):
+events:
+(none)
+semantic: command sent=CloseGripper: GripperCommand(position=1,max_effort=0); OpenGripper: GripperCommand(position=0,max_effort=0) | ack=CloseGripper: ACCEPTED; OpenGripper: ACCEPTED | state=CloseGripper: ABORTED{reached_goal=0 stalled=0 position=1 effort=0}; OpenGripper: ABORTED{reached_goal=0 stalled=0 position=0 effort=0} | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=CloseGripper=SUCCESS; OpenGripper=SUCCESS | timeout=none | release result=OpenGripper=SUCCESS (goal ABORTED) | result code=CloseGripper: ABORTED; OpenGripper: ABORTED
+counts: /m26_gc02/gripper_command=6
+
+=== scenario GC-03
+pins: ABORTED with an empty result: the BT still reports SUCCESS
+runner keys: gripper_action=/m26_gc03/gripper_command gripper_close_position=1 gripper_open_position=0 gripper_cmd_topic=(unset)
+server: /m26_gc03/gripper_command script: ABORT(empty result) (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+--- tick 1: <CloseGripper/>
+events:
+[1] ACTION /m26_gc03/gripper_command GripperCommand.goal #1 -> ABORT(empty result)
+  | position=1 max_effort=0
+  command:
+    position: 1.0000000000000000
+    max_effort: 0.0000000000000000
+[2] ACTION /m26_gc03/gripper_command goal #1 response ACCEPT_AND_EXECUTE
+[3] ACTION /m26_gc03/gripper_command goal #1 result ABORTED
+  | (empty result)
+bt: SUCCESS
+--- after the last tick (watched 1000 ms more):
+events:
+(none)
+semantic: command sent=CloseGripper: GripperCommand(position=1,max_effort=0) | ack=CloseGripper: ACCEPTED | state=CloseGripper: ABORTED{(empty result)} | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=CloseGripper=SUCCESS | timeout=none | release result=none | result code=CloseGripper: ABORTED
+counts: /m26_gc03/gripper_command=3
+
+=== scenario GC-04
+pins: ros2_control allow_stalling=true: the jaws stall on the object, SUCCEEDED reached_goal=false stalled=true
+runner keys: gripper_action=/m26_gc04/gripper_command gripper_close_position=0.76910000000000001 gripper_open_position=0 gripper_cmd_topic=(unset)
+server: /m26_gc04/gripper_command script: SUCCEED(reached_goal=0,stalled=1,position=0.34999999999999998,effort=0) (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+--- tick 1: <CloseGripper/>
+events:
+[1] ACTION /m26_gc04/gripper_command GripperCommand.goal #1 -> SUCCEED(reached_goal=0,stalled=1,position=0.34999999999999998,effort=0)
+  | position=0.76910000000000001 max_effort=0
+  command:
+    position: 0.76910000000000001
+    max_effort: 0.0000000000000000
+[2] ACTION /m26_gc04/gripper_command goal #1 response ACCEPT_AND_EXECUTE
+[3] ACTION /m26_gc04/gripper_command goal #1 result SUCCEEDED
+  | reached_goal=0 stalled=1 position=0.34999999999999998 effort=0
+bt: SUCCESS
+--- after the last tick (watched 1000 ms more):
+events:
+(none)
+semantic: command sent=CloseGripper: GripperCommand(position=0.76910000000000001,max_effort=0) | ack=CloseGripper: ACCEPTED | state=CloseGripper: SUCCEEDED{reached_goal=0 stalled=1 position=0.34999999999999998 effort=0} | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=CloseGripper=SUCCESS | timeout=none | release result=none | result code=CloseGripper: SUCCEEDED
+counts: /m26_gc04/gripper_command=3
+
+=== scenario GC-05
+pins: ros2_control allow_stalling=false (its default): the same stall ends ABORTED; the BT still reports SUCCESS
+runner keys: gripper_action=/m26_gc05/gripper_command gripper_close_position=0.76910000000000001 gripper_open_position=0 gripper_cmd_topic=(unset)
+server: /m26_gc05/gripper_command script: ABORT(reached_goal=0,stalled=1,position=0.34999999999999998,effort=0) (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+--- tick 1: <CloseGripper/>
+events:
+[1] ACTION /m26_gc05/gripper_command GripperCommand.goal #1 -> ABORT(reached_goal=0,stalled=1,position=0.34999999999999998,effort=0)
+  | position=0.76910000000000001 max_effort=0
+  command:
+    position: 0.76910000000000001
+    max_effort: 0.0000000000000000
+[2] ACTION /m26_gc05/gripper_command goal #1 response ACCEPT_AND_EXECUTE
+[3] ACTION /m26_gc05/gripper_command goal #1 result ABORTED
+  | reached_goal=0 stalled=1 position=0.34999999999999998 effort=0
+bt: SUCCESS
+--- after the last tick (watched 1000 ms more):
+events:
+(none)
+semantic: command sent=CloseGripper: GripperCommand(position=0.76910000000000001,max_effort=0) | ack=CloseGripper: ACCEPTED | state=CloseGripper: ABORTED{reached_goal=0 stalled=1 position=0.34999999999999998 effort=0} | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=CloseGripper=SUCCESS | timeout=none | release result=none | result code=CloseGripper: ABORTED
+counts: /m26_gc05/gripper_command=3
+
+=== scenario GC-06
+pins: an EMPTY close (nothing between the jaws) ends SUCCEEDED reached_goal=true: the same answer as a grasp
+runner keys: gripper_action=/m26_gc06/gripper_command gripper_close_position=0.76910000000000001 gripper_open_position=0 gripper_cmd_topic=(unset)
+server: /m26_gc06/gripper_command script: SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0) (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+--- tick 1: <CloseGripper/>
+events:
+[1] ACTION /m26_gc06/gripper_command GripperCommand.goal #1 -> SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0)
+  | position=0.76910000000000001 max_effort=0
+  command:
+    position: 0.76910000000000001
+    max_effort: 0.0000000000000000
+[2] ACTION /m26_gc06/gripper_command goal #1 response ACCEPT_AND_EXECUTE
+[3] ACTION /m26_gc06/gripper_command goal #1 result SUCCEEDED
+  | reached_goal=1 stalled=0 position=0.76910000000000001 effort=0
+bt: SUCCESS
+--- after the last tick (watched 1000 ms more):
+events:
+(none)
+semantic: command sent=CloseGripper: GripperCommand(position=0.76910000000000001,max_effort=0) | ack=CloseGripper: ACCEPTED | state=CloseGripper: SUCCEEDED{reached_goal=1 stalled=0 position=0.76910000000000001 effort=0} | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=CloseGripper=SUCCESS | timeout=none | release result=none | result code=CloseGripper: SUCCEEDED
+counts: /m26_gc06/gripper_command=3
+
+=== scenario GC-07
+pins: a preemption: a second client's real cancel request ends the goal CANCELED with an empty result; the BT still reports SUCCESS
+runner keys: gripper_action=/m26_gc07/gripper_command gripper_close_position=1 gripper_open_position=0 gripper_cmd_topic=(unset)
+server: /m26_gc07/gripper_command script: PREEMPT(a second client sends a real cancel request; CANCELED, empty result) (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+--- tick 1: <CloseGripper/>
+events:
+[1] ACTION /m26_gc07/gripper_command GripperCommand.goal #1 -> PREEMPT(a second client sends a real cancel request; CANCELED, empty result)
+  | position=1 max_effort=0
+  command:
+    position: 1.0000000000000000
+    max_effort: 0.0000000000000000
+[2] ACTION /m26_gc07/gripper_command goal #1 response ACCEPT_AND_EXECUTE
+[3] CLIENT /m26_preemptor_m26_gc07_gripper_command the second client asks to cancel every goal (preempting goal #1)
+[4] ACTION /m26_gc07/gripper_command goal #1 cancel request -> ACCEPT
+[5] ACTION /m26_gc07/gripper_command goal #1 result CANCELED
+  | (empty result); the cancel response listed 1 goal(s)
+bt: SUCCESS
+--- after the last tick (watched 1000 ms more):
+events:
+(none)
+semantic: command sent=CloseGripper: GripperCommand(position=1,max_effort=0) | ack=CloseGripper: ACCEPTED; cancel requests received by the server: 1 (the harness's second client sent 1) | state=CloseGripper: CANCELED{(empty result)} | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=CloseGripper=SUCCESS | timeout=none | release result=none | result code=CloseGripper: CANCELED
+counts: /m26_gc07/gripper_command=4 /m26_preemptor_m26_gc07_gripper_command=1
+
+=== scenario GC-08
+pins: the server REJECTS the goal: FAILURE, and nothing else is tried
+runner keys: gripper_action=/m26_gc08/gripper_command gripper_close_position=1 gripper_open_position=0 gripper_cmd_topic=(unset)
+server: /m26_gc08/gripper_command script: REJECT (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+--- tick 1: <CloseGripper/>
+events:
+[1] ACTION /m26_gc08/gripper_command GripperCommand.goal #1 -> REJECT
+  | position=1 max_effort=0
+  command:
+    position: 1.0000000000000000
+    max_effort: 0.0000000000000000
+[2] ACTION /m26_gc08/gripper_command goal #1 response REJECT
+bt: FAILURE
+--- after the last tick (watched 1000 ms more):
+events:
+(none)
+semantic: command sent=CloseGripper: GripperCommand(position=1,max_effort=0) | ack=CloseGripper: REJECTED | state=CloseGripper: - | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=CloseGripper=FAILURE | timeout=none | release result=none | result code=CloseGripper: REJECTED
+counts: /m26_gc08/gripper_command=2
+
+=== scenario GC-09
+pins: no server at the configured name: FAILURE after the 5 s server wait
+runner keys: gripper_action=/m26_gc09/gripper_command gripper_close_position=1 gripper_open_position=0 gripper_cmd_topic=(unset)
+server: none
+--- tick 1: <CloseGripper/>
+events:
+(none)
+bt: FAILURE
+--- after the last tick (watched 1000 ms more):
+events:
+(none)
+semantic: command sent=none | ack=CloseGripper: no goal reached a server (none serves /m26_gc09/gripper_command) | state=none | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=CloseGripper=FAILURE | timeout=CloseGripper: server wait (no server) | release result=none
+counts: none
+
+=== scenario GC-10
+pins: a LATE accept: the goal response comes after the 5 s goal-response wait; the client returns FAILURE, the server still executes the goal afterwards, and no cancel request ever arrives
+runner keys: gripper_action=/m26_gc10/gripper_command gripper_close_position=1 gripper_open_position=0 gripper_cmd_topic=(unset)
+server: /m26_gc10/gripper_command script: SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0) accept_after=7000ms (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+--- tick 1: <CloseGripper/>
+events:
+[1] ACTION /m26_gc10/gripper_command GripperCommand.goal #1 -> SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0) accept_after=7000ms
+  | position=1 max_effort=0
+  command:
+    position: 1.0000000000000000
+    max_effort: 0.0000000000000000
+bt: FAILURE
+--- after the last tick (watched 1000 ms more):
+events:
+[2] ACTION /m26_gc10/gripper_command goal #1 response ACCEPT_AND_EXECUTE
+[3] ACTION /m26_gc10/gripper_command goal #1 result SUCCEEDED
+  | reached_goal=1 stalled=0 position=1 effort=0
+semantic: command sent=CloseGripper: GripperCommand(position=1,max_effort=0) | ack=CloseGripper: ACCEPTED after the client had returned | state=CloseGripper: not answered when the client returned (afterwards: ACCEPTED, SUCCEEDED by script) | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=CloseGripper=FAILURE | timeout=CloseGripper: goal-response wait (the response came after the client returned) | release result=none | result code=CloseGripper: none before the client returned
+counts: /m26_gc10/gripper_command=3
+
+=== scenario GC-11
+pins: the result is WITHHELD past the 10 s result wait: FAILURE; the goal stays EXECUTING and no cancel request ever arrives
+runner keys: gripper_action=/m26_gc11/gripper_command gripper_close_position=1 gripper_open_position=0 gripper_cmd_topic=(unset)
+server: /m26_gc11/gripper_command script: WITHHOLD(accepted; no result until the harness releases it) (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+--- tick 1: <CloseGripper/>
+events:
+[1] ACTION /m26_gc11/gripper_command GripperCommand.goal #1 -> WITHHOLD(accepted; no result until the harness releases it)
+  | position=1 max_effort=0
+  command:
+    position: 1.0000000000000000
+    max_effort: 0.0000000000000000
+[2] ACTION /m26_gc11/gripper_command goal #1 response ACCEPT_AND_EXECUTE
+[3] ACTION /m26_gc11/gripper_command goal #1 held EXECUTING: no result (script)
+bt: FAILURE
+--- after the last tick (watched 1000 ms more):
+events:
+(none)
+semantic: command sent=CloseGripper: GripperCommand(position=1,max_effort=0) | ack=CloseGripper: ACCEPTED | state=CloseGripper: EXECUTING when the client returned | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=CloseGripper=FAILURE | timeout=CloseGripper: result wait (no result before the client returned) | release result=none | result code=CloseGripper: none before the client returned
+counts: /m26_gc11/gripper_command=3
+
+=== scenario GC-12
+pins: configured joint targets (close 0.7691 rad, open 0.0 rad): the goals carry them, max_effort stays 0
+runner keys: gripper_action=/m26_gc12/gripper_command gripper_close_position=0.76910000000000001 gripper_open_position=0 gripper_cmd_topic=(unset)
+server: /m26_gc12/gripper_command script: default (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+--- tick 1: <CloseGripper/>
+events:
+[1] ACTION /m26_gc12/gripper_command GripperCommand.goal #1 -> SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0)
+  | position=0.76910000000000001 max_effort=0
+  command:
+    position: 0.76910000000000001
+    max_effort: 0.0000000000000000
+[2] ACTION /m26_gc12/gripper_command goal #1 response ACCEPT_AND_EXECUTE
+[3] ACTION /m26_gc12/gripper_command goal #1 result SUCCEEDED
+  | reached_goal=1 stalled=0 position=0.76910000000000001 effort=0
+bt: SUCCESS
+--- tick 2: <OpenGripper/>
+events:
+[4] ACTION /m26_gc12/gripper_command GripperCommand.goal #2 -> SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0)
+  | position=0 max_effort=0
+  command:
+    position: 0.0000000000000000
+    max_effort: 0.0000000000000000
+[5] ACTION /m26_gc12/gripper_command goal #2 response ACCEPT_AND_EXECUTE
+[6] ACTION /m26_gc12/gripper_command goal #2 result SUCCEEDED
+  | reached_goal=1 stalled=0 position=0 effort=0
+bt: SUCCESS
+--- after the last tick (watched 1000 ms more):
+events:
+(none)
+semantic: command sent=CloseGripper: GripperCommand(position=0.76910000000000001,max_effort=0); OpenGripper: GripperCommand(position=0,max_effort=0) | ack=CloseGripper: ACCEPTED; OpenGripper: ACCEPTED | state=CloseGripper: SUCCEEDED{reached_goal=1 stalled=0 position=0.76910000000000001 effort=0}; OpenGripper: SUCCEEDED{reached_goal=1 stalled=0 position=0 effort=0} | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=CloseGripper=SUCCESS; OpenGripper=SUCCESS | timeout=none | release result=OpenGripper=SUCCESS (goal SUCCEEDED) | result code=CloseGripper: SUCCEEDED; OpenGripper: SUCCEEDED
+counts: /m26_gc12/gripper_command=6
+
+=== scenario GC-13
+pins: SetGripper with a numeric position, then with none (the port default "1.0")
+runner keys: gripper_action=/m26_gc13/gripper_command gripper_close_position=1 gripper_open_position=0 gripper_cmd_topic=(unset)
+server: /m26_gc13/gripper_command script: default (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+--- tick 1: <SetGripper position="0.35"/>
+events:
+[1] ACTION /m26_gc13/gripper_command GripperCommand.goal #1 -> SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0)
+  | position=0.34999999999999998 max_effort=0
+  command:
+    position: 0.34999999999999998
+    max_effort: 0.0000000000000000
+[2] ACTION /m26_gc13/gripper_command goal #1 response ACCEPT_AND_EXECUTE
+[3] ACTION /m26_gc13/gripper_command goal #1 result SUCCEEDED
+  | reached_goal=1 stalled=0 position=0.34999999999999998 effort=0
+bt: SUCCESS
+--- tick 2: <SetGripper/>
+events:
+[4] ACTION /m26_gc13/gripper_command GripperCommand.goal #2 -> SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0)
+  | position=1 max_effort=0
+  command:
+    position: 1.0000000000000000
+    max_effort: 0.0000000000000000
+[5] ACTION /m26_gc13/gripper_command goal #2 response ACCEPT_AND_EXECUTE
+[6] ACTION /m26_gc13/gripper_command goal #2 result SUCCEEDED
+  | reached_goal=1 stalled=0 position=1 effort=0
+bt: SUCCESS
+--- after the last tick (watched 1000 ms more):
+events:
+(none)
+semantic: command sent=SetGripper: GripperCommand(position=0.34999999999999998,max_effort=0); SetGripper: GripperCommand(position=1,max_effort=0) | ack=SetGripper: ACCEPTED; SetGripper: ACCEPTED | state=SetGripper: SUCCEEDED{reached_goal=1 stalled=0 position=0.34999999999999998 effort=0}; SetGripper: SUCCEEDED{reached_goal=1 stalled=0 position=1 effort=0} | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=SetGripper=SUCCESS; SetGripper=SUCCESS | timeout=none | release result=none | result code=SetGripper: SUCCEEDED; SetGripper: SUCCEEDED
+counts: /m26_gc13/gripper_command=6
+
+=== scenario GC-14
+pins: SetGripper with a non-numeric position: std::stod throws inside the tick; no goal is sent
+runner keys: gripper_action=/m26_gc14/gripper_command gripper_close_position=1 gripper_open_position=0 gripper_cmd_topic=(unset)
+server: /m26_gc14/gripper_command script: default (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+--- tick 1: <SetGripper position="half"/>
+events:
+(none)
+bt: THROW BT::NodeExecutionError: Exception in node 'SetGripper::1' [SetGripper]: stod
+--- after the last tick (watched 1000 ms more):
+events:
+(none)
+semantic: command sent=none | ack=SetGripper: no goal reached a server | state=none | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=SetGripper=THROW BT::NodeExecutionError: Exception in node 'SetGripper::1' [SetGripper]: stod | timeout=none | release result=none
+counts: none
+
+=== scenario GC-15
+pins: OpenGripper against a SUCCEEDED and then an ABORTED release: SUCCESS both times
+runner keys: gripper_action=/m26_gc15/gripper_command gripper_close_position=1 gripper_open_position=0 gripper_cmd_topic=(unset)
+server: /m26_gc15/gripper_command script: SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0), ABORT(reached_goal=0,stalled=0,position=goal,effort=0) (then SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0))
+--- tick 1: <OpenGripper/>
+events:
+[1] ACTION /m26_gc15/gripper_command GripperCommand.goal #1 -> SUCCEED(reached_goal=1,stalled=0,position=goal,effort=0)
+  | position=0 max_effort=0
+  command:
+    position: 0.0000000000000000
+    max_effort: 0.0000000000000000
+[2] ACTION /m26_gc15/gripper_command goal #1 response ACCEPT_AND_EXECUTE
+[3] ACTION /m26_gc15/gripper_command goal #1 result SUCCEEDED
+  | reached_goal=1 stalled=0 position=0 effort=0
+bt: SUCCESS
+--- tick 2: <OpenGripper/>
+events:
+[4] ACTION /m26_gc15/gripper_command GripperCommand.goal #2 -> ABORT(reached_goal=0,stalled=0,position=goal,effort=0)
+  | position=0 max_effort=0
+  command:
+    position: 0.0000000000000000
+    max_effort: 0.0000000000000000
+[5] ACTION /m26_gc15/gripper_command goal #2 response ACCEPT_AND_EXECUTE
+[6] ACTION /m26_gc15/gripper_command goal #2 result ABORTED
+  | reached_goal=0 stalled=0 position=0 effort=0
+bt: SUCCESS
+--- after the last tick (watched 1000 ms more):
+events:
+(none)
+semantic: command sent=OpenGripper: GripperCommand(position=0,max_effort=0); OpenGripper: GripperCommand(position=0,max_effort=0) | ack=OpenGripper: ACCEPTED; OpenGripper: ACCEPTED | state=OpenGripper: SUCCEEDED{reached_goal=1 stalled=0 position=0 effort=0}; OpenGripper: ABORTED{reached_goal=0 stalled=0 position=0 effort=0} | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=OpenGripper=SUCCESS; OpenGripper=SUCCESS | timeout=none | release result=OpenGripper=SUCCESS (goal SUCCEEDED); OpenGripper=SUCCESS (goal ABORTED) | result code=OpenGripper: SUCCEEDED; OpenGripper: ABORTED
+counts: /m26_gc15/gripper_command=6
+
+=== scenario GC-16
+pins: neither a gripper action nor a grasp topic configured: every gripper node fails before any traffic
+runner keys: gripper_action=(unset) gripper_close_position=1 gripper_open_position=0 gripper_cmd_topic=(unset)
+server: none
+--- tick 1: <CloseGripper/>
+events:
+(none)
+bt: FAILURE
+--- tick 2: <OpenGripper/>
+events:
+(none)
+bt: FAILURE
+--- tick 3: <SetGripper position="0.5"/>
+events:
+(none)
+bt: FAILURE
+--- after the last tick (watched 1000 ms more):
+events:
+(none)
+semantic: command sent=none | ack=CloseGripper: no GripperCommand (no gripper_action); OpenGripper: no GripperCommand (no gripper_action); SetGripper: no GripperCommand (no gripper_action) | state=none | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=CloseGripper=FAILURE; OpenGripper=FAILURE; SetGripper=FAILURE | timeout=none | release result=OpenGripper=FAILURE
+counts: none
+

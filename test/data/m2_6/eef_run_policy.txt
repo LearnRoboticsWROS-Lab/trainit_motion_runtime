@@ -1,0 +1,115 @@
+m2_6 capture eef_run_policy
+behaviortree_cpp 4.10.0 | rmw rmw_fastrtps_cpp | moveit_ros_planning_interface 2.5.10
+
+=== scenario RP-01
+pins: pure, the DEFAULT ports (/trainit_policy_runtime/run + /status): accepted, status running -> success: SUCCESS
+policy runtime: /trainit_policy_runtime/run + /trainit_policy_runtime/status (mode pure): run -> success=true message='pure run started'; then status: success
+--- tick 1: <RunPolicy mode="pure" timeout_ms="5000"/>
+events:
+[1] SERVICE /trainit_policy_runtime/run Trigger.call #1 -> run -> success=true message='pure run started'; then status: success
+[2] TOPIC /trainit_policy_runtime/status status published: running (inside the run handler, before the answer)
+[3] SERVICE /trainit_policy_runtime/run Trigger.call #1 answered success=true message='pure run started'
+[4] TOPIC /trainit_policy_runtime/status status published: success (a status subscriber is matched)
+bt: SUCCESS
+--- after the tick (watched 500 ms more):
+events:
+(none)
+semantic: command sent=Trigger on /trainit_policy_runtime/run x1 | ack=answered success=true message='pure run started' | state=status published before RunPolicy returned: running -> success | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=RunPolicy=SUCCESS | timeout=none | release result=none
+
+=== scenario RP-02
+pins: pure: accepted, status running -> failure: RunPolicy still reports SUCCESS (it only says the policy RAN)
+policy runtime: /m26_policy_rp02/run + /m26_policy_rp02/status (mode pure): run -> success=true message='pure run started'; then status: failure
+--- tick 1: <RunPolicy service="/m26_policy_rp02/run" status_topic="/m26_policy_rp02/status" mode="pure" timeout_ms="5000"/>
+events:
+[1] SERVICE /m26_policy_rp02/run Trigger.call #1 -> run -> success=true message='pure run started'; then status: failure
+[2] TOPIC /m26_policy_rp02/status status published: running (inside the run handler, before the answer)
+[3] SERVICE /m26_policy_rp02/run Trigger.call #1 answered success=true message='pure run started'
+[4] TOPIC /m26_policy_rp02/status status published: failure (a status subscriber is matched)
+bt: SUCCESS
+--- after the tick (watched 500 ms more):
+events:
+(none)
+semantic: command sent=Trigger on /m26_policy_rp02/run x1 | ack=answered success=true message='pure run started' | state=status published before RunPolicy returned: running -> failure | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=RunPolicy=SUCCESS | timeout=none | release result=none
+
+=== scenario RP-03
+pins: pure: accepted, the runtime's own window expires (status timeout): SUCCESS
+policy runtime: /m26_policy_rp03/run + /m26_policy_rp03/status (mode pure): run -> success=true message='pure run started'; then status: timeout
+--- tick 1: <RunPolicy service="/m26_policy_rp03/run" status_topic="/m26_policy_rp03/status" mode="pure" timeout_ms="5000"/>
+events:
+[1] SERVICE /m26_policy_rp03/run Trigger.call #1 -> run -> success=true message='pure run started'; then status: timeout
+[2] TOPIC /m26_policy_rp03/status status published: running (inside the run handler, before the answer)
+[3] SERVICE /m26_policy_rp03/run Trigger.call #1 answered success=true message='pure run started'
+[4] TOPIC /m26_policy_rp03/status status published: timeout (a status subscriber is matched)
+bt: SUCCESS
+--- after the tick (watched 500 ms more):
+events:
+(none)
+semantic: command sent=Trigger on /m26_policy_rp03/run x1 | ack=answered success=true message='pure run started' | state=status published before RunPolicy returned: running -> timeout | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=RunPolicy=SUCCESS | timeout=none | release result=none
+
+=== scenario RP-04
+pins: pure: accepted, the status never leaves running: RunPolicy stops waiting after timeout_ms and reports SUCCESS
+policy runtime: /m26_policy_rp04/run + /m26_policy_rp04/status (mode pure): run -> success=true message='pure run started'
+--- tick 1: <RunPolicy service="/m26_policy_rp04/run" status_topic="/m26_policy_rp04/status" mode="pure" timeout_ms="1500"/>
+events:
+[1] SERVICE /m26_policy_rp04/run Trigger.call #1 -> run -> success=true message='pure run started'
+[2] TOPIC /m26_policy_rp04/status status published: running (inside the run handler, before the answer)
+[3] SERVICE /m26_policy_rp04/run Trigger.call #1 answered success=true message='pure run started'
+bt: SUCCESS
+--- after the tick (watched 500 ms more):
+events:
+(none)
+semantic: command sent=Trigger on /m26_policy_rp04/run x1 | ack=answered success=true message='pure run started' | state=status published before RunPolicy returned: running | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=RunPolicy=SUCCESS | timeout=status wait (timeout_ms) expired with the status still running | release result=none
+
+=== scenario RP-05
+pins: hybrid: SUCCESS on the answer, no status is read
+policy runtime: /m26_policy_rp05/run + /m26_policy_rp05/status (mode hybrid): run -> success=true message='hybrid target published'; status before the answer: running -> hybrid_target_ready
+--- tick 1: <RunPolicy service="/m26_policy_rp05/run" status_topic="/m26_policy_rp05/status" mode="hybrid" timeout_ms="5000"/>
+events:
+[1] SERVICE /m26_policy_rp05/run Trigger.call #1 -> run -> success=true message='hybrid target published'; status before the answer: running -> hybrid_target_ready
+[2] TOPIC /m26_policy_rp05/status status published: running (inside the run handler, before the answer)
+[3] TOPIC /m26_policy_rp05/status status published: hybrid_target_ready (inside the run handler, before the answer)
+[4] SERVICE /m26_policy_rp05/run Trigger.call #1 answered success=true message='hybrid target published'
+bt: SUCCESS
+--- after the tick (watched 500 ms more):
+events:
+(none)
+semantic: command sent=Trigger on /m26_policy_rp05/run x1 | ack=answered success=true message='hybrid target published' | state=status published before RunPolicy returned: running -> hybrid_target_ready | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=RunPolicy=SUCCESS | timeout=none | release result=none
+
+=== scenario RP-06
+pins: the runtime refuses the run (success=false): FAILURE
+policy runtime: /m26_policy_rp06/run + /m26_policy_rp06/status (mode pure): run -> success=false message='already running'
+--- tick 1: <RunPolicy service="/m26_policy_rp06/run" status_topic="/m26_policy_rp06/status" mode="pure" timeout_ms="5000"/>
+events:
+[1] SERVICE /m26_policy_rp06/run Trigger.call #1 -> run -> success=false message='already running'
+[2] SERVICE /m26_policy_rp06/run Trigger.call #1 answered success=false message='already running'
+bt: FAILURE
+--- after the tick (watched 500 ms more):
+events:
+(none)
+semantic: command sent=Trigger on /m26_policy_rp06/run x1 | ack=answered success=false message='already running' | state=status published before RunPolicy returned: nothing | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=RunPolicy=FAILURE | timeout=none | release result=none
+
+=== scenario RP-07
+pins: no policy runtime in the graph: FAILURE after the 2 s service wait
+policy runtime: none
+--- tick 1: <RunPolicy service="/m26_policy_rp07/run" status_topic="/m26_policy_rp07/status" mode="pure" timeout_ms="5000"/>
+events:
+(none)
+bt: FAILURE
+--- after the tick (watched 500 ms more):
+events:
+(none)
+semantic: command sent=none | ack=no run service in the graph | state=none | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=RunPolicy=FAILURE | timeout=service wait (2 s) expired | release result=none
+
+=== scenario RP-08
+pins: the run service answers after timeout_ms (2500 ms > 1000 ms): FAILURE; the late answer is discarded
+policy runtime: /m26_policy_rp08/run + /m26_policy_rp08/status (mode pure): run -> success=true message='pure run started' answered after 2500ms
+--- tick 1: <RunPolicy service="/m26_policy_rp08/run" status_topic="/m26_policy_rp08/status" mode="pure" timeout_ms="1000"/>
+events:
+[1] SERVICE /m26_policy_rp08/run Trigger.call #1 -> run -> success=true message='pure run started' answered after 2500ms
+[2] TOPIC /m26_policy_rp08/status status published: running (inside the run handler, before the answer)
+bt: FAILURE
+--- after the tick (watched 500 ms more):
+events:
+[3] SERVICE /m26_policy_rp08/run Trigger.call #1 answered success=true message='pure run started'
+semantic: command sent=Trigger on /m26_policy_rp08/run x1 | ack=no answer before RunPolicy returned | state=status published before RunPolicy returned: running | grasp confirmation=Bool state subscriptions of /trainit_run_bt: none | BT result=RunPolicy=FAILURE | timeout=run-answer wait (timeout_ms) expired | release result=none
+

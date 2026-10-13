@@ -1,0 +1,406 @@
+m2_5 capture failure_mapping
+moveit_ros_planning_interface 2.5.10 | behaviortree_cpp 4.10.0 | rmw rmw_fastrtps_cpp
+
+=== scenario T4-01
+pins: planning fails every time: 4 identical goals (plan_retries 3), no execute, FAILURE
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: (none)
+script: move_action: ABORT(-1) ABORT(-1) ABORT(-1) ABORT(-1)
+--- tick 1: <MoveToNamed target="ready"/>
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> ABORT(-1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+[2] ACTION /move_action MoveGroup.goal #2 -> ABORT(-1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+[3] ACTION /move_action MoveGroup.goal #3 -> ABORT(-1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+[4] ACTION /move_action MoveGroup.goal #4 -> ABORT(-1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+bt: FAILURE
+planner_mode_after: ompl
+counts: /move_action=4
+
+=== scenario T4-02
+pins: planning fails once then succeeds: the second plan is the one executed
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: (none)
+script: move_action: ABORT(-1)
+--- tick 1: <MoveToNamed target="ready"/>
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> ABORT(-1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+[2] ACTION /move_action MoveGroup.goal #2 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+[3] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+[4] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+    joint_trajectory: frame= joints=[j1,j2,j3] points=4
+      first: positions=[0, -0, 0] velocities=[] accelerations=[] t=0s+0ns
+      last:  positions=[0.29999999999999999, -0.40000000000000008, 0.60199999999999998] velocities=[] accelerations=[] t=0s+300000000ns
+    multi_dof_points=0
+    sha256(precision-17 block)=a0789b31f2664c018d76c70469199574738a46c5840c49df638d81a2b0c7a4b8
+bt: SUCCESS
+planner_mode_after: ompl
+counts: /execute_trajectory=1 /get_planning_scene=1 /move_action=2
+
+=== scenario T4-03
+pins: an empty trajectory fails validation: no retry, no execute
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: (none)
+script: move_action: SUCCEED(1,empty)
+--- tick 1: <MoveToNamed target="ready"/>
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1,empty)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+bt: FAILURE
+planner_mode_after: ompl
+counts: /get_planning_scene=1 /move_action=1
+
+=== scenario T4-04a
+pins: a 0.6 rad joint jump fails validation
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: (none)
+script: move_action: SUCCEED(1,jump)
+--- tick 1: <MoveToNamed target="ready"/>
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1,jump)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+bt: FAILURE
+planner_mode_after: ompl
+counts: /get_planning_scene=1 /move_action=1
+
+=== scenario T4-04b
+pins: the same jump with enforce_validation=false is executed
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=off retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: (none)
+script: move_action: SUCCEED(1,jump)
+--- tick 1: <MoveToNamed target="ready"/>
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1,jump)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+[3] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+    joint_trajectory: frame= joints=[j1,j2,j3] points=5
+      first: positions=[0, -0, 0] velocities=[] accelerations=[] t=0s+0ns
+      last:  positions=[0.89999999999999991, -0.40000000000000008, 0.60099999999999998] velocities=[] accelerations=[] t=1s+300000000ns
+    multi_dof_points=0
+    sha256(precision-17 block)=ca5e53ad288c181cb9686c616b8f57692d59e0c7ef35bf9cc8b389c049013fdf
+bt: SUCCESS
+planner_mode_after: ompl
+counts: /execute_trajectory=1 /get_planning_scene=1 /move_action=1
+
+=== scenario T4-04c
+pins: a point outside the joint limits fails validation
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: (none)
+script: move_action: SUCCEED(1,out_of_limits)
+--- tick 1: <MoveToNamed target="ready"/>
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1,out_of_limits)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+bt: FAILURE
+planner_mode_after: ompl
+counts: /get_planning_scene=1 /move_action=1
+
+=== scenario T4-04d
+pins: a decreasing time_from_start fails validation
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: (none)
+script: move_action: SUCCEED(1,decreasing_time)
+--- tick 1: <MoveToNamed target="ready"/>
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1,decreasing_time)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+bt: FAILURE
+planner_mode_after: ompl
+counts: /get_planning_scene=1 /move_action=1
+
+=== scenario T4-06a
+pins: TIMED_OUT (-6), the emulated planning timeout: 4 goals, FAILURE
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: (none)
+script: move_action: ABORT(-6) ABORT(-6) ABORT(-6) ABORT(-6)
+--- tick 1: <MoveToNamed target="ready"/>
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> ABORT(-6)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+[2] ACTION /move_action MoveGroup.goal #2 -> ABORT(-6)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+[3] ACTION /move_action MoveGroup.goal #3 -> ABORT(-6)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+[4] ACTION /move_action MoveGroup.goal #4 -> ABORT(-6)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+bt: FAILURE
+planner_mode_after: ompl
+counts: /move_action=4
+
+=== scenario T4-06b
+pins: PREEMPTED (-7): 4 goals, FAILURE
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: (none)
+script: move_action: ABORT(-7) ABORT(-7) ABORT(-7) ABORT(-7)
+--- tick 1: <MoveToNamed target="ready"/>
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> ABORT(-7)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+[2] ACTION /move_action MoveGroup.goal #2 -> ABORT(-7)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+[3] ACTION /move_action MoveGroup.goal #3 -> ABORT(-7)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+[4] ACTION /move_action MoveGroup.goal #4 -> ABORT(-7)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+bt: FAILURE
+planner_mode_after: ompl
+counts: /move_action=4
+
+=== scenario T4-06c
+pins: INVALID_GOAL_CONSTRAINTS (-16) and NO_IK_SOLUTION (-31)
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: (none)
+script: move_action: ABORT(-16) ABORT(-31) ABORT(-16) ABORT(-31)
+--- tick 1: <MoveToNamed target="ready"/>
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> ABORT(-16)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+[2] ACTION /move_action MoveGroup.goal #2 -> ABORT(-31)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+[3] ACTION /move_action MoveGroup.goal #3 -> ABORT(-16)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+[4] ACTION /move_action MoveGroup.goal #4 -> ABORT(-31)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+bt: FAILURE
+planner_mode_after: ompl
+counts: /move_action=4
+
+=== scenario T4-07a
+pins: execution aborts CONTROL_FAILED (-4): FAILURE, execution never retried
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: (none)
+script: execute_trajectory: ABORT(-4)
+--- tick 1: <MoveToNamed target="ready"/>
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+[3] ACTION /execute_trajectory ExecuteTrajectory.goal -> ABORT(-4)
+  | trajectory
+    joint_trajectory: frame= joints=[j1,j2,j3] points=4
+      first: positions=[0, -0, 0] velocities=[] accelerations=[] t=0s+0ns
+      last:  positions=[0.29999999999999999, -0.40000000000000008, 0.60099999999999998] velocities=[] accelerations=[] t=0s+300000000ns
+    multi_dof_points=0
+    sha256(precision-17 block)=ef35c4ba3f0360f59ce8192714c808f0af2a9ab544e0af7019b0d3280cb8e9b6
+bt: FAILURE
+planner_mode_after: ompl
+counts: /execute_trajectory=1 /get_planning_scene=1 /move_action=1
+
+=== scenario T4-07b
+pins: execution TIMED_OUT (-6)
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: (none)
+script: execute_trajectory: ABORT(-6)
+--- tick 1: <MoveToNamed target="ready"/>
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+[3] ACTION /execute_trajectory ExecuteTrajectory.goal -> ABORT(-6)
+  | trajectory
+    joint_trajectory: frame= joints=[j1,j2,j3] points=4
+      first: positions=[0, -0, 0] velocities=[] accelerations=[] t=0s+0ns
+      last:  positions=[0.29999999999999999, -0.40000000000000008, 0.60099999999999998] velocities=[] accelerations=[] t=0s+300000000ns
+    multi_dof_points=0
+    sha256(precision-17 block)=ef35c4ba3f0360f59ce8192714c808f0af2a9ab544e0af7019b0d3280cb8e9b6
+bt: FAILURE
+planner_mode_after: ompl
+counts: /execute_trajectory=1 /get_planning_scene=1 /move_action=1
+
+=== scenario T4-07c
+pins: execution PREEMPTED (-7)
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: (none)
+script: execute_trajectory: ABORT(-7)
+--- tick 1: <MoveToNamed target="ready"/>
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+[3] ACTION /execute_trajectory ExecuteTrajectory.goal -> ABORT(-7)
+  | trajectory
+    joint_trajectory: frame= joints=[j1,j2,j3] points=4
+      first: positions=[0, -0, 0] velocities=[] accelerations=[] t=0s+0ns
+      last:  positions=[0.29999999999999999, -0.40000000000000008, 0.60099999999999998] velocities=[] accelerations=[] t=0s+300000000ns
+    multi_dof_points=0
+    sha256(precision-17 block)=ef35c4ba3f0360f59ce8192714c808f0af2a9ab544e0af7019b0d3280cb8e9b6
+bt: FAILURE
+planner_mode_after: ompl
+counts: /execute_trajectory=1 /get_planning_scene=1 /move_action=1
+
+=== scenario T4-09a
+pins: /move_action gone after construction: no goal reaches it, FAILURE
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: (none)
+script: default (SUCCEED; chomp refuses a pose goal with -16)
+--- tick 1: <MoveToNamed target="ready"/>
+events:
+bt: FAILURE
+planner_mode_after: ompl
+counts: none
+
+=== scenario T4-09b
+pins: /execute_trajectory gone after construction: planned, validated, not executed, FAILURE
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: (none)
+script: default (SUCCEED; chomp refuses a pose goal with -16)
+--- tick 1: <MoveToNamed target="ready"/>
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.5 acc=0.5 time=5 attempts=10 plan_only=1
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+bt: FAILURE
+planner_mode_after: ompl
+counts: /get_planning_scene=1 /move_action=1
+
+=== scenario T4-11a
+pins: sequence ABORT (-1)
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: p2=Pose(0.45000000000000001,0.14999999999999999,0.29999999999999999 | 1,0,0,0)
+script: sequence_move_group: ABORT(-1)
+--- tick 1: <MoveCircular goal_key="p2" aux="0.43;0.12;0.32"/>
+events:
+[1] ACTION /sequence_move_group MoveGroupSequence.goal #1 -> ABORT(-1)
+  | items=1 plan_only=0
+  | item 0: group=arm pipeline=pilz_industrial_motion_planner planner=CIRC target=pose frames=tcp@base_link,tcp@base_link vel=0.20000000000000001 acc=0.20000000000000001 time=3 attempts=1 path_constraints=interim blend=0
+bt: FAILURE
+planner_mode_after: ompl
+counts: /sequence_move_group=1
+
+=== scenario T4-11b
+pins: sequence PREEMPTED (-7)
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: p2=Pose(0.45000000000000001,0.14999999999999999,0.29999999999999999 | 1,0,0,0)
+script: sequence_move_group: ABORT(-7)
+--- tick 1: <MoveCircular goal_key="p2" aux="0.43;0.12;0.32"/>
+events:
+[1] ACTION /sequence_move_group MoveGroupSequence.goal #1 -> ABORT(-7)
+  | items=1 plan_only=0
+  | item 0: group=arm pipeline=pilz_industrial_motion_planner planner=CIRC target=pose frames=tcp@base_link,tcp@base_link vel=0.20000000000000001 acc=0.20000000000000001 time=3 attempts=1 path_constraints=interim blend=0
+bt: FAILURE
+planner_mode_after: ompl
+counts: /sequence_move_group=1
+
+=== scenario T4-11c
+pins: sequence REJECTED
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: p2=Pose(0.45000000000000001,0.14999999999999999,0.29999999999999999 | 1,0,0,0)
+script: sequence_move_group: REJECT(1)
+--- tick 1: <MoveCircular goal_key="p2" aux="0.43;0.12;0.32"/>
+events:
+[1] ACTION /sequence_move_group MoveGroupSequence.goal -> REJECT
+  | items=1 plan_only=0
+  | item 0: group=arm pipeline=pilz_industrial_motion_planner planner=CIRC target=pose frames=tcp@base_link,tcp@base_link vel=0.20000000000000001 acc=0.20000000000000001 time=3 attempts=1 path_constraints=interim blend=0
+bt: FAILURE
+planner_mode_after: ompl
+counts: /sequence_move_group=1
+
+=== scenario T4-11d
+pins: sequence SUCCEEDED carrying -1: FAILURE
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: p2=Pose(0.45000000000000001,0.14999999999999999,0.29999999999999999 | 1,0,0,0)
+script: sequence_move_group: SUCCEED(-1)
+--- tick 1: <MoveCircular goal_key="p2" aux="0.43;0.12;0.32"/>
+events:
+[1] ACTION /sequence_move_group MoveGroupSequence.goal #1 -> SUCCEED(-1)
+  | items=1 plan_only=0
+  | item 0: group=arm pipeline=pilz_industrial_motion_planner planner=CIRC target=pose frames=tcp@base_link,tcp@base_link vel=0.20000000000000001 acc=0.20000000000000001 time=3 attempts=1 path_constraints=interim blend=0
+bt: FAILURE
+planner_mode_after: ompl
+counts: /sequence_move_group=1
+
+=== scenario T4-11e
+pins: sequence ABORTED carrying SUCCESS: FAILURE
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: p2=Pose(0.45000000000000001,0.14999999999999999,0.29999999999999999 | 1,0,0,0)
+script: sequence_move_group: ABORT(1)
+--- tick 1: <MoveCircular goal_key="p2" aux="0.43;0.12;0.32"/>
+events:
+[1] ACTION /sequence_move_group MoveGroupSequence.goal #1 -> ABORT(1)
+  | items=1 plan_only=0
+  | item 0: group=arm pipeline=pilz_industrial_motion_planner planner=CIRC target=pose frames=tcp@base_link,tcp@base_link vel=0.20000000000000001 acc=0.20000000000000001 time=3 attempts=1 path_constraints=interim blend=0
+bt: FAILURE
+planner_mode_after: ompl
+counts: /sequence_move_group=1
+
+=== scenario T4-12a
+pins: cartesian fraction 0.6 under threshold 1.0: FAILURE, no execute
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=cartesian_waypoints pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: (none)
+script: compute_cartesian_path: SUCCEED(1,fraction=0.59999999999999998)
+--- tick 1: <ExecuteProcessPath path_file="${PATHS}/p3.csv"/>
+events:
+[1] SERVICE /compute_cartesian_path GetCartesianPath.request #1 -> SUCCEED(1,fraction=0.59999999999999998)
+  | group=arm link=tcp frame=base_link waypoints=3 max_step=0.0050000000000000001 jump=0 avoid_collisions=1 vel=0.10000000000000001 acc=0.10000000000000001
+bt: FAILURE
+planner_mode_after: ompl
+counts: /compute_cartesian_path=1
+
+=== scenario T4-12b
+pins: cartesian error -1: FAILURE, no execute
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=cartesian_waypoints pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: (none)
+script: compute_cartesian_path: ABORT(-1)
+--- tick 1: <ExecuteProcessPath path_file="${PATHS}/p3.csv"/>
+events:
+[1] SERVICE /compute_cartesian_path GetCartesianPath.request #1 -> ABORT(-1)
+  | group=arm link=tcp frame=base_link waypoints=3 max_step=0.0050000000000000001 jump=0 avoid_collisions=1 vel=0.10000000000000001 acc=0.10000000000000001
+bt: FAILURE
+planner_mode_after: ompl
+counts: /compute_cartesian_path=1
+
+=== scenario T4-12c
+pins: cartesian OK, execution aborts -4: FAILURE
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=cartesian_waypoints pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: (none)
+script: execute_trajectory: ABORT(-4)
+--- tick 1: <ExecuteProcessPath path_file="${PATHS}/p3.csv"/>
+events:
+[1] SERVICE /compute_cartesian_path GetCartesianPath.request #1 -> SUCCEED(1)
+  | group=arm link=tcp frame=base_link waypoints=3 max_step=0.0050000000000000001 jump=0 avoid_collisions=1 vel=0.10000000000000001 acc=0.10000000000000001
+[2] ACTION /execute_trajectory ExecuteTrajectory.goal -> ABORT(-4)
+  | trajectory
+    joint_trajectory: frame=world joints=[j1,j2,j3] points=87
+      first: positions=[0, -0, 0] velocities=[0, -0, 0] accelerations=[0, 0, 0] t=0s+0ns
+      last:  positions=[0.20000000000000001, -0.29999999999999999, 0.40100000000000002] velocities=[8.7458410952799021e-18, -1.3118761642919851e-17, 1.7535411396036206e-17] accelerations=[-0.0083212602483470482, 0.012481890372520571, -0.016684126797935833] t=9s+371999999ns
+    multi_dof_points=0
+    sha256(precision-17 block)=7d4b247a217285d5c065075969cc4e24af80acfcb3bf4dd7839feefe59b63411
+bt: FAILURE
+planner_mode_after: ompl
+counts: /compute_cartesian_path=1 /execute_trajectory=1
+

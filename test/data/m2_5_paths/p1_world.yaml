@@ -1,0 +1,6 @@
+# vNext M2.5 test path with ONE waypoint (the cartesian backend refuses it before touching MoveIt)
+path_name: m25_one
+reference_frame: world
+tcp_link: l3
+waypoints:
+  - {position: [0.40, 0.10, 0.40]}

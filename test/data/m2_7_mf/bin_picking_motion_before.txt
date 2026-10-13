@@ -1,0 +1,1303 @@
+m2_7 capture bin_picking_motion
+behaviortree_cpp 4.10.0 | rmw rmw_fastrtps_cpp | moveit_ros_planning_interface 2.5.10
+tree: m2_6_contract/bin_picking_canonical.xml sha256=25fb4e2533423d150c040dee2a19bb9d65905d2a9ff247c0c8e7cf6456716b5b
+
+=== scenario S0
+pins: nominal: two cycles, each candidate 0 picked, held, placed and released
+script: default (SUCCEED; chomp refuses a pose goal with -16) | hook: none
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=56cf90569fd485c9f278fe8c463554bc8a6a15d3b7188f3921d48214d9da911e
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[3] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=2a6271a57851b4de47a156a01004dc39c411cd0209045a0543be34202e43ade8
+[4] ACTION /move_action MoveGroup.goal #2 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=993869b65b69b40395482253461262441d19613f953b4fd68cb2f2a2c0409714
+[5] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[6] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=d46aefab46c8d548cd16473b164249ac46158ab9a390d3e2016f94b623aff9f3
+[7] ACTION /move_action MoveGroup.goal #3 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[8] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[9] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=36001740a90812477068c0901c703a6cbb7254a451c064435b59fcc3b787a0ed
+[10] ACTION /move_action MoveGroup.goal #4 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=199a094c6def7747d3f72dd00280c146fb464640cad72be1d3b07a91d0ebfc55
+[11] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[12] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=2ac0787f8c287d76b5a796acf150c3044ddb68cd054187d5084fd3cdbef4d686
+[13] ACTION /move_action MoveGroup.goal #5 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=PTP target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=f408bdcc9915505373f0bb700b2c9a8fb34ecef88ac538c16b8f6dda88de8032
+[14] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[15] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=29439d86ede649a36d613279f89f21997e7d459eab50649a5f061d3fd9055099
+[16] ACTION /move_action MoveGroup.goal #6 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=bc5f141f6407f3f0a165c2cbfb7858c2f2a1435f0dc063a27ea2ae8cbff0aae7
+[17] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[18] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=1cc732a423e23085b1c388b2672356d8f214fa746d2c302acf0c1af62ad345d3
+[19] ACTION /move_action MoveGroup.goal #7 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=5d2e0aff5ce2434b7308b3f008cf3e8fd0baf5077b5978008e227e28effa8e46
+[20] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[21] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=c6f7175e5263be284b3516e8e5d02141748716f1d9365939a7eb1994ba64c856
+[22] ACTION /move_action MoveGroup.goal #8 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[23] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[24] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=195a6cfb5a66eccffee6e1597e364348c4dd1ded6852db2bc79cc11c2ca1b2eb
+[25] ACTION /move_action MoveGroup.goal #9 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=199a094c6def7747d3f72dd00280c146fb464640cad72be1d3b07a91d0ebfc55
+[26] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[27] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=b0bc750f629a5c76e32d7df6f684d52da3f17c4d3e091e4d1e54a130c1b08508
+[28] ACTION /move_action MoveGroup.goal #10 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=PTP target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=f408bdcc9915505373f0bb700b2c9a8fb34ecef88ac538c16b8f6dda88de8032
+[29] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[30] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=3194fa676694053fa83a385e2d656dec5bcba5e642fdc3b048acff59e0215658
+[31] ACTION /move_action MoveGroup.goal #11 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=bc5f141f6407f3f0a165c2cbfb7858c2f2a1435f0dc063a27ea2ae8cbff0aae7
+[32] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[33] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=b890a04aad86217f6b33d5e17986f90f81b30a983f326dca853545a3ac6d14d0
+[34] ACTION /move_action MoveGroup.goal #12 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=5d2e0aff5ce2434b7308b3f008cf3e8fd0baf5077b5978008e227e28effa8e46
+[35] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[36] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=c97222d45063e1fb4b78f7c535f8b9dd8a6bb0631d97c0d0cfe303cf05e8dbaa
+moves: ready pre_pick pick post_pick pre_place place post_place pick post_pick pre_place place post_place
+bt: SUCCESS
+stall: recovery=0 bin_empty=0 bin_stalled=0
+vacuum: engage release engage release
+scene_calls: 4
+eef_fault: ""
+latched: (none)
+runner_exit: 0
+
+=== scenario S1
+pins: every candidate unreachable (class A): NO_IK_SOLUTION on every plan of every pick
+script: move_action: SUCCEED(1) SUCCEED(1) ABORT(-31) ABORT(-31) ABORT(-31) ABORT(-31) ABORT(-31) ABORT(-31) ABORT(-31) ABORT(-31) ABORT(-31) ABORT(-31) ABORT(-31) ABORT(-31) ABORT(-31) ABORT(-31) ABORT(-31) ABORT(-31) ABORT(-31) ABORT(-31) ABORT(-31) ABORT(-31) ABORT(-31) ABORT(-31) ABORT(-31) ABORT(-31) | hook: none
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=56cf90569fd485c9f278fe8c463554bc8a6a15d3b7188f3921d48214d9da911e
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[3] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=2a6271a57851b4de47a156a01004dc39c411cd0209045a0543be34202e43ade8
+[4] ACTION /move_action MoveGroup.goal #2 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=993869b65b69b40395482253461262441d19613f953b4fd68cb2f2a2c0409714
+[5] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[6] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=d46aefab46c8d548cd16473b164249ac46158ab9a390d3e2016f94b623aff9f3
+[7] ACTION /move_action MoveGroup.goal #3 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[8] ACTION /move_action MoveGroup.goal #4 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[9] ACTION /move_action MoveGroup.goal #5 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[10] ACTION /move_action MoveGroup.goal #6 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[11] ACTION /move_action MoveGroup.goal #7 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=9916f277864a7f239b42298f162fbcb6f1b9a917239fb48f76cae1728145bf22
+[12] ACTION /move_action MoveGroup.goal #8 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=9916f277864a7f239b42298f162fbcb6f1b9a917239fb48f76cae1728145bf22
+[13] ACTION /move_action MoveGroup.goal #9 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=9916f277864a7f239b42298f162fbcb6f1b9a917239fb48f76cae1728145bf22
+[14] ACTION /move_action MoveGroup.goal #10 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=9916f277864a7f239b42298f162fbcb6f1b9a917239fb48f76cae1728145bf22
+[15] ACTION /move_action MoveGroup.goal #11 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=0a2fe432dd8fd3cf3ab713739c2cb842b620d80e14e65ff5c32768419ef74b8b
+[16] ACTION /move_action MoveGroup.goal #12 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=0a2fe432dd8fd3cf3ab713739c2cb842b620d80e14e65ff5c32768419ef74b8b
+[17] ACTION /move_action MoveGroup.goal #13 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=0a2fe432dd8fd3cf3ab713739c2cb842b620d80e14e65ff5c32768419ef74b8b
+[18] ACTION /move_action MoveGroup.goal #14 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=0a2fe432dd8fd3cf3ab713739c2cb842b620d80e14e65ff5c32768419ef74b8b
+[19] ACTION /move_action MoveGroup.goal #15 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[20] ACTION /move_action MoveGroup.goal #16 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[21] ACTION /move_action MoveGroup.goal #17 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[22] ACTION /move_action MoveGroup.goal #18 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[23] ACTION /move_action MoveGroup.goal #19 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=9916f277864a7f239b42298f162fbcb6f1b9a917239fb48f76cae1728145bf22
+[24] ACTION /move_action MoveGroup.goal #20 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=9916f277864a7f239b42298f162fbcb6f1b9a917239fb48f76cae1728145bf22
+[25] ACTION /move_action MoveGroup.goal #21 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=9916f277864a7f239b42298f162fbcb6f1b9a917239fb48f76cae1728145bf22
+[26] ACTION /move_action MoveGroup.goal #22 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=9916f277864a7f239b42298f162fbcb6f1b9a917239fb48f76cae1728145bf22
+[27] ACTION /move_action MoveGroup.goal #23 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=0a2fe432dd8fd3cf3ab713739c2cb842b620d80e14e65ff5c32768419ef74b8b
+[28] ACTION /move_action MoveGroup.goal #24 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=0a2fe432dd8fd3cf3ab713739c2cb842b620d80e14e65ff5c32768419ef74b8b
+[29] ACTION /move_action MoveGroup.goal #25 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=0a2fe432dd8fd3cf3ab713739c2cb842b620d80e14e65ff5c32768419ef74b8b
+[30] ACTION /move_action MoveGroup.goal #26 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=0a2fe432dd8fd3cf3ab713739c2cb842b620d80e14e65ff5c32768419ef74b8b
+moves: ready pre_pick pick pick pick pick pick pick
+bt: SUCCESS
+stall: recovery=2 bin_empty=0 bin_stalled=2
+vacuum: (none)
+scene_calls: 0
+eef_fault: ""
+latched: (none)
+runner_exit: 0
+
+=== scenario S2
+pins: move_group's MoveGroup action server gone mid-run (class B, plan): dropped during cycle 1's post_place dwell, cycle 2's moves never reach MoveIt
+script: default (SUCCEED; chomp refuses a pose goal with -16) | hook: drop move_action after cycle 1
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=56cf90569fd485c9f278fe8c463554bc8a6a15d3b7188f3921d48214d9da911e
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[3] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=2a6271a57851b4de47a156a01004dc39c411cd0209045a0543be34202e43ade8
+[4] ACTION /move_action MoveGroup.goal #2 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=993869b65b69b40395482253461262441d19613f953b4fd68cb2f2a2c0409714
+[5] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[6] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=d46aefab46c8d548cd16473b164249ac46158ab9a390d3e2016f94b623aff9f3
+[7] ACTION /move_action MoveGroup.goal #3 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[8] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[9] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=36001740a90812477068c0901c703a6cbb7254a451c064435b59fcc3b787a0ed
+[10] ACTION /move_action MoveGroup.goal #4 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=199a094c6def7747d3f72dd00280c146fb464640cad72be1d3b07a91d0ebfc55
+[11] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[12] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=2ac0787f8c287d76b5a796acf150c3044ddb68cd054187d5084fd3cdbef4d686
+[13] ACTION /move_action MoveGroup.goal #5 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=PTP target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=f408bdcc9915505373f0bb700b2c9a8fb34ecef88ac538c16b8f6dda88de8032
+[14] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[15] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=29439d86ede649a36d613279f89f21997e7d459eab50649a5f061d3fd9055099
+[16] ACTION /move_action MoveGroup.goal #6 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=bc5f141f6407f3f0a165c2cbfb7858c2f2a1435f0dc063a27ea2ae8cbff0aae7
+[17] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[18] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=1cc732a423e23085b1c388b2672356d8f214fa746d2c302acf0c1af62ad345d3
+[19] ACTION /move_action MoveGroup.goal #7 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=5d2e0aff5ce2434b7308b3f008cf3e8fd0baf5077b5978008e227e28effa8e46
+[20] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[21] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=c6f7175e5263be284b3516e8e5d02141748716f1d9365939a7eb1994ba64c856
+moves: ready pre_pick pick post_pick pre_place place post_place pick pick pick
+bt: SUCCESS
+stall: recovery=1 bin_empty=0 bin_stalled=1
+vacuum: engage release
+scene_calls: 2
+eef_fault: ""
+latched: (none)
+runner_exit: 0
+
+=== scenario S3
+pins: CONTROL_FAILED executing candidate 0's approach (pick), nothing held (class B, execute)
+script: execute_trajectory: SUCCEED(1) SUCCEED(1) ABORT(-4) | hook: none
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=56cf90569fd485c9f278fe8c463554bc8a6a15d3b7188f3921d48214d9da911e
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[3] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=2a6271a57851b4de47a156a01004dc39c411cd0209045a0543be34202e43ade8
+[4] ACTION /move_action MoveGroup.goal #2 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=993869b65b69b40395482253461262441d19613f953b4fd68cb2f2a2c0409714
+[5] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[6] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=d46aefab46c8d548cd16473b164249ac46158ab9a390d3e2016f94b623aff9f3
+[7] ACTION /move_action MoveGroup.goal #3 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[8] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[9] ACTION /execute_trajectory ExecuteTrajectory.goal -> ABORT(-4)
+  | trajectory
+  sha256=36001740a90812477068c0901c703a6cbb7254a451c064435b59fcc3b787a0ed
+[10] ACTION /move_action MoveGroup.goal #4 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=9916f277864a7f239b42298f162fbcb6f1b9a917239fb48f76cae1728145bf22
+[11] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[12] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=2ac0787f8c287d76b5a796acf150c3044ddb68cd054187d5084fd3cdbef4d686
+[13] ACTION /move_action MoveGroup.goal #5 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=f88fe97fae17b1e09f6398c467b0ccd693fd00f63086ac543eeceb39b135c0a8
+[14] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[15] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=29439d86ede649a36d613279f89f21997e7d459eab50649a5f061d3fd9055099
+[16] ACTION /move_action MoveGroup.goal #6 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=PTP target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=f408bdcc9915505373f0bb700b2c9a8fb34ecef88ac538c16b8f6dda88de8032
+[17] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[18] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=1cc732a423e23085b1c388b2672356d8f214fa746d2c302acf0c1af62ad345d3
+[19] ACTION /move_action MoveGroup.goal #7 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=bc5f141f6407f3f0a165c2cbfb7858c2f2a1435f0dc063a27ea2ae8cbff0aae7
+[20] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[21] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=c6f7175e5263be284b3516e8e5d02141748716f1d9365939a7eb1994ba64c856
+[22] ACTION /move_action MoveGroup.goal #8 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=5d2e0aff5ce2434b7308b3f008cf3e8fd0baf5077b5978008e227e28effa8e46
+[23] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[24] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=195a6cfb5a66eccffee6e1597e364348c4dd1ded6852db2bc79cc11c2ca1b2eb
+[25] ACTION /move_action MoveGroup.goal #9 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[26] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[27] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=b0bc750f629a5c76e32d7df6f684d52da3f17c4d3e091e4d1e54a130c1b08508
+[28] ACTION /move_action MoveGroup.goal #10 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=199a094c6def7747d3f72dd00280c146fb464640cad72be1d3b07a91d0ebfc55
+[29] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[30] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=3194fa676694053fa83a385e2d656dec5bcba5e642fdc3b048acff59e0215658
+[31] ACTION /move_action MoveGroup.goal #11 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=PTP target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=f408bdcc9915505373f0bb700b2c9a8fb34ecef88ac538c16b8f6dda88de8032
+[32] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[33] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=b890a04aad86217f6b33d5e17986f90f81b30a983f326dca853545a3ac6d14d0
+[34] ACTION /move_action MoveGroup.goal #12 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=bc5f141f6407f3f0a165c2cbfb7858c2f2a1435f0dc063a27ea2ae8cbff0aae7
+[35] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[36] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=c97222d45063e1fb4b78f7c535f8b9dd8a6bb0631d97c0d0cfe303cf05e8dbaa
+[37] ACTION /move_action MoveGroup.goal #13 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=5d2e0aff5ce2434b7308b3f008cf3e8fd0baf5077b5978008e227e28effa8e46
+[38] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[39] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=70cbabce7624fb12cab5767d02014580537866def1b1a0ab350e062a73025b8d
+moves: ready pre_pick pick pick post_pick pre_place place post_place pick post_pick pre_place place post_place
+bt: SUCCESS
+stall: recovery=0 bin_empty=0 bin_stalled=0
+vacuum: engage release engage release
+scene_calls: 4
+eef_fault: ""
+latched: (none)
+runner_exit: 0
+
+=== scenario S4
+pins: CONTROL_FAILED executing pre_place while the object is held (Q8.1 HOLD)
+script: execute_trajectory: SUCCEED(1) SUCCEED(1) SUCCEED(1) SUCCEED(1) ABORT(-4) | hook: none
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=56cf90569fd485c9f278fe8c463554bc8a6a15d3b7188f3921d48214d9da911e
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[3] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=2a6271a57851b4de47a156a01004dc39c411cd0209045a0543be34202e43ade8
+[4] ACTION /move_action MoveGroup.goal #2 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=993869b65b69b40395482253461262441d19613f953b4fd68cb2f2a2c0409714
+[5] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[6] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=d46aefab46c8d548cd16473b164249ac46158ab9a390d3e2016f94b623aff9f3
+[7] ACTION /move_action MoveGroup.goal #3 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[8] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[9] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=36001740a90812477068c0901c703a6cbb7254a451c064435b59fcc3b787a0ed
+[10] ACTION /move_action MoveGroup.goal #4 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=199a094c6def7747d3f72dd00280c146fb464640cad72be1d3b07a91d0ebfc55
+[11] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[12] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=2ac0787f8c287d76b5a796acf150c3044ddb68cd054187d5084fd3cdbef4d686
+[13] ACTION /move_action MoveGroup.goal #5 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=PTP target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=f408bdcc9915505373f0bb700b2c9a8fb34ecef88ac538c16b8f6dda88de8032
+[14] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[15] ACTION /execute_trajectory ExecuteTrajectory.goal -> ABORT(-4)
+  | trajectory
+  sha256=29439d86ede649a36d613279f89f21997e7d459eab50649a5f061d3fd9055099
+moves: ready pre_pick pick post_pick pre_place
+bt: FAILURE
+stall: recovery=0 bin_empty=0 bin_stalled=0
+vacuum: engage
+scene_calls: 2
+eef_fault: ""
+latched: (none)
+runner_exit: 1
+
+=== scenario S5
+pins: PLANNING_FAILED on every plan of place while the object is held (class A while holding)
+script: move_action: SUCCEED(1) SUCCEED(1) SUCCEED(1) SUCCEED(1) SUCCEED(1) ABORT(-1) ABORT(-1) ABORT(-1) ABORT(-1) | hook: none
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=56cf90569fd485c9f278fe8c463554bc8a6a15d3b7188f3921d48214d9da911e
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[3] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=2a6271a57851b4de47a156a01004dc39c411cd0209045a0543be34202e43ade8
+[4] ACTION /move_action MoveGroup.goal #2 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=993869b65b69b40395482253461262441d19613f953b4fd68cb2f2a2c0409714
+[5] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[6] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=d46aefab46c8d548cd16473b164249ac46158ab9a390d3e2016f94b623aff9f3
+[7] ACTION /move_action MoveGroup.goal #3 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[8] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[9] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=36001740a90812477068c0901c703a6cbb7254a451c064435b59fcc3b787a0ed
+[10] ACTION /move_action MoveGroup.goal #4 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=199a094c6def7747d3f72dd00280c146fb464640cad72be1d3b07a91d0ebfc55
+[11] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[12] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=2ac0787f8c287d76b5a796acf150c3044ddb68cd054187d5084fd3cdbef4d686
+[13] ACTION /move_action MoveGroup.goal #5 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=PTP target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=f408bdcc9915505373f0bb700b2c9a8fb34ecef88ac538c16b8f6dda88de8032
+[14] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[15] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=29439d86ede649a36d613279f89f21997e7d459eab50649a5f061d3fd9055099
+[16] ACTION /move_action MoveGroup.goal #6 -> ABORT(-1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=bc5f141f6407f3f0a165c2cbfb7858c2f2a1435f0dc063a27ea2ae8cbff0aae7
+[17] ACTION /move_action MoveGroup.goal #7 -> ABORT(-1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=bc5f141f6407f3f0a165c2cbfb7858c2f2a1435f0dc063a27ea2ae8cbff0aae7
+[18] ACTION /move_action MoveGroup.goal #8 -> ABORT(-1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=bc5f141f6407f3f0a165c2cbfb7858c2f2a1435f0dc063a27ea2ae8cbff0aae7
+[19] ACTION /move_action MoveGroup.goal #9 -> ABORT(-1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=bc5f141f6407f3f0a165c2cbfb7858c2f2a1435f0dc063a27ea2ae8cbff0aae7
+moves: ready pre_pick pick post_pick pre_place place
+bt: FAILURE
+stall: recovery=0 bin_empty=0 bin_stalled=0
+vacuum: engage
+scene_calls: 2
+eef_fault: ""
+latched: (none)
+runner_exit: 1
+
+=== scenario S6
+pins: a silent detector (Q9): no fresh detection within the timeout
+script: default (SUCCEED; chomp refuses a pose goal with -16) | hook: none
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=56cf90569fd485c9f278fe8c463554bc8a6a15d3b7188f3921d48214d9da911e
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[3] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=2a6271a57851b4de47a156a01004dc39c411cd0209045a0543be34202e43ade8
+[4] ACTION /move_action MoveGroup.goal #2 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=993869b65b69b40395482253461262441d19613f953b4fd68cb2f2a2c0409714
+[5] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[6] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=d46aefab46c8d548cd16473b164249ac46158ab9a390d3e2016f94b623aff9f3
+moves: ready pre_pick
+bt: FAILURE
+stall: recovery=0 bin_empty=0 bin_stalled=0
+vacuum: (none)
+scene_calls: 0
+eef_fault: "DETECTION_TIMEOUT"
+latched: (none)
+runner_exit: 1
+
+=== scenario S6b
+pins: a fresh detection with no match (class bottle, the tree wants object): the empty bin
+script: default (SUCCEED; chomp refuses a pose goal with -16) | hook: none
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=56cf90569fd485c9f278fe8c463554bc8a6a15d3b7188f3921d48214d9da911e
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[3] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=2a6271a57851b4de47a156a01004dc39c411cd0209045a0543be34202e43ade8
+[4] ACTION /move_action MoveGroup.goal #2 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=993869b65b69b40395482253461262441d19613f953b4fd68cb2f2a2c0409714
+[5] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[6] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=d46aefab46c8d548cd16473b164249ac46158ab9a390d3e2016f94b623aff9f3
+moves: ready pre_pick
+bt: SUCCESS
+stall: recovery=2 bin_empty=0 bin_stalled=2
+vacuum: (none)
+scene_calls: 0
+eef_fault: ""
+latched: (none)
+runner_exit: 0
+
+=== scenario S6c
+pins: the detector publishes in a frame TF cannot transform (Q9, the TF lookup failure): never an empty bin
+script: default (SUCCEED; chomp refuses a pose goal with -16) | hook: none
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=56cf90569fd485c9f278fe8c463554bc8a6a15d3b7188f3921d48214d9da911e
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[3] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=2a6271a57851b4de47a156a01004dc39c411cd0209045a0543be34202e43ade8
+[4] ACTION /move_action MoveGroup.goal #2 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=993869b65b69b40395482253461262441d19613f953b4fd68cb2f2a2c0409714
+[5] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[6] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=d46aefab46c8d548cd16473b164249ac46158ab9a390d3e2016f94b623aff9f3
+moves: ready pre_pick
+bt: FAILURE
+stall: recovery=0 bin_empty=0 bin_stalled=0
+vacuum: (none)
+scene_calls: 0
+eef_fault: "TF_LOOKUP_FAILED"
+latched: (none)
+runner_exit: 1
+
+=== scenario S7
+pins: candidate 0 unreachable (NO_IK_SOLUTION on its four plans), candidate 1 reachable
+script: move_action: SUCCEED(1) SUCCEED(1) ABORT(-31) ABORT(-31) ABORT(-31) ABORT(-31) | hook: none
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=56cf90569fd485c9f278fe8c463554bc8a6a15d3b7188f3921d48214d9da911e
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[3] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=2a6271a57851b4de47a156a01004dc39c411cd0209045a0543be34202e43ade8
+[4] ACTION /move_action MoveGroup.goal #2 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=993869b65b69b40395482253461262441d19613f953b4fd68cb2f2a2c0409714
+[5] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[6] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=d46aefab46c8d548cd16473b164249ac46158ab9a390d3e2016f94b623aff9f3
+[7] ACTION /move_action MoveGroup.goal #3 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[8] ACTION /move_action MoveGroup.goal #4 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[9] ACTION /move_action MoveGroup.goal #5 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[10] ACTION /move_action MoveGroup.goal #6 -> ABORT(-31)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[11] ACTION /move_action MoveGroup.goal #7 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=9916f277864a7f239b42298f162fbcb6f1b9a917239fb48f76cae1728145bf22
+[12] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[13] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=c6f7175e5263be284b3516e8e5d02141748716f1d9365939a7eb1994ba64c856
+[14] ACTION /move_action MoveGroup.goal #8 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=f88fe97fae17b1e09f6398c467b0ccd693fd00f63086ac543eeceb39b135c0a8
+[15] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[16] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=195a6cfb5a66eccffee6e1597e364348c4dd1ded6852db2bc79cc11c2ca1b2eb
+[17] ACTION /move_action MoveGroup.goal #9 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=PTP target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=f408bdcc9915505373f0bb700b2c9a8fb34ecef88ac538c16b8f6dda88de8032
+[18] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[19] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=b0bc750f629a5c76e32d7df6f684d52da3f17c4d3e091e4d1e54a130c1b08508
+[20] ACTION /move_action MoveGroup.goal #10 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=bc5f141f6407f3f0a165c2cbfb7858c2f2a1435f0dc063a27ea2ae8cbff0aae7
+[21] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[22] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=3194fa676694053fa83a385e2d656dec5bcba5e642fdc3b048acff59e0215658
+[23] ACTION /move_action MoveGroup.goal #11 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=5d2e0aff5ce2434b7308b3f008cf3e8fd0baf5077b5978008e227e28effa8e46
+[24] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[25] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=b890a04aad86217f6b33d5e17986f90f81b30a983f326dca853545a3ac6d14d0
+[26] ACTION /move_action MoveGroup.goal #12 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[27] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[28] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=c97222d45063e1fb4b78f7c535f8b9dd8a6bb0631d97c0d0cfe303cf05e8dbaa
+[29] ACTION /move_action MoveGroup.goal #13 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=199a094c6def7747d3f72dd00280c146fb464640cad72be1d3b07a91d0ebfc55
+[30] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[31] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=70cbabce7624fb12cab5767d02014580537866def1b1a0ab350e062a73025b8d
+[32] ACTION /move_action MoveGroup.goal #14 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=PTP target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=f408bdcc9915505373f0bb700b2c9a8fb34ecef88ac538c16b8f6dda88de8032
+[33] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[34] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=9f073410335eddda6426b66453bb1bba41219042db20dd824ee96a3191d9690e
+[35] ACTION /move_action MoveGroup.goal #15 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=bc5f141f6407f3f0a165c2cbfb7858c2f2a1435f0dc063a27ea2ae8cbff0aae7
+[36] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[37] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=d7300c50912d0ec783d0bf7df4775df1ed5455a3477925615ffa15fd6f5fa4b5
+[38] ACTION /move_action MoveGroup.goal #16 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=5d2e0aff5ce2434b7308b3f008cf3e8fd0baf5077b5978008e227e28effa8e46
+[39] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[40] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=68d5ed91c1f3e9a19ac3551e6093c549c26904a7d902e6a8b390ce3ac77e1b32
+moves: ready pre_pick pick pick post_pick pre_place place post_place pick post_pick pre_place place post_place
+bt: SUCCESS
+stall: recovery=0 bin_empty=0 bin_stalled=0
+vacuum: engage release engage release
+scene_calls: 4
+eef_fault: ""
+latched: (none)
+runner_exit: 0
+
+=== scenario S8
+pins: CONTROL_FAILED executing post_place after the confirmed release, nothing held (class B)
+script: execute_trajectory: SUCCEED(1) SUCCEED(1) SUCCEED(1) SUCCEED(1) SUCCEED(1) SUCCEED(1) ABORT(-4) | hook: none
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=56cf90569fd485c9f278fe8c463554bc8a6a15d3b7188f3921d48214d9da911e
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[3] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=2a6271a57851b4de47a156a01004dc39c411cd0209045a0543be34202e43ade8
+[4] ACTION /move_action MoveGroup.goal #2 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=993869b65b69b40395482253461262441d19613f953b4fd68cb2f2a2c0409714
+[5] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[6] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=d46aefab46c8d548cd16473b164249ac46158ab9a390d3e2016f94b623aff9f3
+[7] ACTION /move_action MoveGroup.goal #3 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[8] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[9] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=36001740a90812477068c0901c703a6cbb7254a451c064435b59fcc3b787a0ed
+[10] ACTION /move_action MoveGroup.goal #4 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=199a094c6def7747d3f72dd00280c146fb464640cad72be1d3b07a91d0ebfc55
+[11] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[12] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=2ac0787f8c287d76b5a796acf150c3044ddb68cd054187d5084fd3cdbef4d686
+[13] ACTION /move_action MoveGroup.goal #5 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=PTP target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=f408bdcc9915505373f0bb700b2c9a8fb34ecef88ac538c16b8f6dda88de8032
+[14] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[15] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=29439d86ede649a36d613279f89f21997e7d459eab50649a5f061d3fd9055099
+[16] ACTION /move_action MoveGroup.goal #6 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=bc5f141f6407f3f0a165c2cbfb7858c2f2a1435f0dc063a27ea2ae8cbff0aae7
+[17] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[18] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=1cc732a423e23085b1c388b2672356d8f214fa746d2c302acf0c1af62ad345d3
+[19] ACTION /move_action MoveGroup.goal #7 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=5d2e0aff5ce2434b7308b3f008cf3e8fd0baf5077b5978008e227e28effa8e46
+[20] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[21] ACTION /execute_trajectory ExecuteTrajectory.goal -> ABORT(-4)
+  | trajectory
+  sha256=c6f7175e5263be284b3516e8e5d02141748716f1d9365939a7eb1994ba64c856
+[22] ACTION /move_action MoveGroup.goal #8 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[23] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[24] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=195a6cfb5a66eccffee6e1597e364348c4dd1ded6852db2bc79cc11c2ca1b2eb
+[25] ACTION /move_action MoveGroup.goal #9 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=199a094c6def7747d3f72dd00280c146fb464640cad72be1d3b07a91d0ebfc55
+[26] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[27] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=b0bc750f629a5c76e32d7df6f684d52da3f17c4d3e091e4d1e54a130c1b08508
+[28] ACTION /move_action MoveGroup.goal #10 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=PTP target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=f408bdcc9915505373f0bb700b2c9a8fb34ecef88ac538c16b8f6dda88de8032
+[29] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[30] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=3194fa676694053fa83a385e2d656dec5bcba5e642fdc3b048acff59e0215658
+[31] ACTION /move_action MoveGroup.goal #11 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=bc5f141f6407f3f0a165c2cbfb7858c2f2a1435f0dc063a27ea2ae8cbff0aae7
+[32] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[33] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=b890a04aad86217f6b33d5e17986f90f81b30a983f326dca853545a3ac6d14d0
+[34] ACTION /move_action MoveGroup.goal #12 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=5d2e0aff5ce2434b7308b3f008cf3e8fd0baf5077b5978008e227e28effa8e46
+[35] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[36] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=c97222d45063e1fb4b78f7c535f8b9dd8a6bb0631d97c0d0cfe303cf05e8dbaa
+moves: ready pre_pick pick post_pick pre_place place post_place pick post_pick pre_place place post_place
+bt: SUCCESS
+stall: recovery=1 bin_empty=0 bin_stalled=1
+vacuum: engage release engage release
+scene_calls: 4
+eef_fault: ""
+latched: (none)
+runner_exit: 0
+
+=== scenario S9
+pins: PLANNING_FAILED on every plan of post_place after the release (class A, not a candidate move)
+script: move_action: SUCCEED(1) SUCCEED(1) SUCCEED(1) SUCCEED(1) SUCCEED(1) SUCCEED(1) ABORT(-1) ABORT(-1) ABORT(-1) ABORT(-1) | hook: none
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=56cf90569fd485c9f278fe8c463554bc8a6a15d3b7188f3921d48214d9da911e
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[3] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=2a6271a57851b4de47a156a01004dc39c411cd0209045a0543be34202e43ade8
+[4] ACTION /move_action MoveGroup.goal #2 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=993869b65b69b40395482253461262441d19613f953b4fd68cb2f2a2c0409714
+[5] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[6] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=d46aefab46c8d548cd16473b164249ac46158ab9a390d3e2016f94b623aff9f3
+[7] ACTION /move_action MoveGroup.goal #3 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[8] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[9] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=36001740a90812477068c0901c703a6cbb7254a451c064435b59fcc3b787a0ed
+[10] ACTION /move_action MoveGroup.goal #4 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=199a094c6def7747d3f72dd00280c146fb464640cad72be1d3b07a91d0ebfc55
+[11] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[12] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=2ac0787f8c287d76b5a796acf150c3044ddb68cd054187d5084fd3cdbef4d686
+[13] ACTION /move_action MoveGroup.goal #5 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=PTP target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=f408bdcc9915505373f0bb700b2c9a8fb34ecef88ac538c16b8f6dda88de8032
+[14] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[15] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=29439d86ede649a36d613279f89f21997e7d459eab50649a5f061d3fd9055099
+[16] ACTION /move_action MoveGroup.goal #6 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=bc5f141f6407f3f0a165c2cbfb7858c2f2a1435f0dc063a27ea2ae8cbff0aae7
+[17] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[18] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=1cc732a423e23085b1c388b2672356d8f214fa746d2c302acf0c1af62ad345d3
+[19] ACTION /move_action MoveGroup.goal #7 -> ABORT(-1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=5d2e0aff5ce2434b7308b3f008cf3e8fd0baf5077b5978008e227e28effa8e46
+[20] ACTION /move_action MoveGroup.goal #8 -> ABORT(-1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=5d2e0aff5ce2434b7308b3f008cf3e8fd0baf5077b5978008e227e28effa8e46
+[21] ACTION /move_action MoveGroup.goal #9 -> ABORT(-1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=5d2e0aff5ce2434b7308b3f008cf3e8fd0baf5077b5978008e227e28effa8e46
+[22] ACTION /move_action MoveGroup.goal #10 -> ABORT(-1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=5d2e0aff5ce2434b7308b3f008cf3e8fd0baf5077b5978008e227e28effa8e46
+[23] ACTION /move_action MoveGroup.goal #11 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[24] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[25] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=b890a04aad86217f6b33d5e17986f90f81b30a983f326dca853545a3ac6d14d0
+[26] ACTION /move_action MoveGroup.goal #12 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=199a094c6def7747d3f72dd00280c146fb464640cad72be1d3b07a91d0ebfc55
+[27] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[28] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=c97222d45063e1fb4b78f7c535f8b9dd8a6bb0631d97c0d0cfe303cf05e8dbaa
+[29] ACTION /move_action MoveGroup.goal #13 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=PTP target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=f408bdcc9915505373f0bb700b2c9a8fb34ecef88ac538c16b8f6dda88de8032
+[30] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[31] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=70cbabce7624fb12cab5767d02014580537866def1b1a0ab350e062a73025b8d
+[32] ACTION /move_action MoveGroup.goal #14 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=bc5f141f6407f3f0a165c2cbfb7858c2f2a1435f0dc063a27ea2ae8cbff0aae7
+[33] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[34] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=9f073410335eddda6426b66453bb1bba41219042db20dd824ee96a3191d9690e
+[35] ACTION /move_action MoveGroup.goal #15 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=5d2e0aff5ce2434b7308b3f008cf3e8fd0baf5077b5978008e227e28effa8e46
+[36] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[37] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=d7300c50912d0ec783d0bf7df4775df1ed5455a3477925615ffa15fd6f5fa4b5
+moves: ready pre_pick pick post_pick pre_place place post_place pick post_pick pre_place place post_place
+bt: SUCCESS
+stall: recovery=1 bin_empty=0 bin_stalled=1
+vacuum: engage release engage release
+scene_calls: 4
+eef_fault: ""
+latched: (none)
+runner_exit: 0
+
+=== scenario S10
+pins: PLANNING_FAILED on every plan of post_pick after candidate 0's grasp (class A, inside the retry)
+script: move_action: SUCCEED(1) SUCCEED(1) SUCCEED(1) ABORT(-1) ABORT(-1) ABORT(-1) ABORT(-1) | hook: none
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=56cf90569fd485c9f278fe8c463554bc8a6a15d3b7188f3921d48214d9da911e
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[3] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=2a6271a57851b4de47a156a01004dc39c411cd0209045a0543be34202e43ade8
+[4] ACTION /move_action MoveGroup.goal #2 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=993869b65b69b40395482253461262441d19613f953b4fd68cb2f2a2c0409714
+[5] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[6] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=d46aefab46c8d548cd16473b164249ac46158ab9a390d3e2016f94b623aff9f3
+[7] ACTION /move_action MoveGroup.goal #3 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[8] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[9] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=36001740a90812477068c0901c703a6cbb7254a451c064435b59fcc3b787a0ed
+[10] ACTION /move_action MoveGroup.goal #4 -> ABORT(-1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=199a094c6def7747d3f72dd00280c146fb464640cad72be1d3b07a91d0ebfc55
+[11] ACTION /move_action MoveGroup.goal #5 -> ABORT(-1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=199a094c6def7747d3f72dd00280c146fb464640cad72be1d3b07a91d0ebfc55
+[12] ACTION /move_action MoveGroup.goal #6 -> ABORT(-1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=199a094c6def7747d3f72dd00280c146fb464640cad72be1d3b07a91d0ebfc55
+[13] ACTION /move_action MoveGroup.goal #7 -> ABORT(-1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=199a094c6def7747d3f72dd00280c146fb464640cad72be1d3b07a91d0ebfc55
+[14] ACTION /move_action MoveGroup.goal #8 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=9916f277864a7f239b42298f162fbcb6f1b9a917239fb48f76cae1728145bf22
+[15] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[16] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=195a6cfb5a66eccffee6e1597e364348c4dd1ded6852db2bc79cc11c2ca1b2eb
+[17] ACTION /move_action MoveGroup.goal #9 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=f88fe97fae17b1e09f6398c467b0ccd693fd00f63086ac543eeceb39b135c0a8
+[18] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[19] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=b0bc750f629a5c76e32d7df6f684d52da3f17c4d3e091e4d1e54a130c1b08508
+[20] ACTION /move_action MoveGroup.goal #10 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=PTP target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=f408bdcc9915505373f0bb700b2c9a8fb34ecef88ac538c16b8f6dda88de8032
+[21] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[22] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=3194fa676694053fa83a385e2d656dec5bcba5e642fdc3b048acff59e0215658
+[23] ACTION /move_action MoveGroup.goal #11 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=bc5f141f6407f3f0a165c2cbfb7858c2f2a1435f0dc063a27ea2ae8cbff0aae7
+[24] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[25] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=b890a04aad86217f6b33d5e17986f90f81b30a983f326dca853545a3ac6d14d0
+[26] ACTION /move_action MoveGroup.goal #12 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=5d2e0aff5ce2434b7308b3f008cf3e8fd0baf5077b5978008e227e28effa8e46
+[27] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[28] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=c97222d45063e1fb4b78f7c535f8b9dd8a6bb0631d97c0d0cfe303cf05e8dbaa
+[29] ACTION /move_action MoveGroup.goal #13 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[30] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[31] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=70cbabce7624fb12cab5767d02014580537866def1b1a0ab350e062a73025b8d
+[32] ACTION /move_action MoveGroup.goal #14 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=199a094c6def7747d3f72dd00280c146fb464640cad72be1d3b07a91d0ebfc55
+[33] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[34] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=9f073410335eddda6426b66453bb1bba41219042db20dd824ee96a3191d9690e
+[35] ACTION /move_action MoveGroup.goal #15 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=PTP target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=f408bdcc9915505373f0bb700b2c9a8fb34ecef88ac538c16b8f6dda88de8032
+[36] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[37] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=d7300c50912d0ec783d0bf7df4775df1ed5455a3477925615ffa15fd6f5fa4b5
+[38] ACTION /move_action MoveGroup.goal #16 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=bc5f141f6407f3f0a165c2cbfb7858c2f2a1435f0dc063a27ea2ae8cbff0aae7
+[39] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[40] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=68d5ed91c1f3e9a19ac3551e6093c549c26904a7d902e6a8b390ce3ac77e1b32
+[41] ACTION /move_action MoveGroup.goal #17 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=5d2e0aff5ce2434b7308b3f008cf3e8fd0baf5077b5978008e227e28effa8e46
+[42] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[43] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=64a492a4beea0b053720147a05f0ab320107a080c507dc09d34fe1b82208a27f
+moves: ready pre_pick pick post_pick pick post_pick pre_place place post_place pick post_pick pre_place place post_place
+bt: SUCCESS
+stall: recovery=0 bin_empty=0 bin_stalled=0
+vacuum: engage engage release engage release
+scene_calls: 5
+eef_fault: ""
+latched: (none)
+runner_exit: 0
+
+=== scenario S11
+pins: CONTROL_FAILED executing post_pick after candidate 0's grasp (class B, inside the retry)
+script: execute_trajectory: SUCCEED(1) SUCCEED(1) SUCCEED(1) ABORT(-4) | hook: none
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=56cf90569fd485c9f278fe8c463554bc8a6a15d3b7188f3921d48214d9da911e
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[3] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=2a6271a57851b4de47a156a01004dc39c411cd0209045a0543be34202e43ade8
+[4] ACTION /move_action MoveGroup.goal #2 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=993869b65b69b40395482253461262441d19613f953b4fd68cb2f2a2c0409714
+[5] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[6] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=d46aefab46c8d548cd16473b164249ac46158ab9a390d3e2016f94b623aff9f3
+[7] ACTION /move_action MoveGroup.goal #3 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[8] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[9] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=36001740a90812477068c0901c703a6cbb7254a451c064435b59fcc3b787a0ed
+[10] ACTION /move_action MoveGroup.goal #4 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=199a094c6def7747d3f72dd00280c146fb464640cad72be1d3b07a91d0ebfc55
+[11] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[12] ACTION /execute_trajectory ExecuteTrajectory.goal -> ABORT(-4)
+  | trajectory
+  sha256=2ac0787f8c287d76b5a796acf150c3044ddb68cd054187d5084fd3cdbef4d686
+[13] ACTION /move_action MoveGroup.goal #5 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=9916f277864a7f239b42298f162fbcb6f1b9a917239fb48f76cae1728145bf22
+[14] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[15] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=29439d86ede649a36d613279f89f21997e7d459eab50649a5f061d3fd9055099
+[16] ACTION /move_action MoveGroup.goal #6 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=f88fe97fae17b1e09f6398c467b0ccd693fd00f63086ac543eeceb39b135c0a8
+[17] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[18] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=1cc732a423e23085b1c388b2672356d8f214fa746d2c302acf0c1af62ad345d3
+[19] ACTION /move_action MoveGroup.goal #7 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=PTP target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=f408bdcc9915505373f0bb700b2c9a8fb34ecef88ac538c16b8f6dda88de8032
+[20] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[21] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=c6f7175e5263be284b3516e8e5d02141748716f1d9365939a7eb1994ba64c856
+[22] ACTION /move_action MoveGroup.goal #8 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=bc5f141f6407f3f0a165c2cbfb7858c2f2a1435f0dc063a27ea2ae8cbff0aae7
+[23] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[24] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=195a6cfb5a66eccffee6e1597e364348c4dd1ded6852db2bc79cc11c2ca1b2eb
+[25] ACTION /move_action MoveGroup.goal #9 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=5d2e0aff5ce2434b7308b3f008cf3e8fd0baf5077b5978008e227e28effa8e46
+[26] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[27] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=b0bc750f629a5c76e32d7df6f684d52da3f17c4d3e091e4d1e54a130c1b08508
+[28] ACTION /move_action MoveGroup.goal #10 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[29] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[30] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=3194fa676694053fa83a385e2d656dec5bcba5e642fdc3b048acff59e0215658
+[31] ACTION /move_action MoveGroup.goal #11 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=199a094c6def7747d3f72dd00280c146fb464640cad72be1d3b07a91d0ebfc55
+[32] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[33] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=b890a04aad86217f6b33d5e17986f90f81b30a983f326dca853545a3ac6d14d0
+[34] ACTION /move_action MoveGroup.goal #12 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=PTP target=pose frames=tcp@base_link,tcp@base_link vel=0.80000000000000004 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=f408bdcc9915505373f0bb700b2c9a8fb34ecef88ac538c16b8f6dda88de8032
+[35] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[36] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=c97222d45063e1fb4b78f7c535f8b9dd8a6bb0631d97c0d0cfe303cf05e8dbaa
+[37] ACTION /move_action MoveGroup.goal #13 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=bc5f141f6407f3f0a165c2cbfb7858c2f2a1435f0dc063a27ea2ae8cbff0aae7
+[38] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[39] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=70cbabce7624fb12cab5767d02014580537866def1b1a0ab350e062a73025b8d
+[40] ACTION /move_action MoveGroup.goal #14 -> SUCCEED(1)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=5d2e0aff5ce2434b7308b3f008cf3e8fd0baf5077b5978008e227e28effa8e46
+[41] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[42] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=9f073410335eddda6426b66453bb1bba41219042db20dd824ee96a3191d9690e
+moves: ready pre_pick pick post_pick pick post_pick pre_place place post_place pick post_pick pre_place place post_place
+bt: SUCCESS
+stall: recovery=0 bin_empty=0 bin_stalled=0
+vacuum: engage engage release engage release
+scene_calls: 5
+eef_fault: ""
+latched: (none)
+runner_exit: 0
+
+=== scenario S12
+pins: START_STATE_IN_COLLISION on every plan of every pick (class B: the robot's own state)
+script: move_action: SUCCEED(1) SUCCEED(1) ABORT(-10) ABORT(-10) ABORT(-10) ABORT(-10) ABORT(-10) ABORT(-10) ABORT(-10) ABORT(-10) ABORT(-10) ABORT(-10) ABORT(-10) ABORT(-10) ABORT(-10) ABORT(-10) ABORT(-10) ABORT(-10) ABORT(-10) ABORT(-10) ABORT(-10) ABORT(-10) ABORT(-10) ABORT(-10) ABORT(-10) ABORT(-10) | hook: none
+events:
+[1] ACTION /move_action MoveGroup.goal #1 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=joint vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=56cf90569fd485c9f278fe8c463554bc8a6a15d3b7188f3921d48214d9da911e
+[2] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[3] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=2a6271a57851b4de47a156a01004dc39c411cd0209045a0543be34202e43ade8
+[4] ACTION /move_action MoveGroup.goal #2 -> SUCCEED(1)
+  | group=arm pipeline=ompl planner=RRTConnectkConfigDefault target=pose frames=tcp@base_link,tcp@base_link vel=0.90000000000000002 acc=0.5 time=5 attempts=10 plan_only=1
+  sha256=993869b65b69b40395482253461262441d19613f953b4fd68cb2f2a2c0409714
+[5] SERVICE /get_planning_scene GetPlanningScene.request components=1023
+  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[6] ACTION /execute_trajectory ExecuteTrajectory.goal -> SUCCEED(1)
+  | trajectory
+  sha256=d46aefab46c8d548cd16473b164249ac46158ab9a390d3e2016f94b623aff9f3
+[7] ACTION /move_action MoveGroup.goal #3 -> ABORT(-10)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[8] ACTION /move_action MoveGroup.goal #4 -> ABORT(-10)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[9] ACTION /move_action MoveGroup.goal #5 -> ABORT(-10)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[10] ACTION /move_action MoveGroup.goal #6 -> ABORT(-10)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[11] ACTION /move_action MoveGroup.goal #7 -> ABORT(-10)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=9916f277864a7f239b42298f162fbcb6f1b9a917239fb48f76cae1728145bf22
+[12] ACTION /move_action MoveGroup.goal #8 -> ABORT(-10)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=9916f277864a7f239b42298f162fbcb6f1b9a917239fb48f76cae1728145bf22
+[13] ACTION /move_action MoveGroup.goal #9 -> ABORT(-10)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=9916f277864a7f239b42298f162fbcb6f1b9a917239fb48f76cae1728145bf22
+[14] ACTION /move_action MoveGroup.goal #10 -> ABORT(-10)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=9916f277864a7f239b42298f162fbcb6f1b9a917239fb48f76cae1728145bf22
+[15] ACTION /move_action MoveGroup.goal #11 -> ABORT(-10)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=0a2fe432dd8fd3cf3ab713739c2cb842b620d80e14e65ff5c32768419ef74b8b
+[16] ACTION /move_action MoveGroup.goal #12 -> ABORT(-10)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=0a2fe432dd8fd3cf3ab713739c2cb842b620d80e14e65ff5c32768419ef74b8b
+[17] ACTION /move_action MoveGroup.goal #13 -> ABORT(-10)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=0a2fe432dd8fd3cf3ab713739c2cb842b620d80e14e65ff5c32768419ef74b8b
+[18] ACTION /move_action MoveGroup.goal #14 -> ABORT(-10)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=0a2fe432dd8fd3cf3ab713739c2cb842b620d80e14e65ff5c32768419ef74b8b
+[19] ACTION /move_action MoveGroup.goal #15 -> ABORT(-10)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[20] ACTION /move_action MoveGroup.goal #16 -> ABORT(-10)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[21] ACTION /move_action MoveGroup.goal #17 -> ABORT(-10)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[22] ACTION /move_action MoveGroup.goal #18 -> ABORT(-10)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=cb336de8283d9ae06b0b914f03454b674e2998252cd35272a4f6d2baa3ad5c61
+[23] ACTION /move_action MoveGroup.goal #19 -> ABORT(-10)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=9916f277864a7f239b42298f162fbcb6f1b9a917239fb48f76cae1728145bf22
+[24] ACTION /move_action MoveGroup.goal #20 -> ABORT(-10)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=9916f277864a7f239b42298f162fbcb6f1b9a917239fb48f76cae1728145bf22
+[25] ACTION /move_action MoveGroup.goal #21 -> ABORT(-10)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=9916f277864a7f239b42298f162fbcb6f1b9a917239fb48f76cae1728145bf22
+[26] ACTION /move_action MoveGroup.goal #22 -> ABORT(-10)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=9916f277864a7f239b42298f162fbcb6f1b9a917239fb48f76cae1728145bf22
+[27] ACTION /move_action MoveGroup.goal #23 -> ABORT(-10)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=0a2fe432dd8fd3cf3ab713739c2cb842b620d80e14e65ff5c32768419ef74b8b
+[28] ACTION /move_action MoveGroup.goal #24 -> ABORT(-10)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=0a2fe432dd8fd3cf3ab713739c2cb842b620d80e14e65ff5c32768419ef74b8b
+[29] ACTION /move_action MoveGroup.goal #25 -> ABORT(-10)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=0a2fe432dd8fd3cf3ab713739c2cb842b620d80e14e65ff5c32768419ef74b8b
+[30] ACTION /move_action MoveGroup.goal #26 -> ABORT(-10)
+  | group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.5 acc=0.20000000000000001 time=3 attempts=1 plan_only=1
+  sha256=0a2fe432dd8fd3cf3ab713739c2cb842b620d80e14e65ff5c32768419ef74b8b
+moves: ready pre_pick pick pick pick pick pick pick
+bt: SUCCESS
+stall: recovery=2 bin_empty=0 bin_stalled=2
+vacuum: (none)
+scene_calls: 0
+eef_fault: ""
+latched: (none)
+runner_exit: 0
+

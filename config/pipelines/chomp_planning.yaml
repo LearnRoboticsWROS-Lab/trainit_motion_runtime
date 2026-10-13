@@ -1,11 +1,11 @@
-# Generic CHOMP planning pipeline (MoveIt 2.5.9).
+# Generic CHOMP planning pipeline (MoveIt 2.5).
 #
 # CHOMP here is a full PlannerManager (chomp_interface/CHOMPPlanner), NOT a
-# request adapter — MoveIt 2.5.9 has no CHOMP optimizer adapter. The "ompl_chomp"
-# mode is therefore implemented at the C++ layer (OmplChompStrategy): plan with
-# the `ompl` pipeline, then re-plan with this `chomp` pipeline seeding CHOMP with
-# the OMPL trajectory (req.reference_trajectories). This file makes the standalone
-# `chomp` pipeline available so move_group loads the plugin.
+# request adapter — MoveIt 2.5 ships no CHOMP optimizer adapter, so the runtime
+# does not chain OMPL into CHOMP. The "ompl_chomp" mode is implemented in C++
+# (MoveItMotionRuntime::planAndExecute): plan with this `chomp` pipeline FIRST,
+# standalone, and fall back to `ompl` when it fails (config/planner_profiles.yaml).
+# This file makes the `chomp` pipeline available so move_group loads the plugin.
 planning_plugin: chomp_interface/CHOMPPlanner
 enable_failure_recovery: true
 jiggle_fraction: 0.05

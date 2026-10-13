@@ -62,13 +62,13 @@ int main(int argc, char** argv)
     return 2;
   }
 
-  const std::string mode_str    = getStr(node, "planner_mode", "pilz");
+  const std::string mode_str    = getStr(node, "planner_mode", toString(kDefaultPlannerMode));
   const std::string backend_str = getStr(node, "process_path_backend", "pilz_sequence");
   auto mode = plannerModeFromString(mode_str);
   if (!mode)
   {
-    RCLCPP_FATAL(log, "invalid planner_mode '%s'. Allowed: pilz | ompl | ompl_chomp | stomp",
-                 mode_str.c_str());
+    RCLCPP_FATAL(log, "invalid planner_mode '%s'. Allowed: %s",
+                 mode_str.c_str(), plannerModeList().c_str());
     rclcpp::shutdown();
     return 2;
   }
@@ -104,12 +104,48 @@ int main(int argc, char** argv)
   cfg.tip_link    = !task.tip_link.empty()   ? task.tip_link   : getStr(node, "tip_link", "tcp");
   cfg.mode        = *mode;
   cfg.process_backend = *backend;
-  cfg.available_pipelines = getStrArray(node, "available_pipelines",
-                                        {"ompl", "pilz_industrial_motion_planner", "chomp"});
+  cfg.available_pipelines = getStrArray(node, "available_pipelines", defaultAvailablePipelines());
   cfg.enforce_validation = getBool(node, "enforce_validation", true);
 
   const std::string gripper_action = getStr(node, "gripper_action", "");
   const std::string process_kind   = getStr(node, "process_controller", "mock");
+
+  // The MoveIt start-up wait (vNext M2.7, owner decision D1), as trainit_run_bt: a finite number of
+  // seconds > 0, or -1 for the legacy unbounded wait (still WARNing every 5 s). Default 60.
+  std::string refused;
+  const auto moveit_wait_s = MoveItMotionRuntime::moveItWaitTimeout(node, refused);
+  if (!moveit_wait_s)
+  {
+    RCLCPP_FATAL(log, "invalid moveit_wait_timeout_s %s: a finite number of seconds > 0, or -1 to "
+                 "wait without a bound", refused.c_str());
+    rclcpp::shutdown();
+    return 2;
+  }
+  // The cross-namespace remap guard, as trainit_run_bt (ADR-0023 Decision 5): refused before any
+  // MoveIt client exists; the root is not checked.
+  const auto escaped = MoveItMotionRuntime::crossNamespaceRemaps(node);
+  if (!escaped.empty())
+  {
+    std::string all;
+    for (const auto& e : escaped) all += (all.empty() ? "" : ", ") + e;
+    RCLCPP_FATAL(log, "MoveIt start-up: a remap sends this robot's resources out of its namespace %s: %s "
+                 "(ADR-0023: a cross-namespace remap) -- exit 2", node->get_namespace(), all.c_str());
+    rclcpp::shutdown();
+    return 2;
+  }
+  // THIS robot's MoveIt, before the runtime's constructor waits for it for ever and in silence.
+  switch (MoveItMotionRuntime::waitForMoveIt(node, *moveit_wait_s))
+  {
+    case MoveItMotionRuntime::MoveItWait::READY:
+      break;
+    case MoveItMotionRuntime::MoveItWait::TIMED_OUT:
+      rclcpp::shutdown();
+      return 2;
+    case MoveItMotionRuntime::MoveItWait::INTERRUPTED:
+      RCLCPP_INFO(log, "interrupted while waiting for MoveIt: exit 1");
+      rclcpp::shutdown();
+      return 1;
+  }
 
   rclcpp::executors::SingleThreadedExecutor exec;
   exec.add_node(node);
@@ -117,6 +153,8 @@ int main(int argc, char** argv)
 
   auto runtime = std::make_shared<MoveItMotionRuntime>(node, cfg);
 
+  // LEGACY (ADR-0022, ADR-0023): the gripper action is used as configured; this runner reads no
+  // `eef` block, so its GRIPPER steps always take this client.
   std::unique_ptr<GripperController> gripper;
   if (!gripper_action.empty())
     gripper = std::make_unique<GripperController>(node, gripper_action);
@@ -127,7 +165,7 @@ int main(int argc, char** argv)
   else
     process = std::make_unique<MockProcessController>(node->get_logger());
 
-  TaskRunner runner(*runtime, gripper.get(), process.get());
+  TaskRunner runner(*runtime, runtime->scene(), node->get_logger(), gripper.get(), process.get());
 
   RCLCPP_INFO(log, "task='%s' planner_mode=%s backend=%s plan_only=%d",
               task.name.c_str(), mode_str.c_str(), backend_str.c_str(), plan_only);
