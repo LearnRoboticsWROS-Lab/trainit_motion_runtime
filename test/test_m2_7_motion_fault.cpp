@@ -342,9 +342,11 @@ TEST(M27MotionFault, request_refusals_and_exceptions)
     {"MF-28", "tcp with no orientation: MoveWaypoint throws building the pose, caught", waypoint(
        {{"type", "tcp"}, {"position", "0.4;0.1;0.3"}, {"motion", "free"}}), nullptr, nullptr, nullptr, "FAILURE",
      "MOTION_FAULT: EXCEPTION", true},
-    {"MF-29", "circ by its centre (aux_is_center): the KNOWN_DEBT throw, caught, no goal",
-     waypoint(join(kCirc, {{"aux_is_center", "true"}})), nullptr, nullptr, nullptr, "FAILURE",
-     "MOTION_FAULT: EXCEPTION", true},
+    // vNext M3.4 (owner D3, BUG FIX): the centre form threw (the KNOWN_DEBT this case pinned as an
+    // EXCEPTION); it now runs. MF-28 keeps the caught-exception path covered.
+    {"MF-29", "circ by its centre (aux_is_center): one sequence goal about the centre, SUCCESS (until "
+              "M3.4: the backend threw, caught as EXCEPTION)",
+     waypoint(join(kCirc, {{"aux_is_center", "true"}})), nullptr, nullptr, nullptr, "SUCCESS", ""},
   });
 }
 

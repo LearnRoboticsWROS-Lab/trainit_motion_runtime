@@ -18,7 +18,11 @@ from ament_index_python.packages import PackageNotFoundError, get_package_share_
 from moveit_configs_utils import MoveItConfigsBuilder
 
 # The planner registry this helper reads (config/planner_profiles.yaml, ADR-0021).
-REGISTRY_SCHEMA_VERSION = 1
+# The registry schemas this helper reads. Schema 2 (vNext M3.1, ADR-0025) is schema 1 plus the
+# provider capability sections, which this helper does not need: it reads only the sections both
+# schemas share. Any other number is refused, never half-read.
+REGISTRY_SCHEMA_VERSIONS = (1, 2)
+REGISTRY_SCHEMA_VERSION = 2   # the schema TMR's own registry is written in
 
 
 def _load_yaml(path):
@@ -45,10 +49,11 @@ def planner_registry() -> dict:
     path = planner_registry_path()
     registry = _load_yaml(path) or {}
     version = registry.get("schema_version")
-    if version != REGISTRY_SCHEMA_VERSION:
+    if version not in REGISTRY_SCHEMA_VERSIONS:
         raise RuntimeError(
             f"{path}: planner registry schema_version {version!r}; "
-            f"this trainit_moveit_config reads schema {REGISTRY_SCHEMA_VERSION}")
+            f"this trainit_moveit_config reads schemas "
+            f"{', '.join(str(v) for v in REGISTRY_SCHEMA_VERSIONS)}")
     return registry
 
 

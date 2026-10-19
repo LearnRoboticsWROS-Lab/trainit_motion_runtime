@@ -36,7 +36,11 @@ const std::vector<std::string> kUnits = {
 const std::vector<std::string> kPlain = {
   "src/bt_profiles.cpp", "src/process_path_generators.cpp", "src/process_path_loaders.cpp",
   "src/task_loader.cpp", "src/end_effector_contract.cpp", "src/actuator_outcome.cpp",
-  "src/verify_grasp.cpp", "src/end_effector_registry.cpp", "src/motion_failure.cpp"};
+  "src/verify_grasp.cpp", "src/end_effector_registry.cpp", "src/motion_failure.cpp",
+  // vNext M3.1 (ADR-0024, ADR-0025): the provider table and the path library, pure data/geometry
+  "src/motion_providers.cpp", "src/path_library.cpp",
+  // vNext M3.6 (ADR-0026): the grasp-candidate contract (validation, projection, align_approach)
+  "src/grasp_candidates.cpp"};
 
 // Sources that legitimately name MoveIt (ADR-0015 amendment M2.5-4), not scanned.
 const std::map<std::string, std::string> kExempt = {

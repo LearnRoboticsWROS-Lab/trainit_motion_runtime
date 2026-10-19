@@ -19,6 +19,7 @@
 
 #include "trainit_motion_runtime/motion_runtime.hpp"
 #include "trainit_motion_runtime/manual_motion_strategy_selector.hpp"
+#include "trainit_motion_runtime/pilz_sequence_backend.hpp"
 #include "trainit_motion_runtime/planning_scene_manager.hpp"
 #include "trainit_motion_runtime/trajectory_validator.hpp"
 
@@ -47,6 +48,9 @@ public:
     double max_joint_jump{0.5};      // [rad] between consecutive waypoints
     double cartesian_fraction_threshold{1.0};   // accept cartesian path only if fraction >= this
     bool   allow_partial_cartesian{false};      // execute a partial cartesian path
+    // vNext M3.4: how long a Pilz sequence goal (plan + execute) may take before the motion fails
+    // and the goal is cancelled [s] (PilzSequenceBackend::kDefaultResultTimeoutS, as before)
+    double sequence_result_timeout_s{PilzSequenceBackend::kDefaultResultTimeoutS};
   };
 
   // The move_group this runtime is a client of is the one in the node's OWN namespace (vNext M2.7,
@@ -113,9 +117,10 @@ public:
   MotionResult stop() override;
   void setPlannerMode(PlannerMode mode) override;
   PlannerMode plannerMode() const override;
-  // MoveGroupInterface::getCurrentPose(tip): waits up to 1 s for a fresh joint state and, when
-  // none arrives, returns the identity pose (still stamped in the model frame) without reporting
-  // a failure -- KNOWN_DEBT, kept as it is by vNext M2.5.
+  // The read MoveGroupInterface::getCurrentPose(tip) makes -- the same state monitor, started on
+  // first use, the same wait of up to 1 s for a fresh joint state, the same FK -- except that no
+  // fresh state (or a tip that is not a link of the model) throws RobotStateUnavailable (vNext
+  // M3.4, R-M3-20): getCurrentPose returned the identity pose and reported nothing.
   geometry_msgs::msg::PoseStamped currentTipPose() const override;
 
   // --- the frames and the named-state FK: MotionRuntime methods since vNext M2.7 ---------
@@ -156,6 +161,10 @@ private:
   std::unique_ptr<PlanningSceneManager> scene_;
   std::unique_ptr<TrajectoryValidator> validator_;
   moveit::core::RobotModelConstPtr robot_model_;
+  // vNext M3.4: MoveGroupInterface's own goal tolerances, read at construction: what a plan that
+  // requests none sends (MoveGroupInterface keeps the last value it was given)
+  double mgi_goal_position_tolerance_{0.0};
+  double mgi_goal_orientation_tolerance_{0.0};
 };
 
 }  // namespace trainit

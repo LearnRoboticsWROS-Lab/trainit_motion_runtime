@@ -1,0 +1,46 @@
+# vNext M3.5 (M3_DESIGN §9): process-event paths for the test arm (test/m2_5/test_arm.hpp). Its tcp is
+# (0.5 cos q1, 0.5 sin q1, 0.3) in base_link with the yaw q1 when j2 = j3 = 0, so every state below is a
+# pose the fake joint states can put the arm at: q1 = 0, 0.2, 0.4, 0.6 rad.
+schema_version: 1
+paths:
+  inspect:                       # stop at every state; an event after arriving at 1, 2 and 3
+    continuity: stop
+    profile: process
+    states:
+      - {pose: {position: [0.5, 0.0, 0.3], orientation: [0.0, 0.0, 0.0, 1.0]}}
+      - {pose: {position: [0.490033289, 0.099334665, 0.3], orientation: [0.0, 0.0, 0.0998334166, 0.995004165]}}
+      - {pose: {position: [0.460530497, 0.194709171, 0.3], orientation: [0.0, 0.0, 0.198669331, 0.980066578]}}
+      - {pose: {position: [0.412667808, 0.282321237, 0.3], orientation: [0.0, 0.0, 0.295520207, 0.955336489]}}
+    segments: [{type: lin}, {type: lin}, {type: lin}]
+    events:
+      - {at: {state: 1, when: after_arrival}, kind: capture}
+      - {at: {state: 2, when: after_arrival}, kind: capture}
+      - {at: {state: 3, when: after_arrival}, kind: capture}
+  glue:                          # blended into state 1, stopped at 2 for a process event, then on
+    continuity: blend
+    states:
+      - {pose: {position: [0.5, 0.0, 0.3], orientation: [0.0, 0.0, 0.0, 1.0]}}
+      - {pose: {position: [0.490033289, 0.099334665, 0.3], orientation: [0.0, 0.0, 0.0998334166, 0.995004165]}}
+      - {pose: {position: [0.460530497, 0.194709171, 0.3], orientation: [0.0, 0.0, 0.198669331, 0.980066578]}}
+      - {pose: {position: [0.412667808, 0.282321237, 0.3], orientation: [0.0, 0.0, 0.295520207, 0.955336489]}}
+    segments: [{type: lin, blend_radius_m: 0.02}, {type: lin}, {type: lin}]
+    events:
+      - {at: {state: 2, when: before_departure}, kind: process_on}
+  glue_whole:                    # the same geometry without events: the reference for the split
+    continuity: blend
+    states:
+      - {pose: {position: [0.5, 0.0, 0.3], orientation: [0.0, 0.0, 0.0, 1.0]}}
+      - {pose: {position: [0.490033289, 0.099334665, 0.3], orientation: [0.0, 0.0, 0.0998334166, 0.995004165]}}
+      - {pose: {position: [0.460530497, 0.194709171, 0.3], orientation: [0.0, 0.0, 0.198669331, 0.980066578]}}
+      - {pose: {position: [0.412667808, 0.282321237, 0.3], orientation: [0.0, 0.0, 0.295520207, 0.955336489]}}
+    segments: [{type: lin, blend_radius_m: 0.02}, {type: lin}, {type: lin}]
+  blended:                       # no events, a blend into state 1: a run cannot end there
+    continuity: blend
+    states:
+      - {pose: {position: [0.5, 0.0, 0.3], orientation: [0.0, 0.0, 0.0, 1.0]}}
+      - {pose: {position: [0.490033289, 0.099334665, 0.3], orientation: [0.0, 0.0, 0.0998334166, 0.995004165]}}
+      - {pose: {position: [0.460530497, 0.194709171, 0.3], orientation: [0.0, 0.0, 0.198669331, 0.980066578]}}
+    segments: [{type: lin, blend_radius_m: 0.02}, {type: lin}]
+  dense:
+    continuity: stop
+    source: {generator: {type: polyline, points: [[0.5, 0.0, 0.3], [0.5, 0.05, 0.3]]}, orientation: [0.0, 0.0, 0.0, 1.0]}

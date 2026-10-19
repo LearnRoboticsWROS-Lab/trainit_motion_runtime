@@ -1,0 +1,81 @@
+m2_5 capture m3_6_validation_c
+moveit_ros_planning_interface 2.5.10 | behaviortree_cpp 4.10.0 | rmw rmw_fastrtps_cpp
+
+=== scenario VC-A
+pins: producer A (GraspCandidateArray, frame cell, best first): SUCCESS; PreGrasp, Approach, Retract and the release goals as designed
+tree: candidates.xml
+steps: [DetectCandidates OK, SetWaypointFromCandidate OK, MoveWaypoint s2_pregrasp OK, MoveWaypoint s2_grasp OK, CloseGripper OK, VerifyGrasp OK, MoveWaypoint s2_retract OK, MoveWaypoint s3_prerelease OK, MoveWaypoint s3_release OK, VerifyGrasp OK, OpenGripper OK, VerifyGrasp OK, MoveWaypoint s3_retract OK]
+move_group goals:
+  1. pilz_industrial_motion_planner/PTP vel=0.500000000 acc=0.500000000 tcp@base_link p=(0.370000000, 0.000000000, 0.140000000) q=(0.948683298, 0.000000000, 0.316227766, 0.000000000)
+  2. pilz_industrial_motion_planner/LIN vel=0.200000000 acc=0.200000000 tcp@base_link p=(0.400000000, 0.000000000, 0.100000000) q=(0.948683298, 0.000000000, 0.316227766, 0.000000000)
+  3. pilz_industrial_motion_planner/LIN vel=0.200000000 acc=0.200000000 tcp@base_link p=(0.340000000, 0.000000000, 0.180000000) q=(0.948683298, 0.000000000, 0.316227766, 0.000000000)
+  4. pilz_industrial_motion_planner/PTP vel=0.500000000 acc=0.500000000 tcp@base_link p=(0.300000000, -0.300000000, 0.200000000) q=(1.000000000, 0.000000000, 0.000000000, 0.000000000)
+  5. pilz_industrial_motion_planner/LIN vel=0.200000000 acc=0.200000000 tcp@base_link p=(0.300000000, -0.300000000, 0.150000000) q=(1.000000000, 0.000000000, 0.000000000, 0.000000000)
+  6. pilz_industrial_motion_planner/LIN vel=0.200000000 acc=0.200000000 tcp@base_link p=(0.300000000, -0.300000000, 0.230000000) q=(1.000000000, 0.000000000, 0.000000000, 0.000000000)
+vacuum: [engage, release]
+bt: SUCCESS
+
+=== scenario VC-B
+pins: producer B (Detection3DArray with a fitted normal, cam_optical), projected: SUCCESS; the SAME goals as VC-A
+tree: detections.xml
+steps: [DetectCandidates OK, SetWaypointFromCandidate OK, MoveWaypoint s2_pregrasp OK, MoveWaypoint s2_grasp OK, CloseGripper OK, VerifyGrasp OK, MoveWaypoint s2_retract OK, MoveWaypoint s3_prerelease OK, MoveWaypoint s3_release OK, VerifyGrasp OK, OpenGripper OK, VerifyGrasp OK, MoveWaypoint s3_retract OK]
+move_group goals:
+  1. pilz_industrial_motion_planner/PTP vel=0.500000000 acc=0.500000000 tcp@base_link p=(0.370000000, 0.000000000, 0.140000000) q=(0.948683298, 0.000000000, 0.316227766, 0.000000000)
+  2. pilz_industrial_motion_planner/LIN vel=0.200000000 acc=0.200000000 tcp@base_link p=(0.400000000, 0.000000000, 0.100000000) q=(0.948683298, 0.000000000, 0.316227766, 0.000000000)
+  3. pilz_industrial_motion_planner/LIN vel=0.200000000 acc=0.200000000 tcp@base_link p=(0.340000000, 0.000000000, 0.180000000) q=(0.948683298, 0.000000000, 0.316227766, 0.000000000)
+  4. pilz_industrial_motion_planner/PTP vel=0.500000000 acc=0.500000000 tcp@base_link p=(0.300000000, -0.300000000, 0.200000000) q=(1.000000000, 0.000000000, 0.000000000, 0.000000000)
+  5. pilz_industrial_motion_planner/LIN vel=0.200000000 acc=0.200000000 tcp@base_link p=(0.300000000, -0.300000000, 0.150000000) q=(1.000000000, 0.000000000, 0.000000000, 0.000000000)
+  6. pilz_industrial_motion_planner/LIN vel=0.200000000 acc=0.200000000 tcp@base_link p=(0.300000000, -0.300000000, 0.230000000) q=(1.000000000, 0.000000000, 0.000000000, 0.000000000)
+vacuum: [engage, release]
+bt: SUCCESS
+
+=== scenario VC-C
+pins: the grasp is NOT confirmed (NO_OBJECT): FAILURE after the Approach -- no Retract, no release
+tree: candidates.xml
+steps: [DetectCandidates OK, SetWaypointFromCandidate OK, MoveWaypoint s2_pregrasp OK, MoveWaypoint s2_grasp OK, CloseGripper OK, VerifyGrasp FAIL]
+move_group goals:
+  1. pilz_industrial_motion_planner/PTP vel=0.500000000 acc=0.500000000 tcp@base_link p=(0.370000000, 0.000000000, 0.140000000) q=(0.948683298, 0.000000000, 0.316227766, 0.000000000)
+  2. pilz_industrial_motion_planner/LIN vel=0.200000000 acc=0.200000000 tcp@base_link p=(0.400000000, 0.000000000, 0.100000000) q=(0.948683298, 0.000000000, 0.316227766, 0.000000000)
+vacuum: [engage]
+bt: FAILURE
+
+=== scenario VC-D
+pins: the release is NOT confirmed (still held): FAILURE after the opening -- no Retract
+tree: candidates.xml
+steps: [DetectCandidates OK, SetWaypointFromCandidate OK, MoveWaypoint s2_pregrasp OK, MoveWaypoint s2_grasp OK, CloseGripper OK, VerifyGrasp OK, MoveWaypoint s2_retract OK, MoveWaypoint s3_prerelease OK, MoveWaypoint s3_release OK, VerifyGrasp OK, OpenGripper OK, VerifyGrasp FAIL]
+move_group goals:
+  1. pilz_industrial_motion_planner/PTP vel=0.500000000 acc=0.500000000 tcp@base_link p=(0.370000000, 0.000000000, 0.140000000) q=(0.948683298, 0.000000000, 0.316227766, 0.000000000)
+  2. pilz_industrial_motion_planner/LIN vel=0.200000000 acc=0.200000000 tcp@base_link p=(0.400000000, 0.000000000, 0.100000000) q=(0.948683298, 0.000000000, 0.316227766, 0.000000000)
+  3. pilz_industrial_motion_planner/LIN vel=0.200000000 acc=0.200000000 tcp@base_link p=(0.340000000, 0.000000000, 0.180000000) q=(0.948683298, 0.000000000, 0.316227766, 0.000000000)
+  4. pilz_industrial_motion_planner/PTP vel=0.500000000 acc=0.500000000 tcp@base_link p=(0.300000000, -0.300000000, 0.200000000) q=(1.000000000, 0.000000000, 0.000000000, 0.000000000)
+  5. pilz_industrial_motion_planner/LIN vel=0.200000000 acc=0.200000000 tcp@base_link p=(0.300000000, -0.300000000, 0.150000000) q=(1.000000000, 0.000000000, 0.000000000, 0.000000000)
+vacuum: [engage, release]
+bt: FAILURE
+
+=== scenario VC-E
+pins: an unusable candidate (a zero approach): the array is refused, nothing moves
+tree: candidates.xml
+steps: [DetectCandidates FAIL]
+move_group goals:
+  (none)
+vacuum: none
+bt: FAILURE
+
+=== scenario VC-F
+pins: no candidate (an empty array): FAILURE, nothing moves
+tree: candidates.xml
+steps: [DetectCandidates FAIL]
+move_group goals:
+  (none)
+vacuum: none
+bt: FAILURE
+
+=== scenario VC-G
+pins: an approach exactly against the reference's tool axis: align_approach refuses, nothing moves
+tree: candidates.xml
+steps: [DetectCandidates OK, SetWaypointFromCandidate FAIL]
+move_group goals:
+  (none)
+vacuum: none
+bt: FAILURE
+

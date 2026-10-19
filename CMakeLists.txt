@@ -16,7 +16,8 @@ find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(control_msgs REQUIRED)
 find_package(trajectory_msgs REQUIRED)      # ADR-0022: an EEF axis goal (FollowJointTrajectory)
-find_package(trainit_interfaces REQUIRED)   # ADR-0022: EndEffectorState (TMR 2.0.0)
+find_package(trainit_interfaces 0.2.0 REQUIRED)   # ADR-0022: EndEffectorState (TMR 2.0.0); ADR-0026: GraspCandidate (2.5.0)
+find_package(diagnostic_msgs REQUIRED)   # ADR-0026: a grasp candidate's metadata
 find_package(shape_msgs REQUIRED)
 find_package(moveit_core REQUIRED)
 find_package(moveit_msgs REQUIRED)
@@ -68,6 +69,7 @@ set(TRAINIT_DEPS
   control_msgs
   trajectory_msgs
   trainit_interfaces
+  diagnostic_msgs
   shape_msgs
   moveit_core
   moveit_msgs
@@ -104,6 +106,12 @@ add_library(trainit_motion_runtime SHARED
   src/actuator_outcome.cpp
   src/verify_grasp.cpp
   src/end_effector_registry.cpp
+  # vNext M3.1 (ADR-0024, ADR-0025): the motion provider table and the path library (both pure,
+  # MoveIt-free; test_m2_5_seam_scan: kPlain)
+  src/motion_providers.cpp
+  src/path_library.cpp
+  # vNext M3.6 (ADR-0026): the grasp-candidate contract's pure half (MoveIt-free; test_m2_5_seam_scan: kPlain)
+  src/grasp_candidates.cpp
 )
 target_include_directories(trainit_motion_runtime PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -250,6 +258,13 @@ if(BUILD_TESTING)
   target_link_libraries(test_pilz_sequence_request trainit_motion_runtime)
   target_compile_definitions(test_pilz_sequence_request PRIVATE
     TRAINIT_PLANNER_REGISTRY="${CMAKE_CURRENT_SOURCE_DIR}/config/planner_profiles.yaml")
+
+  # vNext M3.1 (ADR-0024): the path library, pure (no ROS graph): every refusal, the derived
+  # capabilities, the geometry checks, the dense sources (test/data/m3_1/).
+  ament_add_gtest(test_path_library test/test_path_library.cpp TIMEOUT 60)
+  target_link_libraries(test_path_library trainit_motion_runtime)
+  target_compile_definitions(test_path_library PRIVATE
+    TRAINIT_M31_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/data/m3_1")
 
   # BT node registration/load test needs the behaviortree_cpp headers too.
   ament_add_gtest(test_bt_nodes test/test_bt_nodes.cpp)
@@ -506,6 +521,74 @@ if(BUILD_TESTING)
   # AFTER (owner decision 11.2): the door's types, the task_runner family through the new
   # TaskRunner constructor, the BT nodes on a fake runtime (same domain, one binary at a time)
   trainit_m27_test(test_m2_7_bt_interface 82 600 test_m2_7_bt_interface)
+
+  # vNext M3.1 (ADR-0024): FollowPath and MoveWaypoint's additive keys ticked for real against the
+  # M2.5 fake move_group (domain 83): what each path sends through the door, the refusals that send
+  # nothing, and the comparison with the committed AFTER family (test/data/m3_1/captures/).
+  file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/m3_1_actual)
+  trainit_m25_test(test_m3_1_follow_path 83 600 test_m3_1_follow_path)
+  target_compile_definitions(test_m3_1_follow_path PRIVATE
+    TRAINIT_M31_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/data/m3_1"
+    TRAINIT_M31_ACTUAL_DIR="${CMAKE_CURRENT_BINARY_DIR}/m3_1_actual")
+  ament_target_dependencies(test_m3_1_follow_path tf2_ros)
+
+  # vNext M3.4 (ADR-0015 amendment M3.4, owner decisions D3 and D8): every hardened behaviour ticked
+  # for real against the M2.5 fake move_group (domain 84), and SIGINT reaching the real trainit_run_bt
+  # in the middle of a motion (domain 85, a child process). Both record the SAME scenarios BEFORE
+  # (TMR 2.2.0, 9418694: test/data/m3_4/before/) and AFTER (test/data/m3_4/after/).
+  # TRAINIT_M34_AFTER: built for the M3.4 production, they compare with the AFTER and assert it.
+  trainit_m25_test(test_m3_4_execution 84 900 test_m3_4_execution)
+  target_compile_definitions(test_m3_4_execution PRIVATE TRAINIT_M34_AFTER
+    TRAINIT_M34_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/data/m3_4"
+    TRAINIT_M31_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/data/m3_1")
+  ament_target_dependencies(test_m3_4_execution tf2_ros)
+  trainit_m26_test(test_m3_4_runner_stop 85 300 test_m3_4_runner_stop)
+  target_compile_definitions(test_m3_4_runner_stop PRIVATE TRAINIT_M34_AFTER
+    TRAINIT_M34_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/data/m3_4")
+  # vNext M3.5 (ADR-0024, M3_DESIGN §9): process-path semantics. FollowPath from= to= (the event-free runs of
+  # a path) against the M2.5 fake move_group (domain 70, an AFTER record: test/data/m3_5/captures/);
+  # DetectObject trigger="true" (a capture) against a fake on-demand detector (domain 71); the generic
+  # ProcessEvent node and the ROS process controller's retained publishers (domain 72).
+  trainit_m25_test(test_m3_5_follow_path_range 70 600 test_m3_5_follow_path_range)
+  target_compile_definitions(test_m3_5_follow_path_range PRIVATE
+    TRAINIT_M35_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/data/m3_5")
+  ament_target_dependencies(test_m3_5_follow_path_range tf2_ros)
+  ament_add_gtest(test_m3_5_detect_trigger test/test_m3_5_detect_trigger.cpp TIMEOUT 120
+    ENV ROS_DOMAIN_ID=71 ROS_LOCALHOST_ONLY=1 RMW_IMPLEMENTATION=rmw_fastrtps_cpp)
+  target_link_libraries(test_m3_5_detect_trigger trainit_motion_runtime)
+  link_btcpp(test_m3_5_detect_trigger)
+  ament_add_gtest(test_m3_5_process_event test/test_m3_5_process_event.cpp TIMEOUT 120
+    ENV ROS_DOMAIN_ID=72 ROS_LOCALHOST_ONLY=1 RMW_IMPLEMENTATION=rmw_fastrtps_cpp)
+  target_link_libraries(test_m3_5_process_event trainit_motion_runtime)
+  link_btcpp(test_m3_5_process_event)
+  # vNext M3.6 (ADR-0026): the grasp-candidate contract. Pure (no ROS graph): validation, the Detection3D
+  # projection and its hemisphere, align_approach; the two nodes against in-process producers (domain 73).
+  ament_add_gtest(test_m3_6_grasp_candidates test/test_m3_6_grasp_candidates.cpp TIMEOUT 60)
+  target_link_libraries(test_m3_6_grasp_candidates trainit_motion_runtime)
+  ament_add_gtest(test_m3_6_candidate_nodes test/test_m3_6_candidate_nodes.cpp TIMEOUT 180
+    ENV ROS_DOMAIN_ID=73 ROS_LOCALHOST_ONLY=1 RMW_IMPLEMENTATION=rmw_fastrtps_cpp)
+  target_link_libraries(test_m3_6_candidate_nodes trainit_motion_runtime)
+  link_btcpp(test_m3_6_candidate_nodes)
+  # vNext M3.6 / M3-D (ADR-0026): Validation C -- the trees TSA generates (byte copies), ticked with the REAL
+  # nodes against the M2.5 fake move_group and the M2.6 fake end effector, with two synthetic producers
+  # (domain 74, an AFTER record: test/data/m3_6/captures/).
+  file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/m3_6_actual)
+  trainit_m26_test(test_m3_6_validation_c 74 600 test_m3_6_validation_c)
+  target_compile_definitions(test_m3_6_validation_c PRIVATE TRAINIT_M26_CONTRACT_DIR="${_m26c}"
+    TRAINIT_M26_SCRATCH_DIR="${CMAKE_CURRENT_BINARY_DIR}/m3_6_actual"
+    TRAINIT_M36_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/data/m3_6")
+  # ... pure (no ROS graph): every BEFORE -> AFTER difference M3.4 made, exactly, scenario by scenario
+  # (the new families and the legacy ones moved into test/data/m3_4/legacy_after/)
+  ament_add_gtest(test_m3_4_capture_diff test/test_m3_4_capture_diff.cpp TIMEOUT 60)
+  target_link_libraries(test_m3_4_capture_diff trainit_motion_runtime)
+  target_include_directories(test_m3_4_capture_diff PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/test)
+  target_compile_definitions(test_m3_4_capture_diff PRIVATE
+    TRAINIT_M25_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/data/m2_5"
+    TRAINIT_M25_ACTUAL_DIR="${CMAKE_CURRENT_BINARY_DIR}/m2_5_actual"
+    TRAINIT_M27_NS_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/data/m2_7_ns"
+    TRAINIT_M34_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/data/m3_4"
+    TRAINIT_MOVEIT_VERSION="${moveit_ros_planning_interface_VERSION}"
+    TRAINIT_BTCPP_VERSION="${behaviortree_cpp_VERSION}")
 endif()
 
 ament_package()

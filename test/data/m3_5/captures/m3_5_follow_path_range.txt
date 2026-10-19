@@ -1,0 +1,2044 @@
+m2_5 capture m3_5_follow_path_range
+moveit_ros_planning_interface 2.5.10 | behaviortree_cpp 4.10.0 | rmw rmw_fastrtps_cpp
+
+=== scenario RNG-01
+pins: inspect [0..1]: ONE sequence goal with segment 0 only (LIN to state 1, blend 0, the process profile's 0.05); the run ends at an event state, the arm arrives 0.3 s in: SUCCESS
+config: group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0.20000000000000001, 0, 0] (changed during the tick: see pins)
+paths: test/data/m3_5/paths.yaml
+--- tick: <FollowPath path="inspect" from="0" to="1" fault="{f}"/>
+events:
+[1] ACTION /sequence_move_group MoveGroupSequence.goal #1 -> SUCCEED(1)
+  | items=1 plan_only=0
+  | item 0: group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.050000000000000003 acc=0.050000000000000003 time=5 attempts=1 blend=0
+  request:
+    items:
+    -
+      req:
+        workspace_parameters:
+          header:
+            frame_id: ""
+          min_corner:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          max_corner:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+        start_state:
+          joint_state:
+            header:
+              frame_id: ""
+            name: []
+            position: []
+            velocity: []
+            effort: []
+          multi_dof_joint_state:
+            header:
+              frame_id: ""
+            joint_names: []
+            transforms: []
+            twist: []
+            wrench: []
+          attached_collision_objects: []
+          is_diff: false
+        goal_constraints:
+        -
+          name: ""
+          joint_constraints: []
+          position_constraints:
+          -
+            header:
+              frame_id: "base_link"
+            link_name: "tcp"
+            target_point_offset:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+            constraint_region:
+              primitives:
+              -
+                type: 2
+                dimensions:
+                - 0.0010000000000000000
+                polygon:
+                  points: []
+              primitive_poses:
+              -
+                position:
+                  x: 0.49003328899999998
+                  y: 0.099334665000000003
+                  z: 0.29999999999999999
+                orientation:
+                  x: 0.0000000000000000
+                  y: 0.0000000000000000
+                  z: 0.0000000000000000
+                  w: 1.0000000000000000
+              meshes: []
+              mesh_poses: []
+            weight: 1.0000000000000000
+          orientation_constraints:
+          -
+            header:
+              frame_id: "base_link"
+            orientation:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.099833416600000002
+              w: 0.99500416500000000
+            link_name: "tcp"
+            absolute_x_axis_tolerance: 0.010000000000000000
+            absolute_y_axis_tolerance: 0.010000000000000000
+            absolute_z_axis_tolerance: 0.010000000000000000
+            parameterization: 0
+            weight: 1.0000000000000000
+          visibility_constraints: []
+        path_constraints:
+          name: ""
+          joint_constraints: []
+          position_constraints: []
+          orientation_constraints: []
+          visibility_constraints: []
+        trajectory_constraints:
+          constraints: []
+        reference_trajectories: []
+        pipeline_id: "pilz_industrial_motion_planner"
+        planner_id: "LIN"
+        group_name: "arm"
+        num_planning_attempts: 1
+        allowed_planning_time: 5.0000000000000000
+        max_velocity_scaling_factor: 0.050000000000000003
+        max_acceleration_scaling_factor: 0.050000000000000003
+        cartesian_speed_end_effector_link: ""
+        max_cartesian_speed: 0.0000000000000000
+      blend_radius: 0.0000000000000000
+  planning_options:
+    planning_scene_diff:
+      name: ""
+      robot_state:
+        joint_state:
+          header:
+            frame_id: ""
+          name: []
+          position: []
+          velocity: []
+          effort: []
+        multi_dof_joint_state:
+          header:
+            frame_id: ""
+          joint_names: []
+          transforms: []
+          twist: []
+          wrench: []
+        attached_collision_objects: []
+        is_diff: false
+      robot_model_name: ""
+      fixed_frame_transforms: []
+      allowed_collision_matrix:
+        entry_names: []
+        entry_values: []
+        default_entry_names: []
+        default_entry_values: []
+      link_padding: []
+      link_scale: []
+      object_colors: []
+      world:
+        collision_objects: []
+        octomap:
+          header:
+            frame_id: ""
+          origin:
+            position:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+            orientation:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+              w: 1.0000000000000000
+          octomap:
+            header:
+              frame_id: ""
+            binary: false
+            id: ""
+            resolution: 0.0000000000000000
+            data: []
+      is_diff: false
+    plan_only: false
+    look_around: false
+    look_around_attempts: 0
+    max_safe_execution_cost: 0.0000000000000000
+    replan: false
+    replan_attempts: 0
+    replan_delay: 0.0000000000000000
+bt: SUCCESS
+fault: <unset>
+counts: /sequence_move_group=1
+
+=== scenario RNG-02
+pins: inspect [1..2]: the start check at states[1] (the arm is there), ONE goal with segment 1 only
+config: group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0.40000000000000002, 0, 0] (changed during the tick: see pins)
+paths: test/data/m3_5/paths.yaml
+--- tick: <FollowPath path="inspect" from="1" to="2" fault="{f}"/>
+events:
+[1] ACTION /sequence_move_group MoveGroupSequence.goal #1 -> SUCCEED(1)
+  | items=1 plan_only=0
+  | item 0: group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.050000000000000003 acc=0.050000000000000003 time=5 attempts=1 blend=0
+  request:
+    items:
+    -
+      req:
+        workspace_parameters:
+          header:
+            frame_id: ""
+          min_corner:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          max_corner:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+        start_state:
+          joint_state:
+            header:
+              frame_id: ""
+            name: []
+            position: []
+            velocity: []
+            effort: []
+          multi_dof_joint_state:
+            header:
+              frame_id: ""
+            joint_names: []
+            transforms: []
+            twist: []
+            wrench: []
+          attached_collision_objects: []
+          is_diff: false
+        goal_constraints:
+        -
+          name: ""
+          joint_constraints: []
+          position_constraints:
+          -
+            header:
+              frame_id: "base_link"
+            link_name: "tcp"
+            target_point_offset:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+            constraint_region:
+              primitives:
+              -
+                type: 2
+                dimensions:
+                - 0.0010000000000000000
+                polygon:
+                  points: []
+              primitive_poses:
+              -
+                position:
+                  x: 0.46053049699999998
+                  y: 0.19470917099999999
+                  z: 0.29999999999999999
+                orientation:
+                  x: 0.0000000000000000
+                  y: 0.0000000000000000
+                  z: 0.0000000000000000
+                  w: 1.0000000000000000
+              meshes: []
+              mesh_poses: []
+            weight: 1.0000000000000000
+          orientation_constraints:
+          -
+            header:
+              frame_id: "base_link"
+            orientation:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.19866933100000000
+              w: 0.98006657799999997
+            link_name: "tcp"
+            absolute_x_axis_tolerance: 0.010000000000000000
+            absolute_y_axis_tolerance: 0.010000000000000000
+            absolute_z_axis_tolerance: 0.010000000000000000
+            parameterization: 0
+            weight: 1.0000000000000000
+          visibility_constraints: []
+        path_constraints:
+          name: ""
+          joint_constraints: []
+          position_constraints: []
+          orientation_constraints: []
+          visibility_constraints: []
+        trajectory_constraints:
+          constraints: []
+        reference_trajectories: []
+        pipeline_id: "pilz_industrial_motion_planner"
+        planner_id: "LIN"
+        group_name: "arm"
+        num_planning_attempts: 1
+        allowed_planning_time: 5.0000000000000000
+        max_velocity_scaling_factor: 0.050000000000000003
+        max_acceleration_scaling_factor: 0.050000000000000003
+        cartesian_speed_end_effector_link: ""
+        max_cartesian_speed: 0.0000000000000000
+      blend_radius: 0.0000000000000000
+  planning_options:
+    planning_scene_diff:
+      name: ""
+      robot_state:
+        joint_state:
+          header:
+            frame_id: ""
+          name: []
+          position: []
+          velocity: []
+          effort: []
+        multi_dof_joint_state:
+          header:
+            frame_id: ""
+          joint_names: []
+          transforms: []
+          twist: []
+          wrench: []
+        attached_collision_objects: []
+        is_diff: false
+      robot_model_name: ""
+      fixed_frame_transforms: []
+      allowed_collision_matrix:
+        entry_names: []
+        entry_values: []
+        default_entry_names: []
+        default_entry_values: []
+      link_padding: []
+      link_scale: []
+      object_colors: []
+      world:
+        collision_objects: []
+        octomap:
+          header:
+            frame_id: ""
+          origin:
+            position:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+            orientation:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+              w: 1.0000000000000000
+          octomap:
+            header:
+              frame_id: ""
+            binary: false
+            id: ""
+            resolution: 0.0000000000000000
+            data: []
+      is_diff: false
+    plan_only: false
+    look_around: false
+    look_around_attempts: 0
+    max_safe_execution_cost: 0.0000000000000000
+    replan: false
+    replan_attempts: 0
+    replan_delay: 0.0000000000000000
+bt: SUCCESS
+fault: <unset>
+counts: /sequence_move_group=1
+
+=== scenario RNG-03
+pins: inspect [2..3]: the last run, segment 2 only; state 3 is an event state too
+config: group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0.59999999999999998, 0, 0] (changed during the tick: see pins)
+paths: test/data/m3_5/paths.yaml
+--- tick: <FollowPath path="inspect" from="2" to="3" fault="{f}"/>
+events:
+[1] ACTION /sequence_move_group MoveGroupSequence.goal #1 -> SUCCEED(1)
+  | items=1 plan_only=0
+  | item 0: group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.050000000000000003 acc=0.050000000000000003 time=5 attempts=1 blend=0
+  request:
+    items:
+    -
+      req:
+        workspace_parameters:
+          header:
+            frame_id: ""
+          min_corner:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          max_corner:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+        start_state:
+          joint_state:
+            header:
+              frame_id: ""
+            name: []
+            position: []
+            velocity: []
+            effort: []
+          multi_dof_joint_state:
+            header:
+              frame_id: ""
+            joint_names: []
+            transforms: []
+            twist: []
+            wrench: []
+          attached_collision_objects: []
+          is_diff: false
+        goal_constraints:
+        -
+          name: ""
+          joint_constraints: []
+          position_constraints:
+          -
+            header:
+              frame_id: "base_link"
+            link_name: "tcp"
+            target_point_offset:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+            constraint_region:
+              primitives:
+              -
+                type: 2
+                dimensions:
+                - 0.0010000000000000000
+                polygon:
+                  points: []
+              primitive_poses:
+              -
+                position:
+                  x: 0.41266780800000002
+                  y: 0.28232123700000000
+                  z: 0.29999999999999999
+                orientation:
+                  x: 0.0000000000000000
+                  y: 0.0000000000000000
+                  z: 0.0000000000000000
+                  w: 1.0000000000000000
+              meshes: []
+              mesh_poses: []
+            weight: 1.0000000000000000
+          orientation_constraints:
+          -
+            header:
+              frame_id: "base_link"
+            orientation:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.29552020699999998
+              w: 0.95533648900000001
+            link_name: "tcp"
+            absolute_x_axis_tolerance: 0.010000000000000000
+            absolute_y_axis_tolerance: 0.010000000000000000
+            absolute_z_axis_tolerance: 0.010000000000000000
+            parameterization: 0
+            weight: 1.0000000000000000
+          visibility_constraints: []
+        path_constraints:
+          name: ""
+          joint_constraints: []
+          position_constraints: []
+          orientation_constraints: []
+          visibility_constraints: []
+        trajectory_constraints:
+          constraints: []
+        reference_trajectories: []
+        pipeline_id: "pilz_industrial_motion_planner"
+        planner_id: "LIN"
+        group_name: "arm"
+        num_planning_attempts: 1
+        allowed_planning_time: 5.0000000000000000
+        max_velocity_scaling_factor: 0.050000000000000003
+        max_acceleration_scaling_factor: 0.050000000000000003
+        cartesian_speed_end_effector_link: ""
+        max_cartesian_speed: 0.0000000000000000
+      blend_radius: 0.0000000000000000
+  planning_options:
+    planning_scene_diff:
+      name: ""
+      robot_state:
+        joint_state:
+          header:
+            frame_id: ""
+          name: []
+          position: []
+          velocity: []
+          effort: []
+        multi_dof_joint_state:
+          header:
+            frame_id: ""
+          joint_names: []
+          transforms: []
+          twist: []
+          wrench: []
+        attached_collision_objects: []
+        is_diff: false
+      robot_model_name: ""
+      fixed_frame_transforms: []
+      allowed_collision_matrix:
+        entry_names: []
+        entry_values: []
+        default_entry_names: []
+        default_entry_values: []
+      link_padding: []
+      link_scale: []
+      object_colors: []
+      world:
+        collision_objects: []
+        octomap:
+          header:
+            frame_id: ""
+          origin:
+            position:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+            orientation:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+              w: 1.0000000000000000
+          octomap:
+            header:
+              frame_id: ""
+            binary: false
+            id: ""
+            resolution: 0.0000000000000000
+            data: []
+      is_diff: false
+    plan_only: false
+    look_around: false
+    look_around_attempts: 0
+    max_safe_execution_cost: 0.0000000000000000
+    replan: false
+    replan_attempts: 0
+    replan_delay: 0.0000000000000000
+bt: SUCCESS
+fault: <unset>
+counts: /sequence_move_group=1
+
+=== scenario RNG-04
+pins: inspect [1..1]: nothing sent, the robot is at state 1: SUCCESS
+config: group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0.20000000000000001, 0, 0]
+paths: test/data/m3_5/paths.yaml
+--- tick: <FollowPath path="inspect" from="1" to="1" fault="{f}"/>
+events:
+bt: SUCCESS
+fault: <unset>
+counts: none
+
+=== scenario RNG-05
+pins: inspect [1..1] with the arm at state 0: NOT_AT_PATH_START after the bounded settle, nothing sent
+config: group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0, 0, 0]
+paths: test/data/m3_5/paths.yaml
+--- tick: <FollowPath path="inspect" from="1" to="1" fault="{f}"/>
+events:
+bt: FAILURE
+fault: "MOTION_FAULT: NOT_AT_PATH_START during request"
+counts: none
+
+=== scenario RNG-06
+pins: glue_whole (no events), whole: ONE goal, items blend 0.02 / 0 / 0 -- the reference
+config: group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0, 0, 0]
+paths: test/data/m3_5/paths.yaml
+--- tick: <FollowPath path="glue_whole" fault="{f}"/>
+events:
+[1] ACTION /sequence_move_group MoveGroupSequence.goal #1 -> SUCCEED(1)
+  | items=3 plan_only=0
+  | item 0: group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.20000000000000001 acc=0.20000000000000001 time=3 attempts=1 blend=0.02
+  | item 1: group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.20000000000000001 acc=0.20000000000000001 time=3 attempts=1 blend=0
+  | item 2: group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.20000000000000001 acc=0.20000000000000001 time=3 attempts=1 blend=0
+  request:
+    items:
+    -
+      req:
+        workspace_parameters:
+          header:
+            frame_id: ""
+          min_corner:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          max_corner:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+        start_state:
+          joint_state:
+            header:
+              frame_id: ""
+            name: []
+            position: []
+            velocity: []
+            effort: []
+          multi_dof_joint_state:
+            header:
+              frame_id: ""
+            joint_names: []
+            transforms: []
+            twist: []
+            wrench: []
+          attached_collision_objects: []
+          is_diff: false
+        goal_constraints:
+        -
+          name: ""
+          joint_constraints: []
+          position_constraints:
+          -
+            header:
+              frame_id: "base_link"
+            link_name: "tcp"
+            target_point_offset:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+            constraint_region:
+              primitives:
+              -
+                type: 2
+                dimensions:
+                - 0.0010000000000000000
+                polygon:
+                  points: []
+              primitive_poses:
+              -
+                position:
+                  x: 0.49003328899999998
+                  y: 0.099334665000000003
+                  z: 0.29999999999999999
+                orientation:
+                  x: 0.0000000000000000
+                  y: 0.0000000000000000
+                  z: 0.0000000000000000
+                  w: 1.0000000000000000
+              meshes: []
+              mesh_poses: []
+            weight: 1.0000000000000000
+          orientation_constraints:
+          -
+            header:
+              frame_id: "base_link"
+            orientation:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.099833416600000002
+              w: 0.99500416500000000
+            link_name: "tcp"
+            absolute_x_axis_tolerance: 0.010000000000000000
+            absolute_y_axis_tolerance: 0.010000000000000000
+            absolute_z_axis_tolerance: 0.010000000000000000
+            parameterization: 0
+            weight: 1.0000000000000000
+          visibility_constraints: []
+        path_constraints:
+          name: ""
+          joint_constraints: []
+          position_constraints: []
+          orientation_constraints: []
+          visibility_constraints: []
+        trajectory_constraints:
+          constraints: []
+        reference_trajectories: []
+        pipeline_id: "pilz_industrial_motion_planner"
+        planner_id: "LIN"
+        group_name: "arm"
+        num_planning_attempts: 1
+        allowed_planning_time: 3.0000000000000000
+        max_velocity_scaling_factor: 0.20000000000000001
+        max_acceleration_scaling_factor: 0.20000000000000001
+        cartesian_speed_end_effector_link: ""
+        max_cartesian_speed: 0.0000000000000000
+      blend_radius: 0.020000000000000000
+    -
+      req:
+        workspace_parameters:
+          header:
+            frame_id: ""
+          min_corner:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          max_corner:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+        start_state:
+          joint_state:
+            header:
+              frame_id: ""
+            name: []
+            position: []
+            velocity: []
+            effort: []
+          multi_dof_joint_state:
+            header:
+              frame_id: ""
+            joint_names: []
+            transforms: []
+            twist: []
+            wrench: []
+          attached_collision_objects: []
+          is_diff: false
+        goal_constraints:
+        -
+          name: ""
+          joint_constraints: []
+          position_constraints:
+          -
+            header:
+              frame_id: "base_link"
+            link_name: "tcp"
+            target_point_offset:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+            constraint_region:
+              primitives:
+              -
+                type: 2
+                dimensions:
+                - 0.0010000000000000000
+                polygon:
+                  points: []
+              primitive_poses:
+              -
+                position:
+                  x: 0.46053049699999998
+                  y: 0.19470917099999999
+                  z: 0.29999999999999999
+                orientation:
+                  x: 0.0000000000000000
+                  y: 0.0000000000000000
+                  z: 0.0000000000000000
+                  w: 1.0000000000000000
+              meshes: []
+              mesh_poses: []
+            weight: 1.0000000000000000
+          orientation_constraints:
+          -
+            header:
+              frame_id: "base_link"
+            orientation:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.19866933100000000
+              w: 0.98006657799999997
+            link_name: "tcp"
+            absolute_x_axis_tolerance: 0.010000000000000000
+            absolute_y_axis_tolerance: 0.010000000000000000
+            absolute_z_axis_tolerance: 0.010000000000000000
+            parameterization: 0
+            weight: 1.0000000000000000
+          visibility_constraints: []
+        path_constraints:
+          name: ""
+          joint_constraints: []
+          position_constraints: []
+          orientation_constraints: []
+          visibility_constraints: []
+        trajectory_constraints:
+          constraints: []
+        reference_trajectories: []
+        pipeline_id: "pilz_industrial_motion_planner"
+        planner_id: "LIN"
+        group_name: "arm"
+        num_planning_attempts: 1
+        allowed_planning_time: 3.0000000000000000
+        max_velocity_scaling_factor: 0.20000000000000001
+        max_acceleration_scaling_factor: 0.20000000000000001
+        cartesian_speed_end_effector_link: ""
+        max_cartesian_speed: 0.0000000000000000
+      blend_radius: 0.0000000000000000
+    -
+      req:
+        workspace_parameters:
+          header:
+            frame_id: ""
+          min_corner:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          max_corner:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+        start_state:
+          joint_state:
+            header:
+              frame_id: ""
+            name: []
+            position: []
+            velocity: []
+            effort: []
+          multi_dof_joint_state:
+            header:
+              frame_id: ""
+            joint_names: []
+            transforms: []
+            twist: []
+            wrench: []
+          attached_collision_objects: []
+          is_diff: false
+        goal_constraints:
+        -
+          name: ""
+          joint_constraints: []
+          position_constraints:
+          -
+            header:
+              frame_id: "base_link"
+            link_name: "tcp"
+            target_point_offset:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+            constraint_region:
+              primitives:
+              -
+                type: 2
+                dimensions:
+                - 0.0010000000000000000
+                polygon:
+                  points: []
+              primitive_poses:
+              -
+                position:
+                  x: 0.41266780800000002
+                  y: 0.28232123700000000
+                  z: 0.29999999999999999
+                orientation:
+                  x: 0.0000000000000000
+                  y: 0.0000000000000000
+                  z: 0.0000000000000000
+                  w: 1.0000000000000000
+              meshes: []
+              mesh_poses: []
+            weight: 1.0000000000000000
+          orientation_constraints:
+          -
+            header:
+              frame_id: "base_link"
+            orientation:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.29552020699999998
+              w: 0.95533648900000001
+            link_name: "tcp"
+            absolute_x_axis_tolerance: 0.010000000000000000
+            absolute_y_axis_tolerance: 0.010000000000000000
+            absolute_z_axis_tolerance: 0.010000000000000000
+            parameterization: 0
+            weight: 1.0000000000000000
+          visibility_constraints: []
+        path_constraints:
+          name: ""
+          joint_constraints: []
+          position_constraints: []
+          orientation_constraints: []
+          visibility_constraints: []
+        trajectory_constraints:
+          constraints: []
+        reference_trajectories: []
+        pipeline_id: "pilz_industrial_motion_planner"
+        planner_id: "LIN"
+        group_name: "arm"
+        num_planning_attempts: 1
+        allowed_planning_time: 3.0000000000000000
+        max_velocity_scaling_factor: 0.20000000000000001
+        max_acceleration_scaling_factor: 0.20000000000000001
+        cartesian_speed_end_effector_link: ""
+        max_cartesian_speed: 0.0000000000000000
+      blend_radius: 0.0000000000000000
+  planning_options:
+    planning_scene_diff:
+      name: ""
+      robot_state:
+        joint_state:
+          header:
+            frame_id: ""
+          name: []
+          position: []
+          velocity: []
+          effort: []
+        multi_dof_joint_state:
+          header:
+            frame_id: ""
+          joint_names: []
+          transforms: []
+          twist: []
+          wrench: []
+        attached_collision_objects: []
+        is_diff: false
+      robot_model_name: ""
+      fixed_frame_transforms: []
+      allowed_collision_matrix:
+        entry_names: []
+        entry_values: []
+        default_entry_names: []
+        default_entry_values: []
+      link_padding: []
+      link_scale: []
+      object_colors: []
+      world:
+        collision_objects: []
+        octomap:
+          header:
+            frame_id: ""
+          origin:
+            position:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+            orientation:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+              w: 1.0000000000000000
+          octomap:
+            header:
+              frame_id: ""
+            binary: false
+            id: ""
+            resolution: 0.0000000000000000
+            data: []
+      is_diff: false
+    plan_only: false
+    look_around: false
+    look_around_attempts: 0
+    max_safe_execution_cost: 0.0000000000000000
+    replan: false
+    replan_attempts: 0
+    replan_delay: 0.0000000000000000
+bt: SUCCESS
+fault: <unset>
+counts: /sequence_move_group=1
+
+=== scenario RNG-07
+pins: glue [0..2] (an event before departing state 2): ONE goal, items blend 0.02 / 0 -- RNG-06's first two items
+config: group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0.40000000000000002, 0, 0] (changed during the tick: see pins)
+paths: test/data/m3_5/paths.yaml
+--- tick: <FollowPath path="glue" from="0" to="2" fault="{f}"/>
+events:
+[1] ACTION /sequence_move_group MoveGroupSequence.goal #1 -> SUCCEED(1)
+  | items=2 plan_only=0
+  | item 0: group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.20000000000000001 acc=0.20000000000000001 time=3 attempts=1 blend=0.02
+  | item 1: group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.20000000000000001 acc=0.20000000000000001 time=3 attempts=1 blend=0
+  request:
+    items:
+    -
+      req:
+        workspace_parameters:
+          header:
+            frame_id: ""
+          min_corner:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          max_corner:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+        start_state:
+          joint_state:
+            header:
+              frame_id: ""
+            name: []
+            position: []
+            velocity: []
+            effort: []
+          multi_dof_joint_state:
+            header:
+              frame_id: ""
+            joint_names: []
+            transforms: []
+            twist: []
+            wrench: []
+          attached_collision_objects: []
+          is_diff: false
+        goal_constraints:
+        -
+          name: ""
+          joint_constraints: []
+          position_constraints:
+          -
+            header:
+              frame_id: "base_link"
+            link_name: "tcp"
+            target_point_offset:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+            constraint_region:
+              primitives:
+              -
+                type: 2
+                dimensions:
+                - 0.0010000000000000000
+                polygon:
+                  points: []
+              primitive_poses:
+              -
+                position:
+                  x: 0.49003328899999998
+                  y: 0.099334665000000003
+                  z: 0.29999999999999999
+                orientation:
+                  x: 0.0000000000000000
+                  y: 0.0000000000000000
+                  z: 0.0000000000000000
+                  w: 1.0000000000000000
+              meshes: []
+              mesh_poses: []
+            weight: 1.0000000000000000
+          orientation_constraints:
+          -
+            header:
+              frame_id: "base_link"
+            orientation:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.099833416600000002
+              w: 0.99500416500000000
+            link_name: "tcp"
+            absolute_x_axis_tolerance: 0.010000000000000000
+            absolute_y_axis_tolerance: 0.010000000000000000
+            absolute_z_axis_tolerance: 0.010000000000000000
+            parameterization: 0
+            weight: 1.0000000000000000
+          visibility_constraints: []
+        path_constraints:
+          name: ""
+          joint_constraints: []
+          position_constraints: []
+          orientation_constraints: []
+          visibility_constraints: []
+        trajectory_constraints:
+          constraints: []
+        reference_trajectories: []
+        pipeline_id: "pilz_industrial_motion_planner"
+        planner_id: "LIN"
+        group_name: "arm"
+        num_planning_attempts: 1
+        allowed_planning_time: 3.0000000000000000
+        max_velocity_scaling_factor: 0.20000000000000001
+        max_acceleration_scaling_factor: 0.20000000000000001
+        cartesian_speed_end_effector_link: ""
+        max_cartesian_speed: 0.0000000000000000
+      blend_radius: 0.020000000000000000
+    -
+      req:
+        workspace_parameters:
+          header:
+            frame_id: ""
+          min_corner:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          max_corner:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+        start_state:
+          joint_state:
+            header:
+              frame_id: ""
+            name: []
+            position: []
+            velocity: []
+            effort: []
+          multi_dof_joint_state:
+            header:
+              frame_id: ""
+            joint_names: []
+            transforms: []
+            twist: []
+            wrench: []
+          attached_collision_objects: []
+          is_diff: false
+        goal_constraints:
+        -
+          name: ""
+          joint_constraints: []
+          position_constraints:
+          -
+            header:
+              frame_id: "base_link"
+            link_name: "tcp"
+            target_point_offset:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+            constraint_region:
+              primitives:
+              -
+                type: 2
+                dimensions:
+                - 0.0010000000000000000
+                polygon:
+                  points: []
+              primitive_poses:
+              -
+                position:
+                  x: 0.46053049699999998
+                  y: 0.19470917099999999
+                  z: 0.29999999999999999
+                orientation:
+                  x: 0.0000000000000000
+                  y: 0.0000000000000000
+                  z: 0.0000000000000000
+                  w: 1.0000000000000000
+              meshes: []
+              mesh_poses: []
+            weight: 1.0000000000000000
+          orientation_constraints:
+          -
+            header:
+              frame_id: "base_link"
+            orientation:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.19866933100000000
+              w: 0.98006657799999997
+            link_name: "tcp"
+            absolute_x_axis_tolerance: 0.010000000000000000
+            absolute_y_axis_tolerance: 0.010000000000000000
+            absolute_z_axis_tolerance: 0.010000000000000000
+            parameterization: 0
+            weight: 1.0000000000000000
+          visibility_constraints: []
+        path_constraints:
+          name: ""
+          joint_constraints: []
+          position_constraints: []
+          orientation_constraints: []
+          visibility_constraints: []
+        trajectory_constraints:
+          constraints: []
+        reference_trajectories: []
+        pipeline_id: "pilz_industrial_motion_planner"
+        planner_id: "LIN"
+        group_name: "arm"
+        num_planning_attempts: 1
+        allowed_planning_time: 3.0000000000000000
+        max_velocity_scaling_factor: 0.20000000000000001
+        max_acceleration_scaling_factor: 0.20000000000000001
+        cartesian_speed_end_effector_link: ""
+        max_cartesian_speed: 0.0000000000000000
+      blend_radius: 0.0000000000000000
+  planning_options:
+    planning_scene_diff:
+      name: ""
+      robot_state:
+        joint_state:
+          header:
+            frame_id: ""
+          name: []
+          position: []
+          velocity: []
+          effort: []
+        multi_dof_joint_state:
+          header:
+            frame_id: ""
+          joint_names: []
+          transforms: []
+          twist: []
+          wrench: []
+        attached_collision_objects: []
+        is_diff: false
+      robot_model_name: ""
+      fixed_frame_transforms: []
+      allowed_collision_matrix:
+        entry_names: []
+        entry_values: []
+        default_entry_names: []
+        default_entry_values: []
+      link_padding: []
+      link_scale: []
+      object_colors: []
+      world:
+        collision_objects: []
+        octomap:
+          header:
+            frame_id: ""
+          origin:
+            position:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+            orientation:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+              w: 1.0000000000000000
+          octomap:
+            header:
+              frame_id: ""
+            binary: false
+            id: ""
+            resolution: 0.0000000000000000
+            data: []
+      is_diff: false
+    plan_only: false
+    look_around: false
+    look_around_attempts: 0
+    max_safe_execution_cost: 0.0000000000000000
+    replan: false
+    replan_attempts: 0
+    replan_delay: 0.0000000000000000
+bt: SUCCESS
+fault: <unset>
+counts: /sequence_move_group=1
+
+=== scenario RNG-08
+pins: glue [2..3]: ONE goal, RNG-06's last item
+config: group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0.40000000000000002, 0, 0]
+paths: test/data/m3_5/paths.yaml
+--- tick: <FollowPath path="glue" from="2" to="3" fault="{f}"/>
+events:
+[1] ACTION /sequence_move_group MoveGroupSequence.goal #1 -> SUCCEED(1)
+  | items=1 plan_only=0
+  | item 0: group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.20000000000000001 acc=0.20000000000000001 time=3 attempts=1 blend=0
+  request:
+    items:
+    -
+      req:
+        workspace_parameters:
+          header:
+            frame_id: ""
+          min_corner:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          max_corner:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+        start_state:
+          joint_state:
+            header:
+              frame_id: ""
+            name: []
+            position: []
+            velocity: []
+            effort: []
+          multi_dof_joint_state:
+            header:
+              frame_id: ""
+            joint_names: []
+            transforms: []
+            twist: []
+            wrench: []
+          attached_collision_objects: []
+          is_diff: false
+        goal_constraints:
+        -
+          name: ""
+          joint_constraints: []
+          position_constraints:
+          -
+            header:
+              frame_id: "base_link"
+            link_name: "tcp"
+            target_point_offset:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+            constraint_region:
+              primitives:
+              -
+                type: 2
+                dimensions:
+                - 0.0010000000000000000
+                polygon:
+                  points: []
+              primitive_poses:
+              -
+                position:
+                  x: 0.41266780800000002
+                  y: 0.28232123700000000
+                  z: 0.29999999999999999
+                orientation:
+                  x: 0.0000000000000000
+                  y: 0.0000000000000000
+                  z: 0.0000000000000000
+                  w: 1.0000000000000000
+              meshes: []
+              mesh_poses: []
+            weight: 1.0000000000000000
+          orientation_constraints:
+          -
+            header:
+              frame_id: "base_link"
+            orientation:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.29552020699999998
+              w: 0.95533648900000001
+            link_name: "tcp"
+            absolute_x_axis_tolerance: 0.010000000000000000
+            absolute_y_axis_tolerance: 0.010000000000000000
+            absolute_z_axis_tolerance: 0.010000000000000000
+            parameterization: 0
+            weight: 1.0000000000000000
+          visibility_constraints: []
+        path_constraints:
+          name: ""
+          joint_constraints: []
+          position_constraints: []
+          orientation_constraints: []
+          visibility_constraints: []
+        trajectory_constraints:
+          constraints: []
+        reference_trajectories: []
+        pipeline_id: "pilz_industrial_motion_planner"
+        planner_id: "LIN"
+        group_name: "arm"
+        num_planning_attempts: 1
+        allowed_planning_time: 3.0000000000000000
+        max_velocity_scaling_factor: 0.20000000000000001
+        max_acceleration_scaling_factor: 0.20000000000000001
+        cartesian_speed_end_effector_link: ""
+        max_cartesian_speed: 0.0000000000000000
+      blend_radius: 0.0000000000000000
+  planning_options:
+    planning_scene_diff:
+      name: ""
+      robot_state:
+        joint_state:
+          header:
+            frame_id: ""
+          name: []
+          position: []
+          velocity: []
+          effort: []
+        multi_dof_joint_state:
+          header:
+            frame_id: ""
+          joint_names: []
+          transforms: []
+          twist: []
+          wrench: []
+        attached_collision_objects: []
+        is_diff: false
+      robot_model_name: ""
+      fixed_frame_transforms: []
+      allowed_collision_matrix:
+        entry_names: []
+        entry_values: []
+        default_entry_names: []
+        default_entry_values: []
+      link_padding: []
+      link_scale: []
+      object_colors: []
+      world:
+        collision_objects: []
+        octomap:
+          header:
+            frame_id: ""
+          origin:
+            position:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+            orientation:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+              w: 1.0000000000000000
+          octomap:
+            header:
+              frame_id: ""
+            binary: false
+            id: ""
+            resolution: 0.0000000000000000
+            data: []
+      is_diff: false
+    plan_only: false
+    look_around: false
+    look_around_attempts: 0
+    max_safe_execution_cost: 0.0000000000000000
+    replan: false
+    replan_attempts: 0
+    replan_delay: 0.0000000000000000
+bt: SUCCESS
+fault: <unset>
+counts: /sequence_move_group=1
+
+=== scenario RNG-09
+pins: inspect whole (no ports): it would drive through the event states 1 and 2: PATH_RANGE, nothing sent
+config: group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0, 0, 0]
+paths: test/data/m3_5/paths.yaml
+--- tick: <FollowPath path="inspect" fault="{f}"/>
+events:
+bt: FAILURE
+fault: "MOTION_FAULT: PATH_RANGE during request"
+counts: none
+
+=== scenario RNG-10
+pins: inspect [0..2]: through state 1: PATH_RANGE, nothing sent
+config: group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0, 0, 0]
+paths: test/data/m3_5/paths.yaml
+--- tick: <FollowPath path="inspect" from="0" to="2" fault="{f}"/>
+events:
+bt: FAILURE
+fault: "MOTION_FAULT: PATH_RANGE during request"
+counts: none
+
+=== scenario RNG-11
+pins: glue whole: through state 2 (before_departure): PATH_RANGE
+config: group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0, 0, 0]
+paths: test/data/m3_5/paths.yaml
+--- tick: <FollowPath path="glue" fault="{f}"/>
+events:
+bt: FAILURE
+fault: "MOTION_FAULT: PATH_RANGE during request"
+counts: none
+
+=== scenario RNG-12
+pins: inspect [2..1]: not a run of the path: PATH_RANGE, nothing sent
+config: group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0, 0, 0]
+paths: test/data/m3_5/paths.yaml
+--- tick: <FollowPath path="inspect" from="2" to="1" fault="{f}"/>
+events:
+bt: FAILURE
+fault: "MOTION_FAULT: PATH_RANGE during request"
+counts: none
+
+=== scenario RNG-13
+pins: inspect [0..4]: not a run of the path: PATH_RANGE, nothing sent
+config: group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0, 0, 0]
+paths: test/data/m3_5/paths.yaml
+--- tick: <FollowPath path="inspect" from="0" to="4" fault="{f}"/>
+events:
+bt: FAILURE
+fault: "MOTION_FAULT: PATH_RANGE during request"
+counts: none
+
+=== scenario RNG-14
+pins: inspect [-1..1]: not a run of the path: PATH_RANGE, nothing sent
+config: group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0, 0, 0]
+paths: test/data/m3_5/paths.yaml
+--- tick: <FollowPath path="inspect" from="-1" to="1" fault="{f}"/>
+events:
+bt: FAILURE
+fault: "MOTION_FAULT: PATH_RANGE during request"
+counts: none
+
+=== scenario RNG-15
+pins: inspect [x..1]: not a run of the path: PATH_RANGE, nothing sent
+config: group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0, 0, 0]
+paths: test/data/m3_5/paths.yaml
+--- tick: <FollowPath path="inspect" from="x" to="1" fault="{f}"/>
+events:
+bt: FAILURE
+fault: "MOTION_FAULT: PATH_RANGE during request"
+counts: none
+
+=== scenario RNG-16
+pins: inspect [0..1.5]: not a run of the path: PATH_RANGE, nothing sent
+config: group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0, 0, 0]
+paths: test/data/m3_5/paths.yaml
+--- tick: <FollowPath path="inspect" from="0" to="1.5" fault="{f}"/>
+events:
+bt: FAILURE
+fault: "MOTION_FAULT: PATH_RANGE during request"
+counts: none
+
+=== scenario RNG-22
+pins: inspect [+0..1]: not a run of the path: PATH_RANGE, nothing sent
+config: group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0, 0, 0]
+paths: test/data/m3_5/paths.yaml
+--- tick: <FollowPath path="inspect" from="+0" to="1" fault="{f}"/>
+events:
+bt: FAILURE
+fault: "MOTION_FAULT: PATH_RANGE during request"
+counts: none
+
+=== scenario RNG-23
+pins: inspect [ 0..1]: not a run of the path: PATH_RANGE, nothing sent
+config: group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0, 0, 0]
+paths: test/data/m3_5/paths.yaml
+--- tick: <FollowPath path="inspect" from=" 0" to="1" fault="{f}"/>
+events:
+bt: FAILURE
+fault: "MOTION_FAULT: PATH_RANGE during request"
+counts: none
+
+=== scenario RNG-17
+pins: a dense path with from/to: it runs whole: PATH_RANGE
+config: group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0, 0, 0]
+paths: test/data/m3_5/paths.yaml
+--- tick: <FollowPath path="dense" from="0" to="1" fault="{f}"/>
+events:
+bt: FAILURE
+fault: "MOTION_FAULT: PATH_RANGE during request"
+counts: none
+
+=== scenario RNG-18
+pins: blended [0..1]: segment 0 blends into state 1, a run cannot end there: PATH_RANGE
+config: group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0, 0, 0]
+paths: test/data/m3_5/paths.yaml
+--- tick: <FollowPath path="blended" from="0" to="1" fault="{f}"/>
+events:
+bt: FAILURE
+fault: "MOTION_FAULT: PATH_RANGE during request"
+counts: none
+
+=== scenario RNG-19
+pins: only `to`: from defaults to 0 -- inspect [..1]
+config: group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0.20000000000000001, 0, 0] (changed during the tick: see pins)
+paths: test/data/m3_5/paths.yaml
+--- tick: <FollowPath path="inspect" to="1" fault="{f}"/>
+events:
+[1] ACTION /sequence_move_group MoveGroupSequence.goal #1 -> SUCCEED(1)
+  | items=1 plan_only=0
+  | item 0: group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.050000000000000003 acc=0.050000000000000003 time=5 attempts=1 blend=0
+  request:
+    items:
+    -
+      req:
+        workspace_parameters:
+          header:
+            frame_id: ""
+          min_corner:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          max_corner:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+        start_state:
+          joint_state:
+            header:
+              frame_id: ""
+            name: []
+            position: []
+            velocity: []
+            effort: []
+          multi_dof_joint_state:
+            header:
+              frame_id: ""
+            joint_names: []
+            transforms: []
+            twist: []
+            wrench: []
+          attached_collision_objects: []
+          is_diff: false
+        goal_constraints:
+        -
+          name: ""
+          joint_constraints: []
+          position_constraints:
+          -
+            header:
+              frame_id: "base_link"
+            link_name: "tcp"
+            target_point_offset:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+            constraint_region:
+              primitives:
+              -
+                type: 2
+                dimensions:
+                - 0.0010000000000000000
+                polygon:
+                  points: []
+              primitive_poses:
+              -
+                position:
+                  x: 0.49003328899999998
+                  y: 0.099334665000000003
+                  z: 0.29999999999999999
+                orientation:
+                  x: 0.0000000000000000
+                  y: 0.0000000000000000
+                  z: 0.0000000000000000
+                  w: 1.0000000000000000
+              meshes: []
+              mesh_poses: []
+            weight: 1.0000000000000000
+          orientation_constraints:
+          -
+            header:
+              frame_id: "base_link"
+            orientation:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.099833416600000002
+              w: 0.99500416500000000
+            link_name: "tcp"
+            absolute_x_axis_tolerance: 0.010000000000000000
+            absolute_y_axis_tolerance: 0.010000000000000000
+            absolute_z_axis_tolerance: 0.010000000000000000
+            parameterization: 0
+            weight: 1.0000000000000000
+          visibility_constraints: []
+        path_constraints:
+          name: ""
+          joint_constraints: []
+          position_constraints: []
+          orientation_constraints: []
+          visibility_constraints: []
+        trajectory_constraints:
+          constraints: []
+        reference_trajectories: []
+        pipeline_id: "pilz_industrial_motion_planner"
+        planner_id: "LIN"
+        group_name: "arm"
+        num_planning_attempts: 1
+        allowed_planning_time: 5.0000000000000000
+        max_velocity_scaling_factor: 0.050000000000000003
+        max_acceleration_scaling_factor: 0.050000000000000003
+        cartesian_speed_end_effector_link: ""
+        max_cartesian_speed: 0.0000000000000000
+      blend_radius: 0.0000000000000000
+  planning_options:
+    planning_scene_diff:
+      name: ""
+      robot_state:
+        joint_state:
+          header:
+            frame_id: ""
+          name: []
+          position: []
+          velocity: []
+          effort: []
+        multi_dof_joint_state:
+          header:
+            frame_id: ""
+          joint_names: []
+          transforms: []
+          twist: []
+          wrench: []
+        attached_collision_objects: []
+        is_diff: false
+      robot_model_name: ""
+      fixed_frame_transforms: []
+      allowed_collision_matrix:
+        entry_names: []
+        entry_values: []
+        default_entry_names: []
+        default_entry_values: []
+      link_padding: []
+      link_scale: []
+      object_colors: []
+      world:
+        collision_objects: []
+        octomap:
+          header:
+            frame_id: ""
+          origin:
+            position:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+            orientation:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+              w: 1.0000000000000000
+          octomap:
+            header:
+              frame_id: ""
+            binary: false
+            id: ""
+            resolution: 0.0000000000000000
+            data: []
+      is_diff: false
+    plan_only: false
+    look_around: false
+    look_around_attempts: 0
+    max_safe_execution_cost: 0.0000000000000000
+    replan: false
+    replan_attempts: 0
+    replan_delay: 0.0000000000000000
+bt: SUCCESS
+fault: <unset>
+counts: /sequence_move_group=1
+
+=== scenario RNG-20
+pins: inspect [0..1], the arm never leaves state 0 (the fake executes without moving it): the goal was sent and succeeded, then the arrival check fails after the bounded settle: NOT_AT_PATH_STATE
+config: group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0, 0, 0]
+paths: test/data/m3_5/paths.yaml
+--- tick: <FollowPath path="inspect" from="0" to="1" fault="{f}"/>
+events:
+[1] ACTION /sequence_move_group MoveGroupSequence.goal #1 -> SUCCEED(1)
+  | items=1 plan_only=0
+  | item 0: group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.050000000000000003 acc=0.050000000000000003 time=5 attempts=1 blend=0
+  request:
+    items:
+    -
+      req:
+        workspace_parameters:
+          header:
+            frame_id: ""
+          min_corner:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          max_corner:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+        start_state:
+          joint_state:
+            header:
+              frame_id: ""
+            name: []
+            position: []
+            velocity: []
+            effort: []
+          multi_dof_joint_state:
+            header:
+              frame_id: ""
+            joint_names: []
+            transforms: []
+            twist: []
+            wrench: []
+          attached_collision_objects: []
+          is_diff: false
+        goal_constraints:
+        -
+          name: ""
+          joint_constraints: []
+          position_constraints:
+          -
+            header:
+              frame_id: "base_link"
+            link_name: "tcp"
+            target_point_offset:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+            constraint_region:
+              primitives:
+              -
+                type: 2
+                dimensions:
+                - 0.0010000000000000000
+                polygon:
+                  points: []
+              primitive_poses:
+              -
+                position:
+                  x: 0.49003328899999998
+                  y: 0.099334665000000003
+                  z: 0.29999999999999999
+                orientation:
+                  x: 0.0000000000000000
+                  y: 0.0000000000000000
+                  z: 0.0000000000000000
+                  w: 1.0000000000000000
+              meshes: []
+              mesh_poses: []
+            weight: 1.0000000000000000
+          orientation_constraints:
+          -
+            header:
+              frame_id: "base_link"
+            orientation:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.099833416600000002
+              w: 0.99500416500000000
+            link_name: "tcp"
+            absolute_x_axis_tolerance: 0.010000000000000000
+            absolute_y_axis_tolerance: 0.010000000000000000
+            absolute_z_axis_tolerance: 0.010000000000000000
+            parameterization: 0
+            weight: 1.0000000000000000
+          visibility_constraints: []
+        path_constraints:
+          name: ""
+          joint_constraints: []
+          position_constraints: []
+          orientation_constraints: []
+          visibility_constraints: []
+        trajectory_constraints:
+          constraints: []
+        reference_trajectories: []
+        pipeline_id: "pilz_industrial_motion_planner"
+        planner_id: "LIN"
+        group_name: "arm"
+        num_planning_attempts: 1
+        allowed_planning_time: 5.0000000000000000
+        max_velocity_scaling_factor: 0.050000000000000003
+        max_acceleration_scaling_factor: 0.050000000000000003
+        cartesian_speed_end_effector_link: ""
+        max_cartesian_speed: 0.0000000000000000
+      blend_radius: 0.0000000000000000
+  planning_options:
+    planning_scene_diff:
+      name: ""
+      robot_state:
+        joint_state:
+          header:
+            frame_id: ""
+          name: []
+          position: []
+          velocity: []
+          effort: []
+        multi_dof_joint_state:
+          header:
+            frame_id: ""
+          joint_names: []
+          transforms: []
+          twist: []
+          wrench: []
+        attached_collision_objects: []
+        is_diff: false
+      robot_model_name: ""
+      fixed_frame_transforms: []
+      allowed_collision_matrix:
+        entry_names: []
+        entry_values: []
+        default_entry_names: []
+        default_entry_values: []
+      link_padding: []
+      link_scale: []
+      object_colors: []
+      world:
+        collision_objects: []
+        octomap:
+          header:
+            frame_id: ""
+          origin:
+            position:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+            orientation:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+              w: 1.0000000000000000
+          octomap:
+            header:
+              frame_id: ""
+            binary: false
+            id: ""
+            resolution: 0.0000000000000000
+            data: []
+      is_diff: false
+    plan_only: false
+    look_around: false
+    look_around_attempts: 0
+    max_safe_execution_cost: 0.0000000000000000
+    replan: false
+    replan_attempts: 0
+    replan_delay: 0.0000000000000000
+bt: FAILURE
+fault: "MOTION_FAULT: NOT_AT_PATH_STATE during execute"
+counts: /sequence_move_group=1
+
+=== scenario RNG-21
+pins: glue_whole [1..2]: no event at state 2 (and no blend into it), so no arrival check: SUCCESS with the arm still at state 0
+config: group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off
+state: joint_states /joint_states=[0.20000000000000001, 0, 0]
+paths: test/data/m3_5/paths.yaml
+--- tick: <FollowPath path="glue_whole" from="1" to="2" fault="{f}"/>
+events:
+[1] ACTION /sequence_move_group MoveGroupSequence.goal #1 -> SUCCEED(1)
+  | items=1 plan_only=0
+  | item 0: group=arm pipeline=pilz_industrial_motion_planner planner=LIN target=pose frames=tcp@base_link,tcp@base_link vel=0.20000000000000001 acc=0.20000000000000001 time=3 attempts=1 blend=0
+  request:
+    items:
+    -
+      req:
+        workspace_parameters:
+          header:
+            frame_id: ""
+          min_corner:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+          max_corner:
+            x: 0.0000000000000000
+            y: 0.0000000000000000
+            z: 0.0000000000000000
+        start_state:
+          joint_state:
+            header:
+              frame_id: ""
+            name: []
+            position: []
+            velocity: []
+            effort: []
+          multi_dof_joint_state:
+            header:
+              frame_id: ""
+            joint_names: []
+            transforms: []
+            twist: []
+            wrench: []
+          attached_collision_objects: []
+          is_diff: false
+        goal_constraints:
+        -
+          name: ""
+          joint_constraints: []
+          position_constraints:
+          -
+            header:
+              frame_id: "base_link"
+            link_name: "tcp"
+            target_point_offset:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+            constraint_region:
+              primitives:
+              -
+                type: 2
+                dimensions:
+                - 0.0010000000000000000
+                polygon:
+                  points: []
+              primitive_poses:
+              -
+                position:
+                  x: 0.46053049699999998
+                  y: 0.19470917099999999
+                  z: 0.29999999999999999
+                orientation:
+                  x: 0.0000000000000000
+                  y: 0.0000000000000000
+                  z: 0.0000000000000000
+                  w: 1.0000000000000000
+              meshes: []
+              mesh_poses: []
+            weight: 1.0000000000000000
+          orientation_constraints:
+          -
+            header:
+              frame_id: "base_link"
+            orientation:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.19866933100000000
+              w: 0.98006657799999997
+            link_name: "tcp"
+            absolute_x_axis_tolerance: 0.010000000000000000
+            absolute_y_axis_tolerance: 0.010000000000000000
+            absolute_z_axis_tolerance: 0.010000000000000000
+            parameterization: 0
+            weight: 1.0000000000000000
+          visibility_constraints: []
+        path_constraints:
+          name: ""
+          joint_constraints: []
+          position_constraints: []
+          orientation_constraints: []
+          visibility_constraints: []
+        trajectory_constraints:
+          constraints: []
+        reference_trajectories: []
+        pipeline_id: "pilz_industrial_motion_planner"
+        planner_id: "LIN"
+        group_name: "arm"
+        num_planning_attempts: 1
+        allowed_planning_time: 3.0000000000000000
+        max_velocity_scaling_factor: 0.20000000000000001
+        max_acceleration_scaling_factor: 0.20000000000000001
+        cartesian_speed_end_effector_link: ""
+        max_cartesian_speed: 0.0000000000000000
+      blend_radius: 0.0000000000000000
+  planning_options:
+    planning_scene_diff:
+      name: ""
+      robot_state:
+        joint_state:
+          header:
+            frame_id: ""
+          name: []
+          position: []
+          velocity: []
+          effort: []
+        multi_dof_joint_state:
+          header:
+            frame_id: ""
+          joint_names: []
+          transforms: []
+          twist: []
+          wrench: []
+        attached_collision_objects: []
+        is_diff: false
+      robot_model_name: ""
+      fixed_frame_transforms: []
+      allowed_collision_matrix:
+        entry_names: []
+        entry_values: []
+        default_entry_names: []
+        default_entry_values: []
+      link_padding: []
+      link_scale: []
+      object_colors: []
+      world:
+        collision_objects: []
+        octomap:
+          header:
+            frame_id: ""
+          origin:
+            position:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+            orientation:
+              x: 0.0000000000000000
+              y: 0.0000000000000000
+              z: 0.0000000000000000
+              w: 1.0000000000000000
+          octomap:
+            header:
+              frame_id: ""
+            binary: false
+            id: ""
+            resolution: 0.0000000000000000
+            data: []
+      is_diff: false
+    plan_only: false
+    look_around: false
+    look_around_attempts: 0
+    max_safe_execution_cost: 0.0000000000000000
+    replan: false
+    replan_attempts: 0
+    replan_delay: 0.0000000000000000
+bt: SUCCESS
+fault: <unset>
+counts: /sequence_move_group=1
+

@@ -1,0 +1,23 @@
+# vNext M3.4 test profiles (test_m3_4_execution): the shape TSA 7.10.0 writes for a task program
+# (config/motion_profiles.yaml: planning budget and goal tolerance only, scalings on the moves), plus
+# the legacy `approach` / `transit` rows of config/bt/trainit_profiles.yaml, which a waypoint WITHOUT
+# a `profile` key falls back to (the legacy route: its explicit 0.001 is never sent to MoveGroup).
+motion_profiles:
+  transit:
+    velocity_scaling: 0.50
+    acceleration_scaling: 0.50
+    planning_time: 5.0
+    planning_attempts: 10
+  approach:
+    velocity_scaling: 0.20
+    acceleration_scaling: 0.20
+    planning_time: 3.0
+    goal_position_tolerance: 0.001
+  plain: {}
+  tol:
+    goal_position_tolerance: 0.002
+    goal_orientation_tolerance: 0.02
+  pos_only:
+    goal_position_tolerance: 0.002
+  bad_tol:
+    goal_position_tolerance: -0.001

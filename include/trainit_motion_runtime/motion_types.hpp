@@ -102,6 +102,12 @@ struct MotionOptions
   // post-processing of the planned trajectory before execution:
   bool   retime_with_totg{false};       // TimeOptimalTrajectoryGeneration
   bool   smooth_with_ruckig{false};     // RuckigSmoothing
+  // vNext M3.4 (owner D3): whether the REQUEST asked for the goal tolerance above -- a canonical
+  // move whose NAMED motion profile carries it. The MoveGroupInterface routes send a requested
+  // tolerance and otherwise MoveGroupInterface's own defaults, as before; the Pilz sequence route
+  // always sends goal_position_tolerance / goal_orientation_tolerance (unchanged).
+  bool   goal_position_tolerance_requested{false};
+  bool   goal_orientation_tolerance_requested{false};
 };
 
 // --- Planning options for collision-free moves (Section 13) ------------------
@@ -156,6 +162,10 @@ struct ProcessSegment
   double blend_radius{0.0};
 
   bool process_enabled{false};   // process active during this segment
+
+  // vNext M3.4: the link this segment's goal (and a CIRC's aux point) is for; empty => the
+  // backend's tip link. MotionRuntime::moveCircular sets it from CircularTarget::tip_link.
+  std::string tip_link;
 };
 
 // --- Process path: cartesian waypoint (Section 8) ----------------------------

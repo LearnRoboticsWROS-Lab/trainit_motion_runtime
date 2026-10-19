@@ -1,0 +1,14 @@
+m2_5 capture m3_4_runner_stop
+moveit_ros_planning_interface 2.5.10 | behaviortree_cpp 4.10.0 | rmw rmw_fastrtps_cpp
+
+=== scenario STOP-RUNNER-01
+pins: trainit_run_bt blocked in MoveToNamed's execution (held by the fake) receives SIGINT: the motion in flight gets move_group's stop event (2.2.0: nothing was sent); the blocked tick does not return, the launch's escalation ends the process
+child /trainit_run_bt: trainit_run_bt --ros-args --params-file <stop params> (tree test/data/m3_4/runner_stop_tree.xml: one MoveToNamed ready)
+script: execute_trajectory: HOLD(1)
+execution in flight before SIGINT: yes
+after SIGINT, events of the root move_group fakes (summaries):
+(none)
+after SIGINT, topics heard (sorted):
+/trajectory_execution_event String: stop
+child /trainit_run_bt: killed by signal 9 (did not exit within the grace period after SIGINT), 'BT finished: (absent)'
+

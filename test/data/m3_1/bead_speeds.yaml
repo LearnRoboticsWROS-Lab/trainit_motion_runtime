@@ -1,0 +1,5 @@
+path_name: bead_speeds
+orientation: [0.0, 0.0, 0.0, 1.0]
+waypoints:
+  - {position: [0.5, 0.0, 0.3], velocity: 0.07}
+  - {position: [0.5, 0.02, 0.3]}

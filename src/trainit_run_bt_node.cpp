@@ -13,6 +13,7 @@
 #include <tf2_ros/transform_listener.h>
 #include <chrono>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -31,6 +32,7 @@
 #include "trainit_motion_runtime/bt_profiles.hpp"
 #include "trainit_motion_runtime/end_effector_contract.hpp"
 #include "trainit_motion_runtime/end_effector_registry.hpp"
+#include "trainit_motion_runtime/path_library.hpp"
 
 using namespace trainit;
 
@@ -62,6 +64,51 @@ std::vector<std::string> getStrArray(const rclcpp::Node::SharedPtr& n, const std
   if (!n->has_parameter(name)) n->declare_parameter(name, def);
   return n->get_parameter(name).as_string_array();
 }
+
+// vNext M3.4 (owner decision D8, the MINIMAL stop scope): when orchestration stops while the tree
+// runs -- SIGINT/SIGTERM, or any rclcpp::shutdown() -- the motion in flight gets the runtime's stop
+// request, MotionRuntime::stop() (move_group's execution "stop" event: it stops the execution of
+// every route, the Pilz sequence included). A PRE-shutdown callback, so the context is still valid
+// and the request can be published. Once per run; removed with this object. The motion nodes stay
+// synchronous: the tick blocked inside the motion is NOT interrupted (a halt is not preemption, D8).
+// The context is the global default one (rclcpp::init's, the one SIGINT shuts down). The callback
+// runs on the signal handler's thread: the destructor disarms under the same mutex, so it returns
+// only once an invocation in flight has finished (the runtime outlives this object).
+class StopOnShutdown
+{
+public:
+  StopOnShutdown(MotionRuntime& runtime, const rclcpp::Logger& log)
+  : context_(rclcpp::contexts::get_global_default_context()), state_(std::make_shared<State>())
+  {
+    handle_ = context_->add_pre_shutdown_callback([state = state_, &runtime, log]() {
+      std::lock_guard<std::mutex> lock(state->m);
+      if (!state->armed) return;
+      state->armed = false;
+      RCLCPP_WARN(log, "shutdown requested while the tree runs: stopping the motion in flight "
+                       "(MotionRuntime::stop)");
+      const MotionResult r = runtime.stop();
+      if (!r.success) RCLCPP_ERROR(log, "MotionRuntime::stop failed: %s", r.stage.c_str());
+    });
+  }
+  ~StopOnShutdown()
+  {
+    context_->remove_pre_shutdown_callback(handle_);
+    std::lock_guard<std::mutex> lock(state_->m);   // waits for an invocation in flight
+    state_->armed = false;
+  }
+  StopOnShutdown(const StopOnShutdown&) = delete;
+  StopOnShutdown& operator=(const StopOnShutdown&) = delete;
+
+private:
+  struct State
+  {
+    std::mutex m;
+    bool armed{true};
+  };
+  rclcpp::Context::SharedPtr context_;
+  std::shared_ptr<State> state_;
+  rclcpp::PreShutdownCallbackHandle handle_;
+};
 
 // task_parameters.* (ROS params) -> blackboard STRINGS (arrays -> "a;b;c").
 // Ported from the reference framework's loader.
@@ -178,6 +225,27 @@ int main(int argc, char** argv)
   const bool canonical = contract.canonical();
   RCLCPP_INFO(log, "%s", contractLine(contract).c_str());
 
+  // The application's path library (vNext M3.1, ADR-0024): optional. A paths file that does not
+  // load -- structure, a capability its provider lacks, inline geometry -- is a configuration error,
+  // exit 2 naming the path, before anything moves.
+  const std::string paths_file = getStr(node, "paths_file", "");
+  std::shared_ptr<const PathLibrary> paths;
+  if (!paths_file.empty())
+  {
+    try
+    {
+      paths = std::make_shared<const PathLibrary>(
+        loadPathLibrary(paths_file, PathRuntimeFacts{*backend, cfg.tip_link}));
+    }
+    catch (const std::exception& e)
+    {
+      RCLCPP_FATAL(log, "paths_file %s REFUSED: %s", paths_file.c_str(), e.what());
+      rclcpp::shutdown();
+      return 2;
+    }
+    RCLCPP_INFO(log, "paths_file %s: %zu path(s)", paths_file.c_str(), paths->size());
+  }
+
   // A namespaced robot's MoveIt, scene, joint-state, ServoTrack and end-effector names stay in its
   // namespace (ADR-0023 Decision 5): a remap that sends one of them out of it, onto another robot, is
   // refused here, once the contract is read and before any client exists. The root is not checked
@@ -233,6 +301,28 @@ int main(int argc, char** argv)
   else                       process = std::make_unique<MockProcessController>(node->get_logger());
 
   MotionProfileRegistry profiles = loadMotionProfiles(profiles_file);
+  // vNext M3.1: a path or segment that names a profile this runner did not load is refused here,
+  // before the tree runs, not when FollowPath reaches it after earlier motions.
+  if (paths)
+  {
+    for (const auto& name : paths->names())
+    {
+      const PathSpec* spec = paths->find(name);
+      std::vector<std::string> named;
+      if (!spec->profile.empty()) named.push_back(spec->profile);
+      for (const auto& seg : spec->segments)
+        if (!seg.profile.empty()) named.push_back(seg.profile);
+      for (const auto& prof : named)
+        if (!profiles.count(prof))
+        {
+          RCLCPP_FATAL(log, "paths_file %s REFUSED: path '%s' names profile '%s', which motion_profiles_file "
+                       "'%s' does not define -- exit 2", paths_file.c_str(), name.c_str(), prof.c_str(),
+                       profiles_file.c_str());
+          rclcpp::shutdown();
+          return 2;
+        }
+    }
+  }
   BtContext ctx{runtime.get(), gripper.get(), process.get(), node};
   ctx.scene = &runtime->scene();   // what the scene nodes write (vNext M2.7: the nodes see only the door)
 
@@ -272,6 +362,7 @@ int main(int argc, char** argv)
   bb->set<BtContext*>(BB_BT_CONTEXT, &ctx);
   bb->set<MotionProfileRegistry>(BB_MOTION_PROFILES, profiles);
   bb->set<rclcpp::Node::SharedPtr>(BB_ROS_NODE, node);
+  if (paths) bb->set<std::shared_ptr<const PathLibrary>>(BB_PATH_LIBRARY, paths);
   loadTaskParameters(node, bb);
 
   BT::Tree tree;
@@ -298,6 +389,20 @@ int main(int argc, char** argv)
       return 2;
     }
   }
+
+  // vNext M3.5: the process channels the tree's ProcessEvent nodes name (literally) are made ready
+  // before the first tick -- with the ros controller, their publishers exist during the DDS settle
+  // below, so a driver that subscribed early has matched before the first event (nothing is published
+  // before the first event). A channel read from the blackboard ({key}) and the legacy aliases
+  // (EnableProcess / DisableProcess) keep creating theirs at their first event.
+  tree.applyVisitor([&process](const BT::TreeNode* n) {
+    if (n->registrationName() != "ProcessEvent") return;
+    const auto& ports = n->config().input_ports;
+    const auto channel = ports.find("channel");
+    if (channel == ports.end() || !isLogicalChannel(channel->second)) return;   // a {key} is read at its tick
+    const auto kind = ports.find("kind");
+    process->prepare(channel->second, kind != ports.end() && kind->second == "set_value");
+  });
 
 #ifdef BTCPP_GROOT2_SUPPORT
   std::unique_ptr<BT::Groot2Publisher> groot;
@@ -328,6 +433,7 @@ int main(int argc, char** argv)
   BT::NodeStatus status = BT::NodeStatus::RUNNING;
   try
   {
+    const StopOnShutdown stop_on_shutdown(*runtime, log);   // vNext M3.4 (D8): only while the tree runs
     while (rclcpp::ok() && status == BT::NodeStatus::RUNNING)
     {
       status = tree.tickOnce();

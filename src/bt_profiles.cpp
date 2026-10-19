@@ -17,8 +17,18 @@ MotionOptions optionsFromNode(const YAML::Node& n, const MotionOptions& base)
   if (n["acceleration_scaling"])       o.acceleration_scaling = n["acceleration_scaling"].as<double>();
   if (n["planning_time"])              o.planning_time = n["planning_time"].as<double>();
   if (n["planning_attempts"])          o.planning_attempts = n["planning_attempts"].as<int>();
-  if (n["goal_position_tolerance"])    o.goal_position_tolerance = n["goal_position_tolerance"].as<double>();
-  if (n["goal_orientation_tolerance"]) o.goal_orientation_tolerance = n["goal_orientation_tolerance"].as<double>();
+  // vNext M3.4: a tolerance the profile (or the file's default) carries is marked requested; only a
+  // NAMED profile hands that mark to a move (bt_nodes.cpp: the legacy routes clear it)
+  if (n["goal_position_tolerance"])
+  {
+    o.goal_position_tolerance = n["goal_position_tolerance"].as<double>();
+    o.goal_position_tolerance_requested = true;
+  }
+  if (n["goal_orientation_tolerance"])
+  {
+    o.goal_orientation_tolerance = n["goal_orientation_tolerance"].as<double>();
+    o.goal_orientation_tolerance_requested = true;
+  }
   if (n["retime_with_totg"])           o.retime_with_totg = n["retime_with_totg"].as<bool>();
   if (n["smooth_with_ruckig"])         o.smooth_with_ruckig = n["smooth_with_ruckig"].as<bool>();
   return o;

@@ -342,6 +342,11 @@ inline std::string environmentLine()
          rmw_get_implementation_identifier();
 }
 
+// The legacy families vNext M3.4 moved (their AFTER: test/data/m3_4/legacy_after/).
+inline constexpr const char* kM34LegacyAfter[] = {
+  "planned_waypoint", "planned_lin_circ", "planner_identity", "sequences", "task_runner", "task_runner_2",
+  "state_reads", "servo_track_2", "namespace", "namespace_remap"};
+
 class Family
 {
 public:
@@ -350,6 +355,11 @@ public:
   explicit Family(std::string name, std::string frozen_dir = TRAINIT_M25_DATA_DIR)
   : name_(std::move(name)), frozen_dir_(std::move(frozen_dir))
   {
+    // vNext M3.4 (owner D3): a family whose approved M3.4 scenarios moved compares with its AFTER
+    // record, test/data/m3_4/legacy_after/; its BEFORE stays where it was, byte for byte, and
+    // test_m3_4_capture_diff proves the difference is exactly the approved scenarios.
+    for (const char* moved : kM34LegacyAfter)
+      if (name_ == moved) frozen_dir_ = std::string(TRAINIT_M25_DATA_DIR) + "/../m3_4/legacy_after";
     text_ = "m2_5 capture " + name_ + "\n" + environmentLine() + "\n\n";
   }
 

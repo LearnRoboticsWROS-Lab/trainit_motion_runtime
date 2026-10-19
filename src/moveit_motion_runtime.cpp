@@ -6,6 +6,7 @@
 #include "trainit_motion_runtime/cartesian_waypoint_backend.hpp"
 #include "trainit_motion_runtime/scene_service_names.hpp"
 #include "trainit_motion_runtime/end_effector_registry.hpp"
+#include "trainit_motion_runtime/motion_failure.hpp"
 
 #include <moveit/move_group/capability_names.h>
 #include <moveit/robot_state/robot_state.h>
@@ -37,6 +38,9 @@ double durationToSec(const builtin_interfaces::msg::Duration& d)
 {
   return static_cast<double>(d.sec) + static_cast<double>(d.nanosec) * 1e-9;
 }
+
+// vNext M3.4: a CIRC aux point closer than this to the goal describes no circle [m]
+constexpr double kCircleMinAuxDistance = 1e-6;
 }  // namespace
 
 MoveItMotionRuntime::MoveItMotionRuntime(rclcpp::Node::SharedPtr node, Config config)
@@ -48,12 +52,17 @@ MoveItMotionRuntime::MoveItMotionRuntime(rclcpp::Node::SharedPtr node, Config co
   // names::append("", x), so a root runtime's eight names are byte-identical. The string
   // constructor's rclcpp::ok() check is kept (the Options constructor has none).
   if (!rclcpp::ok()) throw std::runtime_error("ROS does not seem to be running");
+  if (!(std::isfinite(config_.sequence_result_timeout_s) && config_.sequence_result_timeout_s > 0.0))
+    throw std::invalid_argument("sequence_result_timeout_s must be a finite number > 0 (got " +
+                                std::to_string(config_.sequence_result_timeout_s) + ")");
   arm_ = std::make_shared<MoveGroupInterface>(
     node_, MoveGroupInterface::Options(config_.group, MoveGroupInterface::ROBOT_DESCRIPTION,
                                        node_->get_namespace()));
   arm_->setPoseReferenceFrame(config_.base_frame);
   arm_->setEndEffectorLink(config_.tip_link);
   robot_model_ = arm_->getRobotModel();
+  mgi_goal_position_tolerance_ = arm_->getGoalPositionTolerance();
+  mgi_goal_orientation_tolerance_ = arm_->getGoalOrientationTolerance();
 
   selector_ = std::make_unique<ManualMotionStrategySelector>(
     config_.mode, config_.process_backend, config_.available_pipelines);
@@ -286,6 +295,15 @@ bool MoveItMotionRuntime::doPlan(const std::string& pipeline, const std::string&
   arm_->setMaxAccelerationScalingFactor(options.acceleration_scaling);
   arm_->setPlanningTime(options.planning_time);
   arm_->setNumPlanningAttempts(std::max(1, options.planning_attempts));
+  // vNext M3.4 (owner D3): a REQUESTED goal tolerance reaches the MoveGroup request (a pose goal's
+  // position/orientation constraints); otherwise MoveGroupInterface's own default, set again on every
+  // plan so that no move inherits the previous one's. A joint goal keeps MoveGroupInterface's joint
+  // tolerance (MoveWaypoint refuses a Cartesian tolerance on a joint target).
+  arm_->setGoalPositionTolerance(options.goal_position_tolerance_requested ? options.goal_position_tolerance
+                                                                           : mgi_goal_position_tolerance_);
+  arm_->setGoalOrientationTolerance(options.goal_orientation_tolerance_requested
+                                      ? options.goal_orientation_tolerance
+                                      : mgi_goal_orientation_tolerance_);
 
   moveit::core::MoveItErrorCode code = arm_->plan(plan);
   planning_time = plan.planning_time_;
@@ -450,11 +468,34 @@ MotionResult MoveItMotionRuntime::moveLinear(const CartesianTarget& target, cons
 MotionResult MoveItMotionRuntime::moveCircular(const CircularTarget& target,
                                                const MotionOptions& options)
 {
+  // vNext M3.4 (owner D3): a circle point MoveIt cannot use is refused here, before the sequence
+  // goal: a non-finite one, or one ON the goal (no circle). What depends on the start (the start's
+  // radius about a centre, a start/via/goal line) is Pilz CIRC's to refuse: it knows the start.
+  const char* aux_name = target.aux_is_center ? "centre" : "via point";
+  auto refused = [&](const std::string& why, const char* cause) {
+    RCLCPP_ERROR(node_->get_logger(), "CIRC: %s -- nothing was sent", why.c_str());
+    MotionResult r = MotionResult::failure("CIRC: " + why);
+    r.phase = MotionPhase::REQUEST;
+    r.cause = cause;
+    return r;
+  };
+  if (!(std::isfinite(target.aux.x) && std::isfinite(target.aux.y) && std::isfinite(target.aux.z)))
+    return refused(std::string("the ") + aux_name + " is not finite", kCauseInvalidPose);
+  const auto& g = target.goal;
+  for (const double v : {g.position.x, g.position.y, g.position.z, g.orientation.x, g.orientation.y,
+                         g.orientation.z, g.orientation.w})
+    if (!std::isfinite(v)) return refused("the goal pose is not finite", kCauseInvalidPose);
+  const double dx = target.aux.x - g.position.x, dy = target.aux.y - g.position.y,
+               dz = target.aux.z - g.position.z;
+  if (!(std::sqrt(dx * dx + dy * dy + dz * dz) >= kCircleMinAuxDistance))
+    return refused(std::string("the ") + aux_name + " is on the goal: no circle", kCauseCircleGeometry);
+
   // Pilz CIRC via a single-item sequence (carries the interim/center point).
   ProcessSegment seg;
   seg.name = "circ";
   seg.type = ProcessSegmentType::CIRCULAR;
   seg.target_pose = target.goal;
+  seg.tip_link = target.tip_link;   // vNext M3.4 (owner D3): empty = the configured tip
   if (target.aux_is_center)
     seg.circle_center = target.aux;
   else
@@ -496,7 +537,8 @@ MotionResult MoveItMotionRuntime::moveCollisionFree(const MotionTarget& target,
 MotionResult MoveItMotionRuntime::executeProcessSequence(
   const std::vector<ProcessSegment>& segments, const MotionOptions& options)
 {
-  PilzSequenceBackend backend(node_, config_.group, config_.tip_link, config_.base_frame);
+  PilzSequenceBackend backend(node_, config_.group, config_.tip_link, config_.base_frame,
+                              config_.sequence_result_timeout_s);
   return backend.run(segments, options);
 }
 
@@ -559,9 +601,22 @@ PlannerMode MoveItMotionRuntime::plannerMode() const
 
 geometry_msgs::msg::PoseStamped MoveItMotionRuntime::currentTipPose() const
 {
-  // Exactly the read the BT nodes made through moveGroup() before vNext M2.5: the same
-  // MoveGroupInterface, the same current-state monitor (started on first use) and fallback.
-  return arm_->getCurrentPose(config_.tip_link);
+  // The read the BT nodes made through moveGroup() before vNext M2.5 (getCurrentPose(tip)): the
+  // same MoveGroupInterface and current-state monitor (started on first use), the same 1 s wait,
+  // the same FK and stamp. vNext M3.4 (R-M3-20, owner D3): what getCurrentPose turned into the
+  // identity pose is now a RobotStateUnavailable naming its reason.
+  const moveit::core::RobotStatePtr state = arm_->getCurrentState(1.0);
+  if (!state)
+    throw RobotStateUnavailable("no fresh robot state within 1 s (group '" + config_.group +
+                                "': is joint_states published?)");
+  const moveit::core::LinkModel* link = state->getLinkModel(config_.tip_link);
+  if (!link)
+    throw RobotStateUnavailable("the tip link '" + config_.tip_link + "' is not a link of the robot model");
+  geometry_msgs::msg::PoseStamped pose;
+  pose.header.stamp = node_->now();
+  pose.header.frame_id = robot_model_->getModelFrame();
+  pose.pose = tf2::toMsg(state->getGlobalLinkTransform(link));
+  return pose;
 }
 
 }  // namespace trainit

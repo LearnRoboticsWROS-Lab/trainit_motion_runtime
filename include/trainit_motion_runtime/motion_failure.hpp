@@ -56,6 +56,27 @@ inline constexpr const char* kCauseUnknownMotion     = "UNKNOWN_MOTION";
 inline constexpr const char* kCauseServoExecution    = "SERVO_EXECUTION";
 inline constexpr const char* kCauseUnknownExecution  = "UNKNOWN_EXECUTION";
 inline constexpr const char* kCauseException         = "EXCEPTION";
+// ... vNext M3.1 (ADR-0024): MoveWaypoint's additive keys and FollowPath, refused before the
+// runtime is asked (REQUEST, so always a FAULT: the configuration's or the robot state's)
+inline constexpr const char* kCauseUnknownProfile    = "UNKNOWN_PROFILE";     // a named profile not loaded
+inline constexpr const char* kCauseFrameUnresolved   = "FRAME_UNRESOLVED";    // a pose's frame has no transform
+inline constexpr const char* kCauseUnsupportedFrame  = "UNSUPPORTED_FRAME";   // a frame on a target with no pose
+inline constexpr const char* kCauseInvalidPose       = "INVALID_POSE";        // a non-finite or non-unit pose
+inline constexpr const char* kCauseUnsupportedTcp    = "UNSUPPORTED_TCP";     // a tcp other than the tip (M3.4)
+inline constexpr const char* kCauseNoPathLibrary     = "NO_PATH_LIBRARY";     // no paths_file was loaded
+inline constexpr const char* kCauseUnknownPath       = "UNKNOWN_PATH";
+inline constexpr const char* kCausePathUnresolved    = "PATH_UNRESOLVED";     // a state's waypoint is not a pose
+inline constexpr const char* kCausePathGeometry      = "PATH_GEOMETRY";       // resolved states fail the geometry
+inline constexpr const char* kCauseNotAtPathStart    = "NOT_AT_PATH_START";   // the robot is not at states[0]
+// ... vNext M3.4 (ADR-0015 amendment M3.4, owner D3): what the runtime cannot honour is refused before
+// MoveIt is asked (REQUEST, so always a FAULT), never dropped or replaced silently
+inline constexpr const char* kCauseCircleGeometry    = "CIRCLE_GEOMETRY";     // a CIRC aux point on the goal
+inline constexpr const char* kCauseUnknownPlanner    = "UNKNOWN_PLANNER";     // not a planner mode (R-M3-19)
+inline constexpr const char* kCauseStateUnavailable  = "STATE_UNAVAILABLE";   // no fresh robot state (R-M3-20)
+inline constexpr const char* kCauseUnsupportedTolerance = "UNSUPPORTED_TOLERANCE";   // a goal tolerance not honourable
+// ... vNext M3.5 (ADR-0024, M3_DESIGN §9): FollowPath's event-free runs of a path (from= to=)
+inline constexpr const char* kCausePathRange         = "PATH_RANGE";          // from/to is not a run of the path
+inline constexpr const char* kCauseNotAtPathState    = "NOT_AT_PATH_STATE";   // a run ended away from its event state
 
 // NONE on success; else TARGET or FAULT by the table above.
 MotionFailureClass classifyMotionFailure(const MotionResult& r);

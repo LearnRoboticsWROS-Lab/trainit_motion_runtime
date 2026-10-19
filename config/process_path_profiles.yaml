@@ -1,19 +1,7 @@
-# Process-path backend profiles (documentation / future config-driven selection).
+# Process-path backend profiles -- SUPERSEDED (vNext M3.1, ADR-0025).
 #
-# pilz_sequence       : LIN/CIRC segments chained via the Pilz MoveGroupSequence
-#                       action (sequence_move_group) with optional blending.
-# cartesian_waypoints : dense cartesian path via computeCartesianPath + TOTG/Ruckig
-#                       retiming. Secondary on FR3WML (KDL Cartesian is fragile).
-
-pilz_sequence:
-  action: sequence_move_group
-  pipeline: pilz_industrial_motion_planner
-  supports_blending: true
-  supports_circular: true
-
-cartesian_waypoints:
-  eef_step: 0.005
-  jump_threshold: 0.0
-  fraction_threshold: 1.0      # accept only complete paths unless allow_partial
-  retime: totg                 # then optional ruckig smoothing
-  supports_circular: false     # approximated by dense sampling
+# What this file used to document (pilz_sequence: blending, circular arcs; cartesian_waypoints:
+# eef_step 0.005, jump_threshold 0.0, fraction_threshold 1.0, TOTG retiming, no native arcs) is
+# now THE registry's: config/planner_profiles.yaml, `providers.pilz_sequence` and
+# `providers.cartesian_waypoints` (schema 2), checked against the code by test_planner_registry.
+# Nothing ever read this file; it stays installed, empty, so a path that names it still opens.

@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>trainit_motion_runtime</name>
-  <version>2.1.0</version>
+  <version>2.5.0</version>
   <description>TrainIt Motion Runtime: a robot-agnostic, multi-planner motion
     framework on top of MoveIt 2 (discrete PTP/LIN/CIRC, free-space OMPL/CHOMP,
     process-path planning, validation and metrics). Embeds the generic planning
@@ -20,8 +20,10 @@
   <depend>std_srvs</depend>
   <depend>control_msgs</depend>
   <depend>trajectory_msgs</depend>   <!-- ADR-0022: the FollowJointTrajectory point of an EEF axis -->
-  <!-- ADR-0022: the end-effector state (EndEffectorState); a mandatory sibling since TMR 2.0.0 -->
-  <depend>trainit_interfaces</depend>
+  <!-- ADR-0022: the end-effector state (EndEffectorState); a mandatory sibling since TMR 2.0.0.
+       ADR-0026 (TMR 2.5.0): the grasp candidate (GraspCandidate, GraspCandidateArray) of 0.2.0 -->
+  <depend version_gte="0.2.0">trainit_interfaces</depend>
+  <depend>diagnostic_msgs</depend>   <!-- ADR-0026: a grasp candidate's metadata (KeyValue) -->
   <depend>shape_msgs</depend>
   <depend>moveit_core</depend>
   <depend>moveit_msgs</depend>

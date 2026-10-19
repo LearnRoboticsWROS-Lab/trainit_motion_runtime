@@ -12,6 +12,7 @@
 #define TRAINIT_MOTION_RUNTIME__MOTION_RUNTIME_HPP_
 
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -23,6 +24,14 @@
 
 namespace trainit
 {
+
+// vNext M3.4 (R-M3-20, owner D3): a robot-state read that has no fresh state to read. Thrown by
+// MotionRuntime::currentTipPose(); a node that reads the state turns it into a FAILURE that names
+// this reason. Never answered with a pose: the identity pose it returned before is a VALID pose.
+struct RobotStateUnavailable : std::runtime_error
+{
+  using std::runtime_error::runtime_error;
+};
 
 class MotionRuntime
 {
@@ -53,7 +62,8 @@ public:
 
   // Robot state (vNext M2.5: the one read the BT nodes need, behind the door) --
   // The CURRENT pose of the runtime's configured tip link, stamped in the robot model frame
-  // (the URDF root, which may differ from the base frame poses are given in).
+  // (the URDF root, which may differ from the base frame poses are given in). Throws
+  // RobotStateUnavailable when there is no fresh robot state to read (vNext M3.4).
   virtual geometry_msgs::msg::PoseStamped currentTipPose() const = 0;
 
   // Frames and named states (vNext M2.7, owner decision 11.2: the reads the BT nodes and TaskRunner

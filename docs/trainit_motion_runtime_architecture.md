@@ -301,6 +301,151 @@ The wait's defaults below are the current public behaviour, ratified by the owne
   run]`. vNext M2.7's multi-runner tests run with `groot_monitor` false. A port per runner is the
   cell level's (ADR-0020; KNOWN_DEBT).
 
+## Paths and provider capabilities (vNext M3.1, ADR-0024, ADR-0025)
+
+A **path** is data, not a tree: `paths.yaml` (schema 1) names an application's paths and the
+runner loads it from its `paths_file` parameter (`path_library.hpp`; a file that does not load is a
+configuration error, exit 2, naming the path). A path is `states` (>= 2; `{waypoint: <name>}` or an
+inline `{pose: ...}`) joined by `segments` (states - 1; `lin`, or `circ` with exactly one of `via`
+/ `center`), with a `continuity` (`stop` | `blend`, a `blend_radius_m` per segment, the last 0), a
+`frame` and `tcp`, a `profile`, scaling and an optional `goal_tolerance`; or a DENSE `source` (TMR's
+process-path YAML or a CSV of x,y,z, or a polyline / circle / rectangle / raster generator).
+`states[0]` is the START: the robot must be there (`start_tolerance`, default 5 mm / 0.035 rad).
+
+`FollowPath path=<name>` runs one path as ONE motion through the door: a segment path, or a stopped
+dense path, is one Pilz `sequence_move_group` goal (`executeProcessSequence`); a continuous dense
+path (`continuity: blend`) is one Cartesian path (`executeCartesianProcess`, on a runner whose
+`process_path_backend` is `cartesian_waypoints`). Every pose is put into the base frame through TF
+first; waypoint states are read from the blackboard (`<wp>.position`, `.orientation`, `.frame`) at
+tick time and the geometry (circle definition, blend radii, zero-length segments) is checked again
+once resolved. A refusal sends nothing and names its cause (`fault`: `NO_PATH_LIBRARY`,
+`UNKNOWN_PATH`, `PATH_UNRESOLVED`, `PATH_GEOMETRY`, `NOT_AT_PATH_START`, `FRAME_UNRESOLVED`,
+`UNKNOWN_PROFILE`, and since M3.4 `STATE_UNAVAILABLE`). Not in M3.1: a `ptp` segment inside a path
+(reserved), a tcp other than the runtime's tip link (the end-effector milestone), process events at
+path states (M3.5).
+
+The registry's **schema 2** (`config/planner_profiles.yaml`) adds `capabilities` (12 live tokens, 3
+reserved), `providers` (one row per MoveIt route: `pilz_ptp`, `ompl`, `ompl_chomp`, `pilz_lin`,
+`pilz_circ`, `pilz_sequence`, `cartesian_waypoints`, each with what it `provides`) and
+`provider_defaults`; `motion_providers.cpp` is its parity-tested C++ mirror. The path library
+derives what each path requires (`requiredCapabilities`) and refuses a provider that lacks a token,
+before anything moves. `config/process_path_profiles.yaml` is folded into the two path rows.
+
+**MoveWaypoint** reads three more optional keys, each changing only a waypoint that carries it:
+`profile` (a loaded motion profile, instead of lin|circ -> approach, else transit), `frame` (the
+pose's frame, resolved through TF; refused on a joint or named waypoint) and `tcp` (must be the tip
+link). Goal tolerances on the MoveGroupInterface routes arrived with M3.4 (below).
+
+The TaskRunner YAML (`trainit_run_task`) is LEGACY / INTERNAL: frozen, no new feature.
+
+## Execution hardening (vNext M3.4, TMR 2.3.0, ADR-0015 amendment M3.4)
+
+What a canonical bundle asks for is executed, or refused loudly before MoveIt is asked; nothing is
+dropped or replaced silently (owner decisions D3, D8). Each change was captured BEFORE (2.2.0) and
+AFTER against the fake move_group (`test/data/m3_4/`).
+
+- **Goal tolerances (data-gated).** A goal tolerance a NAMED motion profile carries -- a waypoint's
+  `profile` key, which TSA writes for every task-program move -- reaches the MoveGroup request on
+  the MoveGroupInterface routes (Pilz PTP/LIN, OMPL, CHOMP-first) for a pose goal. A move that
+  requests none sends MoveGroupInterface's own defaults, set again on every plan (no move inherits
+  the previous one's). The legacy routes (a waypoint without `profile`, the port nodes) never send a
+  profile's tolerance, as before. A Cartesian tolerance on a ptp/free move to a joint target, or a
+  tolerance that is not a finite number > 0, is refused (`UNSUPPORTED_TOLERANCE`). The Pilz sequence
+  route always sent the options' tolerances (unchanged). `goal_tolerance` is now on the
+  `pilz_ptp`, `ompl`, `ompl_chomp` and `pilz_lin` rows.
+- **Planner tokens are a closed set.** MoveWaypoint's `planner` (any motion) and MoveCollisionFree's
+  `planner` port must be a planner mode; an unknown token fails (`UNKNOWN_PLANNER`) instead of
+  running the runtime's planner_mode. A known mode is unchanged (a mode whose pipeline is not
+  loaded still degrades as the registry documents).
+- **CIRC.** The centre form runs (the backend no longer throws); a non-finite goal or aux point
+  (`INVALID_POSE`), an aux point on the goal, or a sequence CIRC item with neither a via point nor a
+  centre (`CIRCLE_GEOMETRY`) is refused; what depends on the start is
+  Pilz CIRC's to refuse. `CircularTarget::tip_link` (`ProcessSegment::tip_link`) is the link of the
+  sequence item's goal and aux constraint. MoveWaypoint and FollowPath still accept only the tip
+  link as `tcp` (another TCP is the end-effector milestone's).
+- **The Cartesian backend** puts the MoveGroupInterface's pose reference frame and end-effector
+  link back on every exit: a path in another frame no longer changes how the next pose is read. It
+  reads the current state FIRST and, with none within 2 s, refuses before anything is sent
+  (`STATE_UNAVAILABLE`); it used to time the path from the model's default state and execute it.
+- **No state is not a pose.** `currentTipPose()` throws `RobotStateUnavailable` when no fresh robot
+  state arrives within 1 s (it returned the identity pose): StoreCurrentPose, ComputeTcpTarget,
+  CheckRobotState, ServoTrack (before any servo call, or releasing the stream) and FollowPath
+  (`STATE_UNAVAILABLE`) fail with the reason.
+- **A timed-out Pilz sequence goal is cancelled** before the failure (`RESULT_TIMEOUT`) is returned,
+  and its end is awaited for up to 5 s more (`Config::sequence_result_timeout_s`, 120 s by default, a
+  finite number > 0 or the runtime refuses to construct). A goal whose SEND times out (10 s) is not
+  cancelled (KNOWN_DEBT).
+- **Stop.** `trainit_run_bt` calls `MotionRuntime::stop()` (move_group's execution stop event) when
+  SIGINT/SIGTERM or a shutdown arrives while the tree runs. The nodes stay synchronous: the tick
+  blocked in the motion is not interrupted, so the process is ended by the launch's escalation
+  (preemption is a later motion-hardening milestone, D8).
+- **Aliases.** `motion: linear` / `circular` take the approach profile, as `lin` / `circ`.
+- **FollowPath's start check settles.** A motion's execution reports success when its trajectory's
+  time is up; an arm may still be settling (M3-B, Isaac: 27 mm right after the PTP into the path's
+  start, 1 mm at rest). The check waits up to 2 s for the robot to come within `start_tolerance`
+  and refuses (`NOT_AT_PATH_START`) only if it never does.
+
+## Process events and captures (vNext M3.5, TMR 2.4.0, ADR-0024, M3_DESIGN §9)
+A canonical task coordinates MOTION + PROCESS ACTIONS + PERCEPTION CAPTURE with generic nodes only (no
+`GlueOn`, `InspectionTask`, ...):
+- **`ProcessEvent kind= channel= value=`** -- `process_on` / `process_off` / `set_value` / `external`
+  onto the one `ProcessController` (ENABLE / DISABLE / SET_ANALOG_VALUE / TRIGGER). `channel` is a
+  LOGICAL application id (`isLogicalChannel`: a letter, then letters, digits or `_`), never a ROS topic,
+  a hardware address or a controller symbol: the controller binds it. Refused, nothing dispatched: an
+  unknown kind (`capture` is DetectObject's trigger, `dwell` is BT's `Sleep`), a channel that is not an
+  id, a misplaced, missing or non-finite value, no controller. `EnableProcess` / `DisableProcess` are
+  the unchanged legacy aliases. Every event is blocking; `external` has no handshake (ADR-0013 is not
+  implemented here).
+- **`RosProcessController`** keeps ONE publisher per channel and signal (`<channel>/process_enabled`
+  Bool, `<channel>/process_value` Float64, transient_local depth 1, relative: the runner's namespace)
+  for its lifetime: a late driver receives the latched last command (2.3.0 destroyed the publisher at
+  once). `trainit_run_bt` prepares the literal channels of the tree's ProcessEvent nodes before the
+  first tick.
+- **Paths with events.** `paths.yaml` records where a path STOPS for an event: `events: [{at: {state,
+  when: after_arrival | before_departure}, kind}]` (the action is the BT node). The loader refuses an
+  event on a dense path, out of range, before departing the last state, or a blend into an event state.
+  **`FollowPath from= to=`** runs the event-free part `states[from..to]` of the SAME path (same
+  provider, options, frames, whole-path geometry): a run cannot drive through an event state
+  (`PATH_RANGE`), `from == to` sends nothing (it confirms the robot is there), a run ending at an event
+  state confirms the arrival with the bounded settle (`NOT_AT_PATH_STATE`). A path with K event states
+  is about K+1 runs and K event nodes, never a node per sample.
+- **`DetectObject trigger="true"`** (a capture): the freshness boundary (the node clock, then the
+  arrival count) is set before calling `/perception/<detector>/detect` (std_srvs/Trigger, the perception
+  contract's on-demand service); only a result that arrives after it AND is stamped at or after it is
+  accepted; a stale one is rejected and the detector triggered again; a clock that is not running is
+  refused (`CLOCK_UNAVAILABLE`), a result on another clock rejected (`CLOCK_MISMATCH`), no answer
+  `TRIGGER_UNAVAILABLE`, no fresh result `DETECTION_TIMEOUT`. The result lands on the blackboard
+  (`<out_key>.*` + `.stamp`); nothing is recorded (D0 is later).
+
+## Grasp candidates and the manipulation idioms (vNext M3.6, TMR 2.5.0, ADR-0026)
+ANY grasp producer proposes `trainit_interfaces/GraspCandidateArray` (best first; an empty array = no
+candidate); the runtime executes every candidate through ONE contract, whatever made it:
+- **`grasp_candidates.{hpp,cpp}`** (pure, MoveIt-free): `candidateProblem` / `arrayProblem` (a frame, a
+  unique id, a provider, a finite pose with a unit quaternion, a finite UNIT approach within 1e-3, a
+  finite standoff >= 0, a confidence in 0..1 -- never repaired); `projectDetection`, the MINIMAL M3
+  bridge from a Detection3D (approach = -normal, the normal facing the camera; an identity orientation
+  = no normal -> the configured default approach, else refused; a zero / non-finite / non-unit
+  quaternion refused; no rotation about the approach invented); `alignApproach` (owner decision
+  M3.6-1): R_tcp = MinRot(R_ref e_z -> a) * R_ref, refused within 1e-6 rad of antiparallel.
+- **`DetectCandidates source=candidates | detections`**: `/perception/<producer>/grasp_candidates` or
+  the projected `/perception/<detector>/detections` (cell-global, ADR-0023); fresh by arrival; validated
+  WHOLE (one unusable candidate refuses the array); the first `keep` in published order, never sorted;
+  pose, approach and normal transformed into `target_frame` by one transform per source frame; written
+  on `<out>.<i>.{position, orientation, approach, normal, standoff_m, eef, site, score, confidence, id,
+  provider, object_class, object_id, frame, stamp}` + `<out>.count`, the count reset to 0 at the start
+  of every tick. NO_CANDIDATES is a verdict (no `fault`); INVALID_CANDIDATE, DETECTION_TIMEOUT,
+  TF_LOOKUP_FAILED, INVALID_CONFIGURATION are faults. An unreadable `keep` is refused, never defaulted.
+- **`SetWaypointFromCandidate`** (pure blackboard): WHERE only -- grasp = p, PreGrasp = p - s a (the
+  step's standoff, else the candidate's; > 0), Retract = p - d a or p + d e_z; one orientation,
+  `align_approach` on the `orientation_from` waypoint (a waypoint without a frame is in the runtime's
+  base frame; another frame than the set's is refused); a candidate for another eef / site refused;
+  an unreadable `index` refused; nothing written on a refusal.
+- **The idioms** are BT sequences of existing nodes (TSA generates them): PreGrasp MoveWaypoint (ptp) ->
+  Approach (lin) -> CloseGripper -> VerifyGrasp held -> Retract (lin); a release at a taught target ->
+  [VerifyGrasp held] -> OpenGripper -> VerifyGrasp released -> Retract. A failed verification stops the
+  sequence. Not in 2.5.0: a triggered candidate detection, a TF lookup at the observation's stamp, an
+  age limit on a candidate set, a tilt limit for align_approach (KNOWN_DEBT).
+
 ## Not yet (by design)
 - STOMP: declared in the registry and never loaded — there is no STOMP plugin for MoveIt
   on Humble, so it needs a port, not an install.

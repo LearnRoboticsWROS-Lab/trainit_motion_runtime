@@ -6,7 +6,10 @@
 #include "trainit_motion_runtime/bt_profiles.hpp"
 #include "trainit_motion_runtime/detection_candidates.hpp"
 #include "trainit_motion_runtime/end_effector_registry.hpp"
+#include "trainit_motion_runtime/grasp_candidates.hpp"
 #include "trainit_motion_runtime/motion_failure.hpp"
+#include "trainit_motion_runtime/motion_providers.hpp"
+#include "trainit_motion_runtime/path_library.hpp"
 #include "trainit_motion_runtime/process_path_generator.hpp"
 #include "trainit_motion_runtime/scene_service_names.hpp"
 
@@ -40,6 +43,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <set>
 
 namespace trainit
@@ -53,10 +57,18 @@ BtContext* ctxOf(const BT::NodeConfig& cfg)
   return cfg.blackboard->get<BtContext*>(BB_BT_CONTEXT);
 }
 
+// The LEGACY profile lookup (a waypoint with no `profile` key, the port nodes' `profile`): a
+// missing name falls back to "default", and the profile's goal tolerance is never SENT to the
+// MoveGroupInterface routes -- MoveGroupInterface's defaults, as since TMR 1.x (the legacy approach
+// profile has carried 0.001 unsent all along). vNext M3.4: only a NAMED profile (namedProfile, a
+// canonical move's `profile` key) requests its tolerance.
 MotionOptions profileOf(const BT::NodeConfig& cfg, const std::string& name)
 {
   const auto& reg = cfg.blackboard->get<MotionProfileRegistry>(BB_MOTION_PROFILES);
-  return resolveProfile(reg, name);
+  MotionOptions o = resolveProfile(reg, name);
+  o.goal_position_tolerance_requested = false;
+  o.goal_orientation_tolerance_requested = false;
+  return o;
 }
 
 std::vector<double> parseVec(const std::string& s)
@@ -132,6 +144,7 @@ geometry_msgs::msg::Pose poseFromXyz(const std::array<double, 3>& p)
   return pose;
 }
 
+// vNext M3.4: throws RobotStateUnavailable (no fresh robot state); each caller fails with the reason.
 geometry_msgs::msg::Pose currentPose(BtContext* ctx)
 {
   return ctx->runtime->currentTipPose().pose;
@@ -206,6 +219,106 @@ MotionOptions resolveOpts(BT::TreeNode& node, const BT::NodeConfig& cfg, const s
     try { o.acceleration_scaling = std::clamp(std::stod(ac) / 100.0, 0.01, 1.0); } catch (const std::exception&) {}
   return o;
 }
+
+// --- vNext M3.1 (ADR-0024): frames, named profiles ------------------------------------------------
+// A pose given in a frame other than the runtime's base frame cannot be resolved (no TF buffer, no
+// transform): the move is refused, never sent in the wrong frame.
+struct FrameError : std::runtime_error
+{
+  using std::runtime_error::runtime_error;
+};
+// A frame on a target that has no pose (a joint or named waypoint): unsupported input, not a
+// missing transform.
+struct UnsupportedFrame : std::runtime_error
+{
+  using std::runtime_error::runtime_error;
+};
+
+// The transform taking `frame` into the runtime's base frame; nullopt when none is needed.
+std::optional<geometry_msgs::msg::TransformStamped> toBaseTransform(BtContext* ctx, const std::string& frame)
+{
+  const std::string base = ctx->runtime->baseFrame();
+  if (frame.empty() || frame == base) return std::nullopt;
+  if (!ctx->tf)
+    throw FrameError("frame '" + frame + "' needs a transform into '" + base +
+                     "', and this runner has no TF buffer");
+  try
+  {
+    return ctx->tf->lookupTransform(base, frame, tf2::TimePointZero, tf2::durationFromSec(1.0));
+  }
+  catch (const std::exception& e)
+  {
+    throw FrameError("no transform from '" + frame + "' into '" + base + "': " + e.what());
+  }
+}
+
+geometry_msgs::msg::Pose inBase(const geometry_msgs::msg::Pose& p,
+                                const std::optional<geometry_msgs::msg::TransformStamped>& T)
+{
+  if (!T) return p;
+  geometry_msgs::msg::Pose out;
+  tf2::doTransform(p, out, *T);
+  return out;
+}
+
+geometry_msgs::msg::Point inBase(const geometry_msgs::msg::Point& p,
+                                 const std::optional<geometry_msgs::msg::TransformStamped>& T)
+{
+  if (!T) return p;
+  geometry_msgs::msg::Point out;
+  tf2::doTransform(p, out, *T);
+  return out;
+}
+
+// One transform per frame within a tick: every pose of one move or path is resolved with the same
+// transform (a frame that moves, e.g. a wrist camera's, is never sampled twice).
+class FrameCache
+{
+public:
+  explicit FrameCache(BtContext* ctx) : ctx_(ctx) {}
+  const std::optional<geometry_msgs::msg::TransformStamped>& toBase(const std::string& frame)
+  {
+    auto it = cache_.find(frame);
+    if (it == cache_.end()) it = cache_.emplace(frame, toBaseTransform(ctx_, frame)).first;
+    return it->second;
+  }
+
+private:
+  BtContext* ctx_;
+  std::map<std::string, std::optional<geometry_msgs::msg::TransformStamped>> cache_;
+};
+
+// "" when `p` is finite with a unit quaternion (1e-3), else the reason.
+std::string poseProblem(const geometry_msgs::msg::Pose& p)
+{
+  const double v[] = {p.position.x, p.position.y, p.position.z,
+                      p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w};
+  for (double x : v)
+    if (!std::isfinite(x)) return "a non-finite value";
+  const double n = std::sqrt(p.orientation.x * p.orientation.x + p.orientation.y * p.orientation.y +
+                             p.orientation.z * p.orientation.z + p.orientation.w * p.orientation.w);
+  if (std::abs(n - 1.0) > 1e-3) return "a non-unit quaternion (norm " + std::to_string(n) + ")";
+  return "";
+}
+
+// vNext M3.4 (M3-B): how long FollowPath waits for the robot to settle within start_tolerance [s]
+constexpr double kPathStartSettleS = 2.0;
+
+// vNext M3.5: FollowPath's settle wait read a non-finite tip pose (refused INVALID_POSE, never a distance)
+struct InvalidTipPose : std::runtime_error
+{
+  using std::runtime_error::runtime_error;
+};
+
+// A NAMED profile, which must be loaded: a name that is not there is refused (resolveProfile's
+// silent fallback to "default" stays the legacy ports' behaviour).
+std::optional<MotionOptions> namedProfile(const BT::NodeConfig& cfg, const std::string& name)
+{
+  const auto& reg = cfg.blackboard->get<MotionProfileRegistry>(BB_MOTION_PROFILES);
+  const auto it = reg.find(name);
+  if (it == reg.end()) return std::nullopt;
+  return it->second;
+}
 }  // namespace
 
 // ═══ motion ═══════════════════════════════════════════════════════════════════
@@ -264,6 +377,13 @@ BT::NodeStatus MoveWaypoint::tick()
   const std::string speed   = field("speed");
   const std::string accel   = field("accel");
   const std::string exec    = field("execution");
+  // vNext M3.1 (ADR-0024), additive and data-gated: a waypoint that does not carry them moves
+  // exactly as before. `profile` names the motion profile (instead of lin|circ -> approach, else
+  // transit); `frame` is the frame of its position/orientation (resolved into the base frame through
+  // TF before the move); `tcp` must be the runtime's tip link in M3.1 (another TCP: M3.4).
+  const std::string profile_name = field("profile");
+  const std::string frame        = field("frame");
+  const std::string tcp          = field("tcp");
 
   if (!isKnownMotion(motion))
   {
@@ -286,15 +406,73 @@ BT::NodeStatus MoveWaypoint::tick()
                    wp.c_str(), exec.c_str(), kExecutionAccepted);
     return refused(exec == "servo" ? kCauseServoExecution : kCauseUnknownExecution);
   }
+  // vNext M3.4 (R-M3-19, owner D3): `planner` is a CLOSED set too -- the registry's planner modes.
+  // An unknown token used to fall back to the runtime's planner_mode (ptp/free) or be ignored
+  // (lin/circ): the move ran with a planner nobody asked for. Now it is refused, whatever the motion.
+  std::optional<PlannerMode> planner_mode;
+  if (!planner.empty())
+  {
+    planner_mode = plannerModeFromString(planner);
+    if (!planner_mode)
+    {
+      RCLCPP_ERROR(safeLog(config()), "MoveWaypoint '%s': unknown planner '%s' -- accepted: %s. Refusing to move "
+                   "(an unknown planner must not fall back to the runtime's planner_mode).",
+                   wp.c_str(), planner.c_str(), plannerModeList().c_str());
+      return refused(kCauseUnknownPlanner);
+    }
+  }
 
   auto* ctx = ctxOf(config());
 
-  // base profile by motion type, then per-waypoint speed/accel overrides (percent).
-  const std::string base_profile = (motion == "lin" || motion == "circ") ? "approach" : "transit";
-  MotionOptions opts = profileOf(config(), base_profile);
+  if (!tcp.empty() && tcp != ctx->runtime->tipLink())
+  {
+    RCLCPP_ERROR(nlog(config()), "MoveWaypoint '%s': tcp '%s' is not the runtime's tip link '%s': "
+                 "UNSUPPORTED in M3.1 (another TCP comes with the motion hardening, M3.4)",
+                 wp.c_str(), tcp.c_str(), ctx->runtime->tipLink().c_str());
+    return refused(kCauseUnsupportedTcp);
+  }
+
+  // base profile by motion type (or the waypoint's named one), then per-waypoint speed/accel
+  // overrides (percent). vNext M3.4 (owner D3): the aliases linear / circular take the approach
+  // profile as lin / circ do (they took transit).
+  const bool cartesian = motion == "lin" || motion == "linear" || motion == "circ" || motion == "circular";
+  const std::string base_profile = cartesian ? "approach" : "transit";
+  MotionOptions opts;
+  if (profile_name.empty()) opts = profileOf(config(), base_profile);
+  else if (auto named = namedProfile(config(), profile_name)) opts = *named;
+  else
+  {
+    RCLCPP_ERROR(nlog(config()), "MoveWaypoint '%s': profile '%s' is not a loaded motion profile",
+                 wp.c_str(), profile_name.c_str());
+    return refused(kCauseUnknownProfile);
+  }
   if (!speed.empty()) try { opts.velocity_scaling = std::clamp(std::stod(speed) / 100.0, 0.01, 1.0); } catch (const std::exception&) {}
   if (!accel.empty()) try { opts.acceleration_scaling = std::clamp(std::stod(accel) / 100.0, 0.01, 1.0); } catch (const std::exception&) {}
+  // vNext M3.4 (owner D3): a goal tolerance the named profile requests is honoured (the runtime sends
+  // it) or refused here -- never dropped. Cartesian tolerances need a pose goal: a ptp/free move to a
+  // joint target has none (MoveIt's joint goal has no Cartesian tolerance).
+  if (opts.goal_position_tolerance_requested || opts.goal_orientation_tolerance_requested)
+  {
+    auto invalid = [](bool requested, double v) { return requested && !(std::isfinite(v) && v > 0.0); };
+    if (invalid(opts.goal_position_tolerance_requested, opts.goal_position_tolerance) ||
+        invalid(opts.goal_orientation_tolerance_requested, opts.goal_orientation_tolerance))
+    {
+      RCLCPP_ERROR(nlog(config()), "MoveWaypoint '%s': profile '%s': a goal tolerance must be a finite number > 0 "
+                   "(position %g m, orientation %g rad)", wp.c_str(), profile_name.c_str(),
+                   opts.goal_position_tolerance, opts.goal_orientation_tolerance);
+      return refused(kCauseUnsupportedTolerance);
+    }
+    if (!cartesian && type == "joint")
+    {
+      RCLCPP_ERROR(nlog(config()), "MoveWaypoint '%s': profile '%s' asks for a Cartesian goal tolerance, and a %s "
+                   "move to a joint target has no pose goal to apply it to: UNSUPPORTED (remove the tolerance "
+                   "from this move's profile, or move to a TCP pose)", wp.c_str(), profile_name.c_str(),
+                   motion.c_str());
+      return refused(kCauseUnsupportedTolerance);
+    }
+  }
 
+  FrameCache frames(ctx);   // vNext M3.1: one transform for the goal and its aux point
   auto buildPose = [&]() -> geometry_msgs::msg::Pose {
     geometry_msgs::msg::Pose p;
     auto pos = parseXyz3(field("position"));
@@ -302,7 +480,7 @@ BT::NodeStatus MoveWaypoint::tick()
     auto q = parseVec(field("orientation"));
     if (q.size() != 4) throw std::runtime_error("waypoint '" + wp + "' needs orientation qx;qy;qz;qw");
     p.orientation.x = q[0]; p.orientation.y = q[1]; p.orientation.z = q[2]; p.orientation.w = q[3];
-    return p;
+    return frame.empty() ? p : inBase(p, frames.toBase(frame));   // vNext M3.1: `frame`
   };
 
   // LIN/CIRC need a TCP pose. A waypoint captured as JOINTS (blind mode, type=named)
@@ -313,6 +491,9 @@ BT::NodeStatus MoveWaypoint::tick()
     const std::string named = field("named");
     if (!named.empty())
     {
+      if (!frame.empty())
+        throw UnsupportedFrame("a frame ('" + frame + "') on a waypoint that has no pose (named state '" +
+                               named + "')");
       auto p = ctx->runtime->namedPose(named);
       if (p) return *p;
       throw std::runtime_error("waypoint '" + wp + "': LIN/CIRC to named state '" + named +
@@ -336,6 +517,7 @@ BT::NodeStatus MoveWaypoint::tick()
       CircularTarget t; t.goal = cartesianGoal(); t.tip_link = tip;
       auto a = parseXyz3(field("aux"));
       t.aux.x = a[0]; t.aux.y = a[1]; t.aux.z = a[2];
+      if (!frame.empty()) t.aux = inBase(t.aux, frames.toBase(frame));   // the same frame, the same transform
       t.aux_is_center = (field("aux_is_center", "false") == "true");
       r = ctx->runtime->moveCircular(t, opts);
     }
@@ -344,6 +526,8 @@ BT::NodeStatus MoveWaypoint::tick()
       MotionTarget t; t.tip_link = tip;
       if (type == "joint")
       {
+        if (!frame.empty())
+          throw UnsupportedFrame("a frame ('" + frame + "') on a joint waypoint, which has no pose");
         JointTarget jt;
         const std::string named = field("named");
         if (!named.empty()) jt.named_state = named;
@@ -353,12 +537,21 @@ BT::NodeStatus MoveWaypoint::tick()
       else { t.pose = buildPose(); }
 
       PlanningOptions po; po.motion = opts;
-      std::optional<PlannerMode> mode;
-      if (!planner.empty()) mode = plannerModeFromString(planner);   // explicit per-waypoint planner
-      else if (motion == "ptp") mode = PlannerMode::PILZ;            // PTP defaults to Pilz PTP
+      std::optional<PlannerMode> mode = planner_mode;                // explicit per-waypoint planner
+      if (!mode && motion == "ptp") mode = PlannerMode::PILZ;        // PTP defaults to Pilz PTP
       po.mode = mode.value_or(ctx->runtime->plannerMode());          // else the launch planner_mode
       r = ctx->runtime->moveCollisionFree(t, po);
     }
+  }
+  catch (const FrameError& e)   // vNext M3.1: nothing was sent
+  {
+    RCLCPP_ERROR(nlog(config()), "MoveWaypoint '%s': %s", wp.c_str(), e.what());
+    return refused(kCauseFrameUnresolved);
+  }
+  catch (const UnsupportedFrame& e)
+  {
+    RCLCPP_ERROR(nlog(config()), "MoveWaypoint '%s': %s", wp.c_str(), e.what());
+    return refused(kCauseUnsupportedFrame);
   }
   catch (const std::exception& e)
   {
@@ -462,6 +655,16 @@ BT::PortsList MoveCollisionFree::providedPorts()
 BT::NodeStatus MoveCollisionFree::tick()
 {
   auto* ctx = ctxOf(config());
+  // vNext M3.4 (owner D3): an explicit planner that is not a planner mode is refused; it fell back to
+  // the runtime's planner_mode. An empty port is still the runtime's mode.
+  const std::string planner = in(*this, "planner", "");
+  const std::optional<PlannerMode> mode = plannerModeFromString(planner);
+  if (!planner.empty() && !mode)
+  {
+    RCLCPP_ERROR(nlog(config()), "MoveCollisionFree: unknown planner '%s' -- accepted: %s. Refusing to move.",
+                 planner.c_str(), plannerModeList().c_str());
+    return BT::NodeStatus::FAILURE;
+  }
   MotionTarget t;
   t.tip_link = in(*this, "tip_link");
   const std::string pose_key = in(*this, "pose_key"), named = in(*this, "named"), joints = in(*this, "joints");
@@ -477,7 +680,6 @@ BT::NodeStatus MoveCollisionFree::tick()
   PlanningOptions po;
   po.motion = resolveOpts(*this, config(), "transit");
   // empty/unset `planner` -> use the runtime's global planner_mode (launch param).
-  auto mode = plannerModeFromString(in(*this, "planner", ""));
   po.mode = mode.value_or(ctx->runtime->plannerMode());
   return ctx->runtime->moveCollisionFree(t, po).success ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
 }
@@ -506,6 +708,353 @@ BT::NodeStatus ExecuteProcessPath::tick()
   catch (const std::exception& e) { RCLCPP_ERROR(nlog(config()), "ExecuteProcessPath load failed: %s", e.what()); return BT::NodeStatus::FAILURE; }
   return ctx->runtime->executeCartesianProcess(path, resolveOpts(*this, config(), "process")).success
            ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
+}
+
+// vNext M3.1 (ADR-0024): ONE path of the runner's path library, as ONE motion. The path is data
+// (paths.yaml, validated when the runner loaded it: structure, provider capabilities, inline
+// geometry); this node resolves its waypoint states from the blackboard (<name>.position,
+// .orientation, .frame), puts every state into the runtime's base frame, re-checks the geometry,
+// requires the robot at states[0] (start_tolerance), then sends the rest through the door:
+//   motion_sequence  -> MotionRuntime::executeProcessSequence (one Pilz sequence goal; a
+//                              blend radius per segment on a 'continuity: blend' path, else 0)
+//   cartesian_path   -> MotionRuntime::executeCartesianProcess (a continuous dense path)
+// Speeds: segment velocity/acceleration_scaling > the segment's profile > the path's scaling > the
+// path's profile (or the `profile` port, "approach"); planning time/attempts and the goal tolerance
+// from the path's profile, `goal_tolerance` overriding it. A refusal sends nothing. `fault` as
+// MoveWaypoint's: written only for a failure that is not this target's (motion_failure.hpp).
+//
+// vNext M3.5 (M3_DESIGN §9): `from` / `to` (state indices, both optional) run the event-free part
+// states[from..to] of the path -- the split of a path at its process events into runs, with the event
+// node between them. A run is the SAME path: the same provider, options, frames and whole-path geometry
+// check; it starts at states[from] (the start check and its settle) and sends segments from..to-1 only.
+// Refused (PATH_RANGE, nothing sent): an index out of range, from > to, a dense path, a run that drives
+// THROUGH an event state of the path, a run that ends before the last state on a segment that blends.
+// Every run resolves and checks the WHOLE path (its waypoints read when the run starts), as the whole
+// path would be. from == to sends nothing: it confirms the robot is at that state. A run that ends at an EVENT state
+// confirms the robot arrived there (the same bounded settle and tolerance; NOT_AT_PATH_STATE otherwise),
+// so an `after_arrival` event happens with the robot at its state. Without the ports: the whole path,
+// exactly as before.
+BT::PortsList FollowPath::providedPorts()
+{ return {BT::InputPort<std::string>("path"),
+          BT::InputPort<std::string>("profile", "the profile of a path that names none (approach)"),
+          BT::InputPort<std::string>("from", "", "first state of the run (index; default 0)"),
+          BT::InputPort<std::string>("to", "", "last state of the run (index; default the last state)"),
+          BT::OutputPort<std::string>("fault", "MOTION_FAULT: CAUSE during PHASE")}; }
+BT::NodeStatus FollowPath::tick()
+{
+  const std::string name = in(*this, "path");
+  auto writeFault = [this, &name](const std::string& text) {
+    try { return setOutput("fault", text).has_value(); }
+    catch (const std::exception& e)
+    {
+      RCLCPP_ERROR(safeLog(config()), "FollowPath '%s': its fault output was not written (%s): %s",
+                   name.c_str(), e.what(), text.c_str());
+      return false;
+    }
+  };
+  auto refused = [this, &writeFault, &name](const char* cause, const std::string& why) {
+    RCLCPP_ERROR(safeLog(config()), "FollowPath '%s': %s -- nothing was sent", name.c_str(), why.c_str());
+    MotionResult r; r.phase = MotionPhase::REQUEST; r.cause = cause;
+    writeFault(motionFaultText(r));
+    return BT::NodeStatus::FAILURE;
+  };
+  if (name.empty()) return refused(kCauseUnknownPath, "empty 'path' port");
+
+  std::shared_ptr<const PathLibrary> lib;
+  try { lib = config().blackboard->get<std::shared_ptr<const PathLibrary>>(BB_PATH_LIBRARY); }
+  catch (const std::exception&) {}
+  if (!lib) return refused(kCauseNoPathLibrary, "no path library: the runner was started without a paths_file");
+  const PathSpec* path = lib->find(name);
+  if (!path)
+  {
+    std::string known;
+    for (const auto& n : lib->names()) known += (known.empty() ? "" : ", ") + n;
+    return refused(kCauseUnknownPath, "no such path in the library (" + (known.empty() ? "none" : known) + ")");
+  }
+
+  // --- the run: states[from..to] (vNext M3.5), the whole path without the ports ---------------------
+  const std::size_t last = (path->dense ? path->samples.waypoints.size() : path->states.size()) - 1;
+  const std::string from_text = in(*this, "from"), to_text = in(*this, "to");
+  const bool ranged = !from_text.empty() || !to_text.empty();
+  std::size_t from = 0, to = last;
+  if (ranged)
+  {
+    if (path->dense) return refused(kCausePathRange, "a dense path runs whole: from / to name states of a segment path");
+    auto index = [last](const std::string& text, std::size_t& out) {
+      if (text.empty()) return true;
+      if (!std::all_of(text.begin(), text.end(), [](char c) { return c >= '0' && c <= '9'; })) return false;
+      std::size_t used = 0;
+      long long v = -1;
+      try { v = std::stoll(text, &used); } catch (const std::exception&) { return false; }
+      if (used != text.size() || v < 0 || static_cast<std::size_t>(v) > last) return false;
+      out = static_cast<std::size_t>(v);
+      return true;
+    };
+    if (!index(from_text, from) || !index(to_text, to))
+      return refused(kCausePathRange, "from '" + from_text + "' / to '" + to_text + "' are not states of the path (0.." +
+                                      std::to_string(last) + ")");
+    if (from > to)
+      return refused(kCausePathRange, "from " + std::to_string(from) + " is after to " + std::to_string(to));
+  }
+  for (const std::size_t e : path->event_states)
+    if (e > from && e < to)
+      return refused(kCausePathRange, "the run " + std::to_string(from) + ".." + std::to_string(to) +
+                                      " drives through state " + std::to_string(e) + ", where the path stops for a "
+                                      "process event: run " + std::to_string(from) + ".." + std::to_string(e) +
+                                      " and " + std::to_string(e) + ".." + std::to_string(to) + " with the event between");
+  if (to > from && to < last && !path->dense && path->segments[to - 1].blend_radius_m > 0.0)
+    return refused(kCausePathRange, "the run ends at state " + std::to_string(to) + ", but segments[" +
+                                    std::to_string(to - 1) + "] blends into the next one: a run ends where the path stops");
+
+  auto* ctx = ctxOf(config());
+  const std::string tip = ctx->runtime->tipLink();
+
+  // --- options: the path's profile, its scaling, its goal tolerance --------------------------------
+  const std::string path_profile = !path->profile.empty() ? path->profile : in(*this, "profile", "approach");
+  const auto base_opts = namedProfile(config(), path_profile);
+  if (!base_opts) return refused(kCauseUnknownProfile, "profile '" + path_profile + "' is not a loaded motion profile");
+  MotionOptions opts = *base_opts;
+  if (path->velocity_scaling) opts.velocity_scaling = *path->velocity_scaling;
+  if (path->acceleration_scaling) opts.acceleration_scaling = *path->acceleration_scaling;
+  if (path->goal_tolerance)
+  {
+    opts.goal_position_tolerance = path->goal_tolerance->position_m;
+    opts.goal_orientation_tolerance = path->goal_tolerance->orientation_rad;
+  }
+
+  // --- resolve every state into the base frame -------------------------------------------------------
+  auto field = [this](const std::string& wp, const std::string& f) -> std::string {
+    try { return config().blackboard->get<std::string>(wp + "." + f); }
+    catch (const std::exception&) { return ""; }
+  };
+  std::vector<geometry_msgs::msg::Pose> states;
+  std::vector<std::optional<geometry_msgs::msg::Point>> aux;
+  FrameCache frames(ctx);
+  try
+  {
+    const auto path_T = frames.toBase(path->dense ? path->samples.reference_frame : path->frame);
+    auto waypointPose = [&](const std::string& wp, bool position_only) -> geometry_msgs::msg::Pose {
+      const std::string type = field(wp, "type");
+      if (!type.empty() && type != "tcp")
+        throw std::invalid_argument("waypoint '" + wp + "' is a " + type + " waypoint: a path state is a "
+                                    "TCP pose (reach a joint target with a ptp move before the path)");
+      const std::string wtcp = field(wp, "tcp");
+      if (!wtcp.empty() && wtcp != tip)
+        throw std::invalid_argument("waypoint '" + wp + "' is for tcp '" + wtcp + "', not the tip link '" + tip + "'");
+      const std::string pos = field(wp, "position");
+      if (pos.empty())
+        throw std::invalid_argument("waypoint '" + wp + "' has no position on the blackboard");
+      geometry_msgs::msg::Pose p;
+      const auto xyz = parseXyz3(pos);
+      p.position.x = xyz[0]; p.position.y = xyz[1]; p.position.z = xyz[2];
+      p.orientation.w = 1.0;
+      if (!position_only)
+      {
+        const auto q = parseVec(field(wp, "orientation"));
+        if (q.size() != 4)
+          throw std::invalid_argument("waypoint '" + wp + "' needs an orientation qx;qy;qz;qw");
+        p.orientation.x = q[0]; p.orientation.y = q[1]; p.orientation.z = q[2]; p.orientation.w = q[3];
+      }
+      return inBase(p, frames.toBase(field(wp, "frame")));
+    };
+    auto resolve = [&](const PathPointRef& r, bool position_only) {
+      return r.isWaypoint() ? waypointPose(r.waypoint, position_only) : inBase(*r.pose, path_T);
+    };
+    if (path->dense)
+      for (const auto& w : path->samples.waypoints) states.push_back(inBase(w.pose, path_T));
+    else
+    {
+      for (const auto& r : path->states) states.push_back(resolve(r, false));
+      for (const auto& seg : path->segments)
+      {
+        if (seg.via) aux.emplace_back(resolve(*seg.via, true).position);
+        else if (seg.center) aux.emplace_back(resolve(*seg.center, true).position);
+        else aux.emplace_back(std::nullopt);
+      }
+    }
+  }
+  catch (const FrameError& e) { return refused(kCauseFrameUnresolved, e.what()); }
+  catch (const std::exception& e) { return refused(kCausePathUnresolved, e.what()); }
+
+  for (std::size_t i = 0; i < states.size(); ++i)
+  {
+    const std::string bad_pose = poseProblem(states[i]);
+    if (!bad_pose.empty()) return refused(kCauseInvalidPose, "state " + std::to_string(i) + " has " + bad_pose);
+  }
+  for (std::size_t i = 0; i < aux.size(); ++i)
+    if (aux[i] && !(std::isfinite(aux[i]->x) && std::isfinite(aux[i]->y) && std::isfinite(aux[i]->z)))
+      return refused(kCauseInvalidPose, "segment " + std::to_string(i) + "'s circle point is not finite");
+  const std::string bad = checkPathGeometry(*path, states, aux);
+  if (!bad.empty()) return refused(kCausePathGeometry, bad);
+
+  // --- the robot must be at the path's start ------------------------------------------------------------
+  // vNext M3.4 (M3-B): a motion's execution reports success when its trajectory's time is up, while a
+  // simulated or real arm may still be settling into that pose (Isaac: 27 mm 0.1 s after the PTP into
+  // states[0], 1 mm at rest). The check therefore waits for the robot to come within start_tolerance,
+  // bounded (kPathStartSettleS, polled every 50 ms), and refuses only if it is still not there. A
+  // robot already there passes at the first read, as before; no state is refused at once.
+  // vNext M3.5: the same wait confirms a run's start (states[from]) and its arrival at an event state.
+  // Returns "" once the robot is there, else the distances after the settle.
+  auto settleAt = [&](const geometry_msgs::msg::Pose& want) -> std::string {
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                            std::chrono::duration<double>(kPathStartSettleS));
+    for (;;)
+    {
+      const auto now = ctx->runtime->currentTipPose();
+      const geometry_msgs::msg::Pose here = inBase(now.pose, frames.toBase(now.header.frame_id));
+      const std::string bad_here = poseProblem(here);
+      if (!bad_here.empty())   // a NaN would pass every distance comparison below: fail closed
+        throw InvalidTipPose("the current tip pose has " + bad_here);
+      const Eigen::Vector3d dp(here.position.x - want.position.x, here.position.y - want.position.y,
+                               here.position.z - want.position.z);
+      const Eigen::Quaterniond qa(here.orientation.w, here.orientation.x, here.orientation.y, here.orientation.z);
+      const Eigen::Quaterniond qb(want.orientation.w, want.orientation.x, want.orientation.y, want.orientation.z);
+      const double dq = qa.normalized().angularDistance(qb.normalized());
+      if (dp.norm() <= path->start_tolerance.position_m && dq <= path->start_tolerance.orientation_rad) return "";
+      if (std::chrono::steady_clock::now() >= deadline)
+      {
+        std::ostringstream why;
+        why << dp.norm() << " m and " << dq << " rad from ";
+        return why.str();
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+  };
+  auto tolerance_text = [&path]() {
+    std::ostringstream t;
+    t << "start_tolerance " << path->start_tolerance.position_m << " m, " << path->start_tolerance.orientation_rad
+      << " rad, after " << kPathStartSettleS << " s of settling";
+    return t.str();
+  };
+  try
+  {
+    const std::string off = settleAt(states[from]);
+    if (!off.empty())
+      return refused(kCauseNotAtPathStart,
+                     from == 0 ? "the robot is not at the path's start: " + off + "states[0] (" + tolerance_text() +
+                                   "); move there first"
+                               : "the robot is not at the run's start: " + off + "states[" + std::to_string(from) +
+                                   "] (" + tolerance_text() + "); run the path up to it first");
+  }
+  catch (const FrameError& e) { return refused(kCauseFrameUnresolved, std::string("the current pose: ") + e.what()); }
+  catch (const RobotStateUnavailable& e)   // vNext M3.4 (R-M3-20): never a distance from the identity
+  {
+    return refused(kCauseStateUnavailable, std::string("the current pose: ") + e.what());
+  }
+  catch (const InvalidTipPose& e) { return refused(kCauseInvalidPose, e.what()); }
+
+  if (from == to)   // vNext M3.5: the run is one state -- the robot is there, nothing to send
+  {
+    RCLCPP_INFO(nlog(config()), "FollowPath '%s' [%zu..%zu]: at state %zu (nothing to move)", name.c_str(), from,
+                to, from);
+    return BT::NodeStatus::SUCCESS;
+  }
+
+  // --- one motion through the door ---------------------------------------------------------------------
+  // The route decides the door method; anything else (a spec built outside the loader) is refused.
+  const MotionProvider* provider = findMotionProvider(path->provider);
+  if (!provider || (provider->route != "cartesian_path" && provider->route != "motion_sequence"))
+    return refused(kCauseUnknownPath, "provider '" + path->provider + "' does not execute paths");
+  MotionResult r;
+  try
+  {
+    if (provider->route == "cartesian_path")
+    {
+      CartesianProcessPath dense = path->samples;
+      dense.reference_frame.clear();   // resolved into the base frame above
+      dense.tcp_link.clear();          // the tip link (the loader refused any other)
+      dense.waypoints.erase(dense.waypoints.begin());   // states[0] is where the robot is
+      for (std::size_t i = 0; i < dense.waypoints.size(); ++i) dense.waypoints[i].pose = states[i + 1];
+      r = ctx->runtime->executeCartesianProcess(dense, opts);
+      // A continuous path is the WHOLE path: a partial Cartesian path (allow_partial_cartesian) is
+      // not this path, whatever the backend accepted.
+      if (r.success && r.process.cartesian_fraction < 1.0)
+      {
+        RCLCPP_ERROR(nlog(config()), "FollowPath '%s': the Cartesian path covers %.3f of the path, not all of it",
+                     name.c_str(), r.process.cartesian_fraction);
+        r.success = false;
+        r.stage = "FollowPath: partial Cartesian path";
+      }
+    }
+    else
+    {
+      std::vector<ProcessSegment> segments;
+      for (std::size_t i = from; i < to; ++i)
+      {
+        ProcessSegment seg;
+        seg.target_pose = states[i + 1];
+        seg.velocity_scaling = opts.velocity_scaling;
+        seg.acceleration_scaling = opts.acceleration_scaling;
+        if (path->dense)
+        {
+          seg.name = "lin";
+          seg.type = ProcessSegmentType::LINEAR;
+        }
+        else
+        {
+          const PathSegmentSpec& spec = path->segments[i];
+          seg.name = spec.type == PathSegmentType::CIRC ? "circ" : "lin";
+          seg.type = spec.type == PathSegmentType::CIRC ? ProcessSegmentType::CIRCULAR : ProcessSegmentType::LINEAR;
+          if (!spec.profile.empty())
+          {
+            const auto sp = namedProfile(config(), spec.profile);
+            if (!sp) return refused(kCauseUnknownProfile, "segment " + std::to_string(i) + "'s profile '" +
+                                                          spec.profile + "' is not a loaded motion profile");
+            seg.velocity_scaling = sp->velocity_scaling;
+            seg.acceleration_scaling = sp->acceleration_scaling;
+          }
+          if (spec.velocity_scaling) seg.velocity_scaling = *spec.velocity_scaling;
+          if (spec.acceleration_scaling) seg.acceleration_scaling = *spec.acceleration_scaling;
+          if (spec.via) seg.interim_point = aux[i];
+          if (spec.center) seg.circle_center = aux[i];
+          seg.blend_radius = path->continuity == PathContinuity::BLEND ? spec.blend_radius_m : 0.0;
+        }
+        segments.push_back(seg);
+      }
+      r = ctx->runtime->executeProcessSequence(segments, opts);
+    }
+  }
+  catch (const std::exception& e)
+  {
+    RCLCPP_ERROR(nlog(config()), "FollowPath '%s': %s", name.c_str(), e.what());
+    MotionResult thrown; thrown.cause = kCauseException;
+    writeFault(motionFaultText(thrown));
+    return BT::NodeStatus::FAILURE;
+  }
+
+  if (ranged)
+    RCLCPP_INFO(nlog(config()), "FollowPath '%s' [%zu..%zu] (%zu of %zu states, provider=%s, continuity=%s): %s",
+                name.c_str(), from, to, to - from + 1, states.size(), path->provider.c_str(),
+                path->continuity == PathContinuity::BLEND ? "blend" : "stop", r.success ? "OK" : r.stage.c_str());
+  else
+    RCLCPP_INFO(nlog(config()), "FollowPath '%s' (%zu states, provider=%s, continuity=%s): %s", name.c_str(),
+                states.size(), path->provider.c_str(),
+                path->continuity == PathContinuity::BLEND ? "blend" : "stop", r.success ? "OK" : r.stage.c_str());
+  if (!r.success && classifyMotionFailure(r) == MotionFailureClass::FAULT)
+  {
+    const std::string why = motionFaultText(r);
+    if (writeFault(why))
+      RCLCPP_ERROR(nlog(config()), "FollowPath '%s': %s -- not this target's failure", name.c_str(), why.c_str());
+  }
+  if (!r.success) return BT::NodeStatus::FAILURE;
+
+  // vNext M3.5: a run that ends at an event state confirms the robot arrived there before the event
+  if (path->isEventState(to))
+  {
+    std::string off;
+    try { off = settleAt(states[to]); }
+    catch (const std::exception& e) { off = std::string("(") + e.what() + ") "; }
+    if (!off.empty())
+    {
+      RCLCPP_ERROR(safeLog(config()), "FollowPath '%s': the robot did not arrive at state %zu, where the path stops "
+                   "for a process event: %sit (%s)", name.c_str(), to, off.c_str(), tolerance_text().c_str());
+      MotionResult arrived; arrived.phase = MotionPhase::EXECUTE; arrived.cause = kCauseNotAtPathState;
+      writeFault(motionFaultText(arrived));
+      return BT::NodeStatus::FAILURE;
+    }
+  }
+  return BT::NodeStatus::SUCCESS;
 }
 
 // ═══ end-effector ═════════════════════════════════════════════════════════════
@@ -696,6 +1245,64 @@ BT::NodeStatus DisableProcess::tick()
   if (!ctx->process) { RCLCPP_ERROR(nlog(config()), "DisableProcess: no process controller"); return BT::NodeStatus::FAILURE; }
   ProcessEvent e; e.type = ProcessEventType::DISABLE_PROCESS; e.channel = in(*this, "channel");
   return ctx->process->executeEvent(e) ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
+}
+
+// vNext M3.5 (ADR-0024, M3_DESIGN §9): ONE generic process event, the canonical model's vocabulary --
+// never a node per application (no GlueOn, WasherStart, ...). `kind` says what happens on the
+// LOGICAL channel `channel` (an application id such as dispenser or washer_start: never a ROS topic, a
+// PLC address or a controller symbol -- the process controller binds it, ADR-0013):
+//   process_on    the process runs           (ProcessController ENABLE)
+//   process_off   the process stops          (DISABLE)
+//   set_value     the process value `value`  (SET_ANALOG_VALUE; a finite number)
+//   external      a logical external action  (TRIGGER; no handshake, no acknowledgement in M3)
+// Blocking: SUCCESS once the controller dispatched it. Refused with the reason, nothing dispatched: an
+// unknown kind (capture is DetectObject trigger, dwell is Sleep), a channel that is not a logical id, a
+// value on a kind that takes none, a missing or non-finite value, no controller. EnableProcess and
+// DisableProcess stay as the legacy aliases of process_on / process_off, unchanged.
+BT::PortsList ProcessEventNode::providedPorts()
+{ return {BT::InputPort<std::string>("kind", "process_on | process_off | set_value | external"),
+          BT::InputPort<std::string>("channel", "a logical channel id"),
+          BT::InputPort<std::string>("value", "", "set_value: the value")}; }
+BT::NodeStatus ProcessEventNode::tick()
+{
+  const std::string kind = in(*this, "kind"), channel = in(*this, "channel"), value = in(*this, "value");
+  auto refuse = [&](const std::string& why) {
+    RCLCPP_ERROR(safeLog(config()), "ProcessEvent kind='%s' channel='%s': %s -- nothing was dispatched",
+                 kind.c_str(), channel.c_str(), why.c_str());
+    return BT::NodeStatus::FAILURE;
+  };
+  trainit::ProcessEvent e;
+  if (kind == "process_on") e.type = ProcessEventType::ENABLE_PROCESS;
+  else if (kind == "process_off") e.type = ProcessEventType::DISABLE_PROCESS;
+  else if (kind == "set_value") e.type = ProcessEventType::SET_ANALOG_VALUE;
+  else if (kind == "external") e.type = ProcessEventType::TRIGGER;
+  else if (kind == "capture" || kind == "dwell")
+    return refuse("a " + kind + " event is not a process output: " +
+                  (kind == "capture" ? std::string("DetectObject trigger=\"true\"") : std::string("Sleep")) +
+                  " runs it");
+  else return refuse("unknown kind (accepted: process_on, process_off, set_value, external)");
+  if (!isLogicalChannel(channel))
+    return refuse("the channel must be a LOGICAL id (a letter, then letters, digits or _: e.g. dispenser), never "
+                  "a ROS topic, a hardware address or a controller symbol: the process controller binds it");
+  if (e.type == ProcessEventType::SET_ANALOG_VALUE)
+  {
+    std::size_t used = 0;
+    try { e.value = std::stod(value, &used); } catch (const std::exception&) { used = 0; }
+    if (value.empty() || used != value.size() || !std::isfinite(e.value))
+      return refuse("set_value needs a finite number 'value', got '" + value + "'");
+  }
+  else if (!value.empty()) return refuse("kind " + kind + " takes no value (only set_value does)");
+  else if (e.type == ProcessEventType::ENABLE_PROCESS) e.value = 1.0;
+  e.channel = channel;
+  auto* ctx = ctxOf(config());
+  if (!ctx->process) return refuse("no process controller");
+  if (!ctx->process->executeEvent(e))
+  {
+    RCLCPP_ERROR(safeLog(config()), "ProcessEvent kind='%s' channel='%s': the process controller did not dispatch it",
+                 kind.c_str(), channel.c_str());
+    return BT::NodeStatus::FAILURE;
+  }
+  return BT::NodeStatus::SUCCESS;
 }
 
 // ═══ planning scene ═══════════════════════════════════════════════════════════
@@ -919,7 +1526,15 @@ BT::PortsList StoreCurrentPose::providedPorts() { return {BT::InputPort<std::str
 BT::NodeStatus StoreCurrentPose::tick()
 {
   auto* ctx = ctxOf(config());
-  config().blackboard->set<geometry_msgs::msg::Pose>(in(*this, "pose_key"), currentPose(ctx));
+  try
+  {
+    config().blackboard->set<geometry_msgs::msg::Pose>(in(*this, "pose_key"), currentPose(ctx));
+  }
+  catch (const RobotStateUnavailable& e)   // vNext M3.4: nothing is stored
+  {
+    RCLCPP_ERROR(nlog(config()), "StoreCurrentPose: %s", e.what());
+    return BT::NodeStatus::FAILURE;
+  }
   return BT::NodeStatus::SUCCESS;
 }
 
@@ -1058,6 +1673,10 @@ DetectionFeed& feedFor(const rclcpp::Node::SharedPtr& node, const std::string& t
   return *f;
 }
 
+// defined with RunPolicy below: one Trigger client per service, shared by the nodes that call it
+rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr triggerClientFor(
+  const rclcpp::Node::SharedPtr& node, const std::string& service);
+
 std::shared_ptr<tf2_ros::Buffer> tfFor(BtContext* ctx)
 {
   if (ctx->tf) return ctx->tf;
@@ -1104,6 +1723,22 @@ std::shared_ptr<tf2_ros::Buffer> tfFor(BtContext* ctx)
 //
 // Freshness is by ARRIVAL, not by stamp: a message that arrived after this tick began
 // is fresh, whatever clock the detector used. That survives sim/system clock mixes.
+//
+// vNext M3.5 -- `trigger="true"` (a CAPTURE, M3_DESIGN §9): sample the detector on demand and accept
+// only a result taken AFTER the capture began. The subscription first waits (1 s at most) to match the
+// detector's publisher, so the answer is not lost. The freshness boundary is set BEFORE the trigger: the
+// arrival count and the node clock's time. The detector's std_srvs/Trigger `/perception/<detector>/
+// detect` (the perception contract's on-demand service) is called; a result is accepted only if it
+// ARRIVED after the boundary AND its header.stamp is not before it (the contract's freshness rule: a
+// detector may answer from an image taken before the trigger, and an arrival alone does not say when
+// the image was taken). A stale result is rejected, logged, and the detector triggered again (500 ms
+// after its answer) until `timeout_ms` (the whole capture); after an answer that says it could not
+// sample (success false) nothing is accepted until the next trigger. The detector and the robot must
+// share a clock (sim time in a simulator, a synchronised clock on a real cell): a clock that is not
+// running is refused at once (CLOCK_UNAVAILABLE), a result stamped ahead of it is rejected. No result
+// -> FAILURE, `fault` TRIGGER_UNAVAILABLE (the service never answered), CLOCK_MISMATCH (only results
+// on another clock) or DETECTION_TIMEOUT. The keys are the same, plus `<out_key>.stamp` ("sec.nanosec"
+// of the accepted result). Without the port: as before.
 BT::PortsList DetectObject::providedPorts()
 { return {BT::InputPort<std::string>("detector"),
           BT::InputPort<std::string>("topic", ""),
@@ -1117,10 +1752,12 @@ BT::PortsList DetectObject::providedPorts()
           // An int port binds an int entry, a string entry and a literal alike (verified).
           BT::InputPort<int>("keep", 1, "how many candidates to publish (ADR-0016)"),
           BT::InputPort<std::string>("out_key", "detected"),
+          BT::InputPort<std::string>("trigger", "false", "true: trigger the detector, accept only a fresh result"),
           // ADR-0022 (canonical bin picking): written ONLY when no fresh message arrived within
           // timeout_ms or a TF lookup failed -- never for a fresh message with no match, which
           // stays the "bin empty" stall. A tree that does not remap it is unaffected.
-          BT::OutputPort<std::string>("fault", "DETECTION_TIMEOUT | TF_LOOKUP_FAILED")}; }
+          BT::OutputPort<std::string>("fault", "DETECTION_TIMEOUT | TF_LOOKUP_FAILED | TRIGGER_UNAVAILABLE | "
+                                               "CLOCK_UNAVAILABLE | CLOCK_MISMATCH")}; }
 BT::NodeStatus DetectObject::tick()
 {
   auto* ctx = ctxOf(config());
@@ -1146,16 +1783,135 @@ BT::NodeStatus DetectObject::tick()
     keep = clampDetectionKeep(keep);
   }
 
+  const std::string trigger_text = in(*this, "trigger", "false");
+  if (trigger_text != "true" && trigger_text != "false")
+  {
+    RCLCPP_ERROR(nlog(config()), "DetectObject: trigger='%s' is not true or false", trigger_text.c_str());
+    return BT::NodeStatus::FAILURE;
+  }
+  const bool trigger = trigger_text == "true";
+  if (trigger && det.empty())
+  {
+    RCLCPP_ERROR(nlog(config()), "DetectObject: trigger=\"true\" needs 'detector' (the detector whose on-demand "
+                 "service it calls)");
+    return BT::NodeStatus::FAILURE;
+  }
+
   DetectionFeed& feed = feedFor(ctx->node, topic);
   uint64_t seen;
   { std::lock_guard<std::mutex> g(feed.m); seen = feed.arrivals; }
 
   const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
   vision_msgs::msg::Detection3DArray::SharedPtr msg;
-  while (std::chrono::steady_clock::now() < deadline)
+  if (!trigger)
   {
-    { std::lock_guard<std::mutex> g(feed.m); if (feed.arrivals > seen) { msg = feed.latest; break; } }
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+      { std::lock_guard<std::mutex> g(feed.m); if (feed.arrivals > seen) { msg = feed.latest; break; } }
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+  }
+  else
+  {
+    // a result published before this node's subscription has matched the detector is lost: wait
+    // (bounded, 1 s) for the match -- the FIRST capture of a run creates the subscription
+    const auto matched_by = std::min(deadline, std::chrono::steady_clock::now() + std::chrono::seconds(1));
+    while (feed.sub->get_publisher_count() == 0 && std::chrono::steady_clock::now() < matched_by)
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    // the boundary: set BEFORE the first trigger -- the node clock, then the arrivals so far. The clock
+    // must run: on sim time before the first /clock it reads 0, and every stamp would pass.
+    const int64_t boundary_ns = ctx->node->now().nanoseconds();
+    if (boundary_ns <= 0)
+    {
+      RCLCPP_ERROR(nlog(config()), "DetectObject: the node's clock is not running (time 0: no /clock yet on sim "
+                   "time?): a capture cannot tell a fresh result from an old one, so it is refused");
+      setOutput("fault", std::string("CLOCK_UNAVAILABLE"));
+      return BT::NodeStatus::FAILURE;
+    }
+    { std::lock_guard<std::mutex> g(feed.m); seen = feed.arrivals; }
+    // a result stamped further ahead of this clock than this is another clock's (sim vs wall time)
+    constexpr int64_t kFutureSlackNs = 1000000000LL;
+    const std::string service = "/perception/" + det + "/detect";   // CELL-GLOBAL, like the topic (ADR-0023)
+    auto client = triggerClientFor(ctx->node, service);
+    int triggers = 0, answered = 0, stale = 0, future_stamped = 0;
+    std::string last_refusal;
+    while (!msg && std::chrono::steady_clock::now() < deadline)
+    {
+      if (!client->service_is_ready() && !client->wait_for_service(std::chrono::milliseconds(100))) continue;
+      auto future = client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+      ++triggers;
+      while (std::chrono::steady_clock::now() < deadline &&
+             future.wait_for(std::chrono::milliseconds(10)) != std::future_status::ready) {}
+      if (future.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+      {
+        client->remove_pending_request(future);
+        break;
+      }
+      ++answered;
+      const auto answer = future.get();
+      // a detector that says it could not sample is not waited on: nothing it publishes until the next
+      // answer is taken for this capture's result
+      const bool sampled = answer->success;
+      if (!sampled)
+      {
+        last_refusal = answer->message;
+        RCLCPP_WARN(nlog(config()), "DetectObject: trigger %d of '%s' answered: %s -- triggering again",
+                    triggers, service.c_str(), answer->message.c_str());
+      }
+      const auto retrigger = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+      while (!msg && std::chrono::steady_clock::now() < std::min(deadline, retrigger))
+      {
+        vision_msgs::msg::Detection3DArray::SharedPtr got;
+        {
+          std::lock_guard<std::mutex> g(feed.m);
+          if (feed.arrivals > seen) { got = feed.latest; seen = feed.arrivals; }
+        }
+        if (!got) { std::this_thread::sleep_for(std::chrono::milliseconds(10)); continue; }
+        if (!sampled) continue;
+        const int64_t stamp_ns = rclcpp::Time(got->header.stamp).nanoseconds();
+        const int64_t now_ns = ctx->node->now().nanoseconds();
+        if (stamp_ns > now_ns + kFutureSlackNs)
+        {
+          ++future_stamped;
+          RCLCPP_WARN(nlog(config()), "DetectObject: result rejected on '%s': stamped %.3f s, AHEAD of this "
+                      "clock (%.3f s): the detector and the robot are not on one clock (sim vs wall time?)",
+                      topic.c_str(), stamp_ns * 1e-9, now_ns * 1e-9);
+          continue;
+        }
+        if (stamp_ns >= boundary_ns) { msg = got; break; }
+        ++stale;
+        RCLCPP_WARN(nlog(config()), "DetectObject: stale result rejected on '%s': stamped %.3f s, before the "
+                    "capture began at %.3f s%s", topic.c_str(), stamp_ns * 1e-9, boundary_ns * 1e-9,
+                    boundary_ns - stamp_ns > 60 * kFutureSlackNs
+                      ? " (over a minute older: do the detector and the robot share a clock?)" : "");
+      }
+    }
+    if (!msg)
+    {
+      if (answered == 0)
+      {
+        RCLCPP_ERROR(nlog(config()), "DetectObject: the detector's service '%s' did not answer within %d ms (is "
+                     "the detector running?)", service.c_str(), timeout_ms);
+        setOutput("fault", std::string("TRIGGER_UNAVAILABLE"));
+        return BT::NodeStatus::FAILURE;
+      }
+      if (future_stamped > 0 && stale == 0)
+      {
+        RCLCPP_ERROR(nlog(config()), "DetectObject: no result on '%s' within %d ms is on this node's clock (%d "
+                     "stamped ahead of it): the detector and the robot must share a clock", topic.c_str(),
+                     timeout_ms, future_stamped);
+        setOutput("fault", std::string("CLOCK_MISMATCH"));
+        return BT::NodeStatus::FAILURE;
+      }
+      RCLCPP_ERROR(nlog(config()), "DetectObject: no fresh detection on '%s' within %d ms after %d trigger(s) "
+                   "(%d stale result(s) rejected%s%s)", topic.c_str(), timeout_ms, triggers, stale,
+                   last_refusal.empty() ? "" : "; the detector last answered: ", last_refusal.c_str());
+      setOutput("fault", std::string("DETECTION_TIMEOUT"));
+      return BT::NodeStatus::FAILURE;
+    }
+    RCLCPP_INFO(nlog(config()), "DetectObject: fresh result on '%s' after %d trigger(s) (%d stale rejected), "
+                "stamped %.3f s >= the capture's start %.3f s", topic.c_str(), triggers, stale,
+                rclcpp::Time(msg->header.stamp).nanoseconds() * 1e-9, boundary_ns * 1e-9);
   }
   if (!msg)
   {
@@ -1222,6 +1978,10 @@ BT::NodeStatus DetectObject::tick()
     bb->set<std::string>(pre + ".class_id", h.hypothesis.class_id);
     bb->set<std::string>(pre + ".frame", target);
     bb->set<std::string>(pre + ".size", fmtVec({d.bbox.size.x, d.bbox.size.y, d.bbox.size.z}));
+    if (trigger)   // vNext M3.5: when the captured result was taken
+      bb->set<std::string>(pre + ".stamp", std::to_string(msg->header.stamp.sec) + "." +
+                                           [&] { std::string ns = std::to_string(msg->header.stamp.nanosec);
+                                                 return std::string(9 - std::min<std::size_t>(9, ns.size()), '0') + ns; }());
     RCLCPP_INFO(nlog(config()), "DetectObject: '%s' score %.2f at (%.4f, %.4f, %.4f) in %s -> BB[%s.*]",
                 h.hypothesis.class_id.c_str(), h.hypothesis.score,
                 P.position.x, P.position.y, P.position.z, target.c_str(), pre.c_str());
@@ -1449,6 +2209,483 @@ BT::NodeStatus SetWaypointRelative::tick()
   { RCLCPP_ERROR(log, "SetWaypointRelative '%s': %s", wp.c_str(), e.what()); return BT::NodeStatus::FAILURE; }
 }
 
+// ═══ grasp candidates (vNext M3.6, ADR-0026) ════════════════════════════════════
+namespace
+{
+// One subscription per candidate topic, shared by every DetectCandidates that names it (as
+// DetectionFeed for detections; the source="detections" path shares DetectObject's feed).
+struct CandidateFeed
+{
+  std::mutex m;
+  GraspCandidateArrayMsg::SharedPtr latest;
+  uint64_t arrivals{0};
+  rclcpp::Subscription<GraspCandidateArrayMsg>::SharedPtr sub;
+};
+
+CandidateFeed& candidateFeedFor(const rclcpp::Node::SharedPtr& node, const std::string& topic)
+{
+  static std::map<std::string, std::shared_ptr<CandidateFeed>> feeds;
+  static std::mutex feeds_m;
+  std::lock_guard<std::mutex> lk(feeds_m);
+  auto& f = feeds[topic];
+  if (!f)
+  {
+    f = std::make_shared<CandidateFeed>();
+    CandidateFeed* raw = f.get();
+    // the contract: RELIABLE, depth 1 (ADR-0026), like detections
+    f->sub = node->create_subscription<GraspCandidateArrayMsg>(
+      topic, rclcpp::QoS(rclcpp::KeepLast(1)).reliable(), [raw](GraspCandidateArrayMsg::SharedPtr msg) {
+        std::lock_guard<std::mutex> g(raw->m);
+        raw->latest = std::move(msg);
+        ++raw->arrivals;
+      });
+  }
+  return *f;
+}
+
+// "x;y;z" -> a finite vector; false otherwise
+bool vec3(const std::string& text, Eigen::Vector3d& out)
+{
+  try
+  {
+    const auto v = parseVec(text);
+    if (v.size() != 3) return false;
+    out = Eigen::Vector3d(v[0], v[1], v[2]);
+    return out.allFinite();
+  }
+  catch (const std::exception&) { return false; }
+}
+
+// "qx;qy;qz;qw" -> a finite UNIT quaternion (within kUnitTolerance, never repaired); false otherwise
+bool unitQuat(const std::string& text, Eigen::Quaterniond& out)
+{
+  try
+  {
+    const auto v = parseVec(text);
+    if (v.size() != 4) return false;
+    out = Eigen::Quaterniond(v[3], v[0], v[1], v[2]);
+    return out.coeffs().allFinite() && std::abs(out.norm() - 1.0) <= kUnitTolerance;
+  }
+  catch (const std::exception&) { return false; }
+}
+
+// a finite number; false otherwise (the whole text must be the number)
+bool number(const std::string& text, double& out)
+{
+  std::size_t used = 0;
+  try { out = std::stod(text, &used); } catch (const std::exception&) { return false; }
+  return used == text.size() && std::isfinite(out);
+}
+
+// An integer port that must be read when it is given: absent -> keep the default (true); given but
+// unreadable (a typo, a blackboard key never written) -> false. Never a silent fallback to the
+// default: a candidate's index decides which object the arm goes to.
+bool strictIntIn(const BT::TreeNode& n, const char* port, int& out)
+{
+  const auto& ports = n.config().input_ports;
+  const auto it = ports.find(port);
+  if (it == ports.end() || it->second.empty()) return true;
+  const auto e = n.getInput<int>(port);
+  if (!e) return false;
+  out = e.value();
+  return true;
+}
+
+std::string quatText(const Eigen::Quaterniond& q)
+{
+  return formatNumbers({q.x(), q.y(), q.z(), q.w()});
+}
+std::string vecText(const Eigen::Vector3d& v) { return formatNumbers({v.x(), v.y(), v.z()}); }
+}  // namespace
+
+// DetectCandidates (vNext M3.6, ADR-0026): the ONE consumption of the grasp-candidate contract.
+//
+//   source        candidates   a GraspCandidateArray from ANY producer, on
+//                              /perception/<detector>/grasp_candidates (cell-global, ADR-0023)
+//                 detections   a Detection3DArray on /perception/<detector>/detections, projected onto
+//                              the SAME contract (projectDetection: approach = -normal; an identity
+//                              orientation -> `default_approach`, else refused) -- the minimal M3
+//                              bridge, never a grasp method
+//   detector / topic, target_frame (base_link), timeout_ms (3000), keep (1), out_key (required)
+//   detections only: class_id, min_score (as DetectObject), default_approach "x;y;z" (unit, in
+//                    target_frame), standoff_m, eef, site (what the projection writes)
+//
+// A FRESH array (arrived after the tick began; freshness by arrival, as DetectObject without its
+// trigger), validated WHOLE: one unusable candidate (arrayProblem) refuses the array -- never skipped,
+// never repaired, nothing written. The first `keep` candidates IN PUBLISHED ORDER (the order is the
+// rank: never sorted) are transformed into target_frame (one TF lookup per source frame: the pose,
+// the approach and the normal by the same transform) and written on "<out_key>.<i>.*" (the layout of
+// grasp_candidates.hpp) with "<out_key>.count". "<out_key>.count" is "0" from the start of the tick, so
+// a failed detection never leaves an older set readable. An EMPTY array (or no matching detection) is
+// the valid "no candidate" answer: FAILURE with reason NO_CANDIDATES and no fault.
+// Outputs on FAILURE: `reason` (INVALID_CONFIGURATION | NO_CANDIDATES | INVALID_CANDIDATE |
+// DETECTION_TIMEOUT | TF_LOOKUP_FAILED) and `fault` (the reason, unless NO_CANDIDATES).
+BT::PortsList DetectCandidates::providedPorts()
+{ return {BT::InputPort<std::string>("source", "candidates | detections"),
+          BT::InputPort<std::string>("detector"),
+          BT::InputPort<std::string>("topic", ""),
+          BT::InputPort<std::string>("target_frame", "base_link"),
+          BT::InputPort<std::string>("timeout_ms", "3000"),
+          BT::InputPort<int>("keep", 1, "how many candidates to publish, in published order"),
+          BT::InputPort<std::string>("out_key", "", "the candidate set's blackboard prefix"),
+          BT::InputPort<std::string>("class_id", "", "detections: keep this class only"),
+          BT::InputPort<std::string>("min_score", "", "detections: the lowest hypothesis score"),
+          BT::InputPort<std::string>("default_approach", "", "detections: the approach without a normal (target_frame)"),
+          BT::InputPort<std::string>("standoff_m", "", "detections: the projected standoff"),
+          BT::InputPort<std::string>("eef", "", "detections: the projected device"),
+          BT::InputPort<std::string>("site", "", "detections: the projected site"),
+          BT::OutputPort<std::string>("reason", "on FAILURE: why"),
+          BT::OutputPort<std::string>("fault", "on FAILURE: the reason, unless NO_CANDIDATES")}; }
+BT::NodeStatus DetectCandidates::tick()
+{
+  auto* ctx = ctxOf(config());
+  const std::string source = in(*this, "source"), det = in(*this, "detector"), out = in(*this, "out_key");
+  const std::string target = in(*this, "target_frame", "base_link");
+  auto fail = [&](const std::string& reason, const std::string& why) {
+    RCLCPP_ERROR(nlog(config()), "DetectCandidates '%s' (source %s, detector '%s'): %s: %s -- no candidate written",
+                 out.c_str(), source.c_str(), det.c_str(), reason.c_str(), why.c_str());
+    setOutput("reason", reason);
+    if (reason != "NO_CANDIDATES") setOutput("fault", reason);
+    return BT::NodeStatus::FAILURE;
+  };
+  if (out.empty()) return fail("INVALID_CONFIGURATION", "out_key is required (the candidate set's name)");
+  // nothing older stays readable: the set is empty until this tick writes it -- before any other check,
+  // so a refused configuration never leaves the previous set usable either
+  auto bb = config().blackboard;
+  bb->set<std::string>(candidateCountKey(out), "0");
+  if (source != "candidates" && source != "detections")
+    return fail("INVALID_CONFIGURATION", "source must be candidates (a GraspCandidateArray) or detections (a "
+                "Detection3DArray, projected), got '" + source + "'");
+  std::string topic = in(*this, "topic");
+  if (topic.empty())
+  {
+    if (det.empty()) return fail("INVALID_CONFIGURATION", "need 'detector' or 'topic'");
+    // CELL-GLOBAL (ADR-0023 Decision 4): a producer serves a station, not one robot
+    topic = "/perception/" + det + (source == "candidates" ? "/grasp_candidates" : "/detections");
+  }
+  int timeout_ms = 0;
+  {
+    double t = 0;
+    if (!number(in(*this, "timeout_ms", "3000"), t) || t < 1 || t != std::floor(t))
+      return fail("INVALID_CONFIGURATION", "timeout_ms must be a whole number of milliseconds >= 1");
+    timeout_ms = static_cast<int>(t);
+  }
+  int keep = 1;
+  if (!strictIntIn(*this, "keep", keep))
+    return fail("INVALID_CONFIGURATION", "keep='" + config().input_ports.at("keep") + "' cannot be read as a count");
+  if (keep < 1) return fail("INVALID_CONFIGURATION", "keep=" + std::to_string(keep) + " is not a count (>= 1)");
+  const std::string class_id = in(*this, "class_id"), min_score_text = in(*this, "min_score"),
+                    approach_text = in(*this, "default_approach"), standoff_text = in(*this, "standoff_m");
+  ProjectionConfig projection;
+  projection.eef = in(*this, "eef");
+  projection.site = in(*this, "site");
+  projection.detector = det;
+  double min_score = 0.0;
+  std::optional<Eigen::Vector3d> default_approach;   // in target_frame
+  if (source == "candidates")
+  {
+    for (const auto& [port, value] : std::vector<std::pair<std::string, std::string>>{
+           {"class_id", class_id}, {"min_score", min_score_text}, {"default_approach", approach_text},
+           {"standoff_m", standoff_text}, {"eef", projection.eef}, {"site", projection.site}})
+      if (!value.empty())
+        return fail("INVALID_CONFIGURATION", port + " belongs to source=\"detections\" (the projection): a grasp "
+                    "producer states it in each candidate");
+  }
+  else
+  {
+    if (!min_score_text.empty() && !number(min_score_text, min_score))
+      return fail("INVALID_CONFIGURATION", "min_score '" + min_score_text + "' is not a number");
+    if (!standoff_text.empty() && (!number(standoff_text, projection.standoff_m) || projection.standoff_m < 0))
+      return fail("INVALID_CONFIGURATION", "standoff_m '" + standoff_text + "' is not a distance >= 0");
+    if (!approach_text.empty())
+    {
+      Eigen::Vector3d a;
+      if (!vec3(approach_text, a) || std::abs(a.norm() - 1.0) > kUnitTolerance)
+        return fail("INVALID_CONFIGURATION", "default_approach '" + approach_text + "' is not a unit vector x;y;z");
+      default_approach = a / a.norm();
+    }
+  }
+
+  // a FRESH message: arrived after this tick began
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+  GraspCandidateArrayMsg::SharedPtr cands;
+  vision_msgs::msg::Detection3DArray::SharedPtr dets;
+  if (source == "candidates")
+  {
+    CandidateFeed& feed = candidateFeedFor(ctx->node, topic);
+    uint64_t seen;
+    { std::lock_guard<std::mutex> g(feed.m); seen = feed.arrivals; }
+    while (!cands && std::chrono::steady_clock::now() < deadline)
+    {
+      { std::lock_guard<std::mutex> g(feed.m); if (feed.arrivals > seen) cands = feed.latest; }
+      if (!cands) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+  }
+  else
+  {
+    DetectionFeed& feed = feedFor(ctx->node, topic);
+    uint64_t seen;
+    { std::lock_guard<std::mutex> g(feed.m); seen = feed.arrivals; }
+    while (!dets && std::chrono::steady_clock::now() < deadline)
+    {
+      { std::lock_guard<std::mutex> g(feed.m); if (feed.arrivals > seen) dets = feed.latest; }
+      if (!dets) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+  }
+  if (!cands && !dets)
+    return fail("DETECTION_TIMEOUT", "no fresh message on '" + topic + "' within " + std::to_string(timeout_ms) +
+                " ms (is the producer running? is it publishing RELIABLE?)");
+
+  // TF into target_frame: ONE lookup per source frame, shared by every candidate from it
+  auto tf = tfFor(ctx);
+  std::map<std::string, geometry_msgs::msg::TransformStamped> transforms;
+  std::string tf_error;
+  auto transformTo = [&](const std::string& src) -> const geometry_msgs::msg::TransformStamped* {
+    auto it = transforms.find(src);
+    if (it != transforms.end()) return &it->second;
+    try
+    {
+      it = transforms.emplace(src, tf->lookupTransform(target, src, tf2::TimePointZero, tf2::durationFromSec(2.0))).first;
+      return &it->second;
+    }
+    catch (const std::exception& e)
+    {
+      tf_error = "TF " + src + " -> " + target + ": " + e.what();
+      return nullptr;
+    }
+  };
+  auto rotationOf = [](const geometry_msgs::msg::TransformStamped& T) {
+    const auto& r = T.transform.rotation;
+    return Eigen::Quaterniond(r.w, r.x, r.y, r.z).normalized();
+  };
+
+  // the candidates, in published order: a producer's array as it is, or the projected detections
+  GraspCandidateArrayMsg set;
+  if (cands)
+  {
+    set = *cands;
+    const std::string why = arrayProblem(set);
+    if (!why.empty()) return fail("INVALID_CANDIDATE", why + " (the producer '" + topic + "' broke the contract)");
+    if (set.candidates.size() > static_cast<std::size_t>(keep)) set.candidates.resize(keep);
+  }
+  else
+  {
+    set.header = dets->header;
+    const auto chosen = selectDetectionCandidates(*dets, class_id, min_score, keep);
+    for (const std::size_t i : chosen)
+    {
+      const auto& d = dets->detections[i];
+      ProjectionConfig cfg = projection;
+      if (default_approach)
+      {
+        const std::string src = d.header.frame_id.empty() ? dets->header.frame_id : d.header.frame_id;
+        const auto* T = transformTo(src);
+        if (!T) return fail("TF_LOOKUP_FAILED", tf_error);
+        cfg.default_approach = rotationOf(*T).inverse() * *default_approach;   // into the detection's frame
+      }
+      Projection p = projectDetection(d, dets->header, i, cfg);
+      if (!p.problem.empty())
+        return fail("INVALID_CANDIDATE", "detection " + std::to_string(i) + ": " + p.problem);
+      set.candidates.push_back(std::move(p.candidate));
+    }
+  }
+  if (set.candidates.empty())
+    return fail("NO_CANDIDATES", cands ? "the producer proposed none (an empty array)"
+                                       : "the fresh detection array has no match (had " +
+                                           std::to_string(dets->detections.size()) + ")");
+
+  // into target_frame, then onto the blackboard
+  for (std::size_t n = 0; n < set.candidates.size(); ++n)
+  {
+    const auto& c = set.candidates[n];
+    const auto* T = transformTo(c.header.frame_id);
+    if (!T) return fail("TF_LOOKUP_FAILED", tf_error);
+    const Eigen::Quaterniond R = rotationOf(*T);
+    geometry_msgs::msg::Pose P;
+    tf2::doTransform(c.grasp_pose, P, *T);
+    const Eigen::Vector3d a = R * Eigen::Vector3d(c.approach.x, c.approach.y, c.approach.z);
+    const Eigen::Vector3d nrm = R * Eigen::Vector3d(c.surface_normal.x, c.surface_normal.y, c.surface_normal.z);
+    const std::string pre = candidatePrefix(out, n);
+    bb->set<std::string>(pre + ".position", formatNumbers({P.position.x, P.position.y, P.position.z}));
+    bb->set<std::string>(pre + ".orientation",
+                         formatNumbers({P.orientation.x, P.orientation.y, P.orientation.z, P.orientation.w}));
+    bb->set<std::string>(pre + ".approach", vecText(a));
+    bb->set<std::string>(pre + ".normal", vecText(nrm));
+    bb->set<std::string>(pre + ".standoff_m", formatNumbers({c.standoff_m}));
+    bb->set<std::string>(pre + ".eef", c.eef);
+    bb->set<std::string>(pre + ".site", c.site);
+    bb->set<std::string>(pre + ".score", formatNumbers({c.score}));
+    bb->set<std::string>(pre + ".confidence", formatNumbers({c.confidence}));
+    bb->set<std::string>(pre + ".id", c.id);
+    bb->set<std::string>(pre + ".provider", c.provider);
+    bb->set<std::string>(pre + ".object_class", c.object_class);
+    bb->set<std::string>(pre + ".object_id", c.object_id);
+    bb->set<std::string>(pre + ".frame", target);
+    bb->set<std::string>(pre + ".stamp", std::to_string(c.header.stamp.sec) + "." + [&] {
+      std::string ns = std::to_string(c.header.stamp.nanosec);
+      return std::string(9 - std::min<std::size_t>(9, ns.size()), '0') + ns; }());
+    RCLCPP_INFO(nlog(config()), "DetectCandidates: candidate %zu '%s' (provider %s) at (%.4f, %.4f, %.4f), approach "
+                "(%.4f, %.4f, %.4f), standoff %.4f m in %s -> BB[%s.*]", n, c.id.c_str(), c.provider.c_str(),
+                P.position.x, P.position.y, P.position.z, a.x(), a.y(), a.z(), c.standoff_m, target.c_str(), pre.c_str());
+  }
+  bb->set<std::string>(candidateCountKey(out), std::to_string(set.candidates.size()));
+  RCLCPP_INFO(nlog(config()), "DetectCandidates: %zu candidate(s) on BB[%s.0 ..] in the order the producer PUBLISHED "
+              "them (the order is the rank, ADR-0016); BB[%s] = %zu", set.candidates.size(), out.c_str(),
+              candidateCountKey(out).c_str(), set.candidates.size());
+  return BT::NodeStatus::SUCCESS;
+}
+
+// SetWaypointFromCandidate (vNext M3.6, ADR-0026): candidate `index` of the set `from` -> the grasp,
+// PreGrasp and (optionally) Retract WAYPOINTS of the grasp idiom. WHERE only: each waypoint's motion
+// type, profile and speed stay its task_parameters entry's (the idiom's), never the candidate's.
+//
+//   orientation        align_approach (the only form in M3.6, owner decision M3.6-1): the TCP
+//                      orientation = MinRot(z_ref -> a) * R_ref, R_ref the orientation of the
+//                      waypoint `orientation_from` (in the candidate set's frame), a the candidate's
+//                      approach: the application's reference tilted as little as possible so the
+//                      tool's +Z travels along the approach. Refused when R_ref's +Z opposes the
+//                      approach (the minimal rotation is undefined): no axis is chosen, the
+//                      candidate's own orientation is never used instead.
+//   grasp     = p                         (the candidate's position)
+//   pregrasp  = p - s * a                 s: `standoff_m` (the step's) or else the candidate's; > 0
+//   retract   = p - d * a                 retract_along_approach = d (back along the approach), or
+//             = p + d * e_z               retract_dz = d (up the frame's +Z axis)
+//   every waypoint: the same orientation, type tcp, frame = the candidate set's frame.
+// The candidate's eef / site, when it names them, must be the step's (`eef`, `site`): a candidate for
+// another tool is refused, never executed with this one. Nothing is written on a refusal (`reason`).
+// Pure blackboard: no ROS, no runtime -- unit-tested by ticking it.
+BT::PortsList SetWaypointFromCandidate::providedPorts()
+{ return {BT::InputPort<std::string>("from", "", "the candidate set (DetectCandidates out_key)"),
+          BT::InputPort<int>("index", 0, "which candidate, in published order"),
+          BT::InputPort<std::string>("grasp", "", "the grasp waypoint to (re)define"),
+          BT::InputPort<std::string>("pregrasp", "", "the PreGrasp waypoint to (re)define"),
+          BT::InputPort<std::string>("retract", "", "the Retract waypoint to (re)define (optional)"),
+          BT::InputPort<std::string>("standoff_m", "", "replaces the candidate's standoff"),
+          BT::InputPort<std::string>("retract_along_approach", "", "Retract: back along the approach [m]"),
+          BT::InputPort<std::string>("retract_dz", "", "Retract: up the frame's +Z [m]"),
+          BT::InputPort<std::string>("orientation", "", "align_approach"),
+          BT::InputPort<std::string>("orientation_from", "", "the reference waypoint of align_approach"),
+          BT::InputPort<std::string>("eef", "", "the step's device"),
+          BT::InputPort<std::string>("site", "", "the step's site"),
+          BT::OutputPort<std::string>("reason", "on FAILURE: why")}; }
+BT::NodeStatus SetWaypointFromCandidate::tick()
+{
+  auto bb = config().blackboard;
+  auto log = safeLog(config());
+  const std::string from = in(*this, "from"), grasp = in(*this, "grasp"), pregrasp = in(*this, "pregrasp"),
+                    retract = in(*this, "retract"), orientation = in(*this, "orientation"),
+                    reference = in(*this, "orientation_from"), standoff_text = in(*this, "standoff_m"),
+                    along_text = in(*this, "retract_along_approach"), dz_text = in(*this, "retract_dz"),
+                    eef = in(*this, "eef"), site = in(*this, "site");
+  int index = 0;
+  const bool index_read = strictIntIn(*this, "index", index);
+  auto refuse = [&](const std::string& reason, const std::string& why) {
+    RCLCPP_ERROR(log, "SetWaypointFromCandidate '%s' [%d]: %s: %s -- no waypoint written", from.c_str(), index,
+                 reason.c_str(), why.c_str());
+    setOutput("reason", reason);
+    return BT::NodeStatus::FAILURE;
+  };
+  auto get = [&](const std::string& key, std::string& value) {
+    try { value = bb->get<std::string>(key); return true; }
+    catch (const std::exception&) { return false; }
+  };
+  if (!index_read)
+    return refuse("INVALID_CONFIGURATION", "index='" + config().input_ports.at("index") + "' cannot be read as a "
+                  "candidate index (never defaulted to 0: it decides which object the arm goes to)");
+  if (from.empty() || grasp.empty() || pregrasp.empty())
+    return refuse("INVALID_CONFIGURATION", "from, grasp and pregrasp are required");
+  if (orientation != "align_approach")
+    return refuse("INVALID_CONFIGURATION", "orientation '" + orientation + "': a candidate's TCP orientation is "
+                  "align_approach in this version (the reference waypoint orientation_from, tilted onto the approach)");
+  if (reference.empty()) return refuse("INVALID_CONFIGURATION", "align_approach needs orientation_from (a waypoint)");
+  if (!retract.empty() && along_text.empty() == dz_text.empty())
+    return refuse("INVALID_CONFIGURATION", "a Retract is exactly one of retract_along_approach or retract_dz");
+  if (retract.empty() && !(along_text.empty() && dz_text.empty()))
+    return refuse("INVALID_CONFIGURATION", "retract_along_approach / retract_dz need a retract waypoint");
+
+  // WHICH candidate: an index into the set's published order, below its count
+  std::string count_text;
+  if (!get(candidateCountKey(from), count_text))
+    return refuse("NO_CANDIDATE", "no '" + candidateCountKey(from) + "' on the blackboard (run DetectCandidates first)");
+  double count = 0;
+  if (!number(count_text, count)) return refuse("NO_CANDIDATE", "'" + candidateCountKey(from) + "' is not a count");
+  if (index < 0 || index >= count)
+    return refuse("NO_CANDIDATE", "no candidate " + std::to_string(index) + ": the set holds " + count_text);
+  const std::string pre = candidatePrefix(from, static_cast<std::size_t>(index));
+  std::string pos_text, approach_text, frame, cand_standoff_text, cand_eef, cand_site, id, provider;
+  if (!get(pre + ".position", pos_text) || !get(pre + ".approach", approach_text) || !get(pre + ".frame", frame) ||
+      !get(pre + ".standoff_m", cand_standoff_text) || !get(pre + ".eef", cand_eef) || !get(pre + ".site", cand_site) ||
+      !get(pre + ".id", id) || !get(pre + ".provider", provider))
+    return refuse("NO_CANDIDATE", "candidate '" + pre + "' is incomplete on the blackboard");
+  Eigen::Vector3d p, a;
+  if (!vec3(pos_text, p)) return refuse("INVALID_CANDIDATE", "its position '" + pos_text + "' is not finite x;y;z");
+  if (!vec3(approach_text, a) || std::abs(a.norm() - 1.0) > kUnitTolerance)
+    return refuse("INVALID_CANDIDATE", "its approach '" + approach_text + "' is not a unit vector");
+  a.normalize();
+  if (!cand_eef.empty() && cand_eef != eef)
+    return refuse("CANDIDATE_SITE_MISMATCH", "candidate '" + id + "' is for device '" + cand_eef + "', the step uses '" +
+                  eef + "'");
+  if (!cand_site.empty() && cand_site != site)
+    return refuse("CANDIDATE_SITE_MISMATCH", "candidate '" + id + "' is for site '" + cand_site + "', the step uses '" +
+                  site + "'");
+
+  double standoff = 0;
+  const std::string& s_text = standoff_text.empty() ? cand_standoff_text : standoff_text;
+  if (!number(s_text, standoff) || standoff <= 0)
+    return refuse("INVALID_STANDOFF", "the PreGrasp needs a standoff > 0 m along the approach (" +
+                  std::string(standoff_text.empty() ? "the candidate suggests '" : "the step gives '") + s_text +
+                  "'; the step's standoff_m replaces the candidate's)");
+  double d = 0;
+  if (!retract.empty() && (!number(along_text.empty() ? dz_text : along_text, d) || d <= 0))
+    return refuse("INVALID_CONFIGURATION", "the Retract distance must be a number > 0 m");
+
+  std::string ref_text, ref_frame;
+  Eigen::Quaterniond R_ref;
+  if (!get(reference + ".orientation", ref_text) || !unitQuat(ref_text, R_ref))
+    return refuse("INVALID_REFERENCE", "the reference waypoint '" + reference + "' has no unit orientation qx;qy;qz;qw");
+  if (!get(reference + ".frame", ref_frame) || ref_frame.empty())
+  {
+    // a waypoint without a frame is in the runtime's base frame (MoveWaypoint's rule): say which it is
+    BtContext* ctx = nullptr;
+    try { ctx = bb->get<BtContext*>(BB_BT_CONTEXT); } catch (const std::exception&) {}
+    if (!ctx || !ctx->runtime)
+      return refuse("INVALID_REFERENCE", "the reference waypoint '" + reference + "' names no frame and there is no "
+                    "runtime to say which its base frame is");
+    ref_frame = ctx->runtime->baseFrame();
+  }
+  if (ref_frame != frame)
+    return refuse("INVALID_REFERENCE", "the reference waypoint '" + reference + "' is in frame '" + ref_frame +
+                  "', the candidate set in '" + frame + "': an orientation is compared in one frame");
+  const auto R_tcp = alignApproach(R_ref, a);
+  if (!R_tcp)
+    return refuse("APPROACH_OPPOSES_REFERENCE", "the reference '" + reference + "' points the tool's +Z exactly "
+                  "against candidate '" + id + "''s approach: the minimal rotation is undefined (teach a reference "
+                  "whose tool +Z points along the approach)");
+
+  const Eigen::Vector3d pg = p - standoff * a;
+  const std::string q = quatText(*R_tcp);
+  auto write = [&](const std::string& wp, const Eigen::Vector3d& at) {
+    bb->set<std::string>(wp + ".position", vecText(at));
+    bb->set<std::string>(wp + ".orientation", q);
+    bb->set<std::string>(wp + ".type", "tcp");
+    bb->set<std::string>(wp + ".frame", frame);
+  };
+  write(grasp, p);
+  write(pregrasp, pg);
+  Eigen::Vector3d rt = p;
+  if (!retract.empty())
+  {
+    rt = along_text.empty() ? Eigen::Vector3d(p + d * Eigen::Vector3d::UnitZ()) : Eigen::Vector3d(p - d * a);
+    write(retract, rt);
+  }
+  const std::string retract_text = retract.empty() ? std::string() : ", " + retract + " = " + vecText(rt);
+  RCLCPP_INFO(log, "SetWaypointFromCandidate: candidate '%s' (provider %s) -> %s = %s, %s = %s (standoff %g m along "
+              "-approach %s)%s, orientation align_approach(%s) = %s, frame %s", id.c_str(), provider.c_str(),
+              grasp.c_str(), vecText(p).c_str(), pregrasp.c_str(), vecText(pg).c_str(), standoff, vecText(a).c_str(),
+              retract_text.c_str(), reference.c_str(), q.c_str(), frame.c_str());
+  return BT::NodeStatus::SUCCESS;
+}
+
 // ═══ learned-policy execution ═══════════════════════════════════════════════════
 // Extension point (POLICY_EXECUTION.md, ADR-0005). These nodes keep TMR torch-free:
 // they only speak a ROS contract to the separate Pro package trainit_policy_runtime.
@@ -1632,7 +2869,10 @@ BT::NodeStatus CheckRobotState::tick()
     try { want = parseXyz3(pos_s); }
     catch (const std::exception& e)
     { RCLCPP_ERROR(nlog(config()), "CheckRobotState: bad 'position': %s", e.what()); return BT::NodeStatus::FAILURE; }
-    const auto cur = currentPose(ctx).position;
+    geometry_msgs::msg::Point cur;
+    try { cur = currentPose(ctx).position; }
+    catch (const RobotStateUnavailable& e)   // vNext M3.4: no state is never "at the origin"
+    { RCLCPP_ERROR(nlog(config()), "CheckRobotState: %s", e.what()); return BT::NodeStatus::FAILURE; }
     const double dx = cur.x - want[0], dy = cur.y - want[1], dz = cur.z - want[2];
     const double dist = std::sqrt(dx * dx + dy * dy + dz * dz);
     if (dist > tol)
@@ -1957,8 +3197,15 @@ BT::NodeStatus ServoTrack::tick()
 
   // --- the target must already be in the frame we measure in -----------------
   // The FULL read, not a frame accessor: it also waits (up to 1 s) for a fresh state before
-  // start_servo, as the read through moveGroup() did before vNext M2.5.
-  const std::string pose_frame = ctx->runtime->currentTipPose().header.frame_id;
+  // start_servo, as the read through moveGroup() did before vNext M2.5. vNext M3.4: no state fails
+  // here, before any servo call (it streamed toward the identity pose until the timeout).
+  std::string pose_frame;
+  try { pose_frame = ctx->runtime->currentTipPose().header.frame_id; }
+  catch (const RobotStateUnavailable& e)
+  {
+    RCLCPP_ERROR(log, "ServoTrack '%s': %s -- nothing was sent", wp.c_str(), e.what());
+    return BT::NodeStatus::FAILURE;
+  }
   const std::string wp_frame = field("frame");
   if (!wp_frame.empty() && !pose_frame.empty() && wp_frame != pose_frame)
   {
@@ -2080,8 +3327,15 @@ BT::NodeStatus ServoTrack::tick()
   while (rclcpp::ok())
   {
     // 1) where are we? (currentTipPose copies the monitored state — fine at 50 Hz on
-    //    the BT thread, which is not a real-time control path)
-    const auto cur = ctx->runtime->currentTipPose().pose;
+    //    the BT thread, which is not a real-time control path). vNext M3.4: a state that stops
+    //    arriving mid-stream ends it (a zero twist, pause), never a twist toward the identity pose.
+    geometry_msgs::msg::Pose cur;
+    try { cur = ctx->runtime->currentTipPose().pose; }
+    catch (const RobotStateUnavailable& e)
+    {
+      RCLCPP_ERROR(log, "ServoTrack '%s': %s -- the stream is released", wp.c_str(), e.what());
+      return release(BT::NodeStatus::FAILURE);
+    }
     const Eigen::Vector3d cur_p(cur.position.x, cur.position.y, cur.position.z);
     const Eigen::Vector3d err_p = target_p - cur_p;
     dist = err_p.norm();
@@ -2184,12 +3438,14 @@ void registerAllNodes(BT::BehaviorTreeFactory& f)
   f.registerNodeType<MoveCollisionFree>("MoveFree");   // alias
   f.registerNodeType<ServoTrack>("ServoTrack");        // ADR-0015: execution: servo
   f.registerNodeType<ExecuteProcessPath>("ExecuteProcessPath");
+  f.registerNodeType<FollowPath>("FollowPath");          // vNext M3.1 (ADR-0024)
   f.registerNodeType<OpenGripper>("OpenGripper");
   f.registerNodeType<CloseGripper>("CloseGripper");
   f.registerNodeType<SetGripper>("SetGripper");
   f.registerNodeType<CommandActuator>("CommandActuator");   // ADR-0022
   f.registerNodeType<VerifyGrasp>("VerifyGrasp");           // ADR-0022
   f.registerNodeType<EnableProcess>("EnableProcess");
+  f.registerNodeType<ProcessEventNode>("ProcessEvent");   // vNext M3.5 (the struct ProcessEvent is the event)
   f.registerNodeType<DisableProcess>("DisableProcess");
   f.registerNodeType<AddCollisionObject>("AddCollisionObject");
   f.registerNodeType<RemoveCollisionObject>("RemoveCollisionObject");
@@ -2206,6 +3462,8 @@ void registerAllNodes(BT::BehaviorTreeFactory& f)
   f.registerNodeType<DetectObject>("DetectObject");
   f.registerNodeType<SetWaypointFromDetection>("SetWaypointFromDetection");
   f.registerNodeType<SetWaypointRelative>("SetWaypointRelative");
+  f.registerNodeType<DetectCandidates>("DetectCandidates");                   // vNext M3.6 (ADR-0026)
+  f.registerNodeType<SetWaypointFromCandidate>("SetWaypointFromCandidate");   // vNext M3.6 (ADR-0026)
   f.registerNodeType<RunPolicy>("RunPolicy");
   f.registerNodeType<CheckRobotState>("CheckRobotState");
   f.registerNodeType<Wait>("Wait");

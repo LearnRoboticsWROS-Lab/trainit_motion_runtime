@@ -19,8 +19,13 @@
 # its selector case in C++, then a TSA catalog refresh; the tests name whatever is
 # missing. Candidate providers (cuMotion, cuRobo, ...) are NOT entries: they are
 # external metadata in TSA's candidate catalog (ADR-0019).
+#
+# Schema 2 (vNext M3.1, ADR-0025) is schema 1 plus three sections at the end:
+# `capabilities`, `providers` and `provider_defaults` -- what each MoveIt ROUTE can honour.
+# Nothing above them changed; a reader that maps only schema 1 refuses this file by its
+# number instead of half-reading it.
 # =============================================================================
-schema_version: 1
+schema_version: 2
 
 # MoveIt planning pipelines. `loaded: true` = in the DEFAULT loaded set: move_group
 # loads it in every TrainIt cell (planning_pipelines, in this order) and the
@@ -90,3 +95,100 @@ cartesian:
 execution:
   plan:  {planned: true, node: MoveWaypoint}    # plan the trajectory, then execute it
   servo: {planned: false, node: ServoTrack}     # MoveIt Servo streams it; no planner applies
+
+# --- schema 2 (vNext M3.1, ADR-0025): motion provider capabilities ---------------------------
+# The application states INTENT and LIMITS; a provider implements them. A provider is a ROW
+# here -- one MoveIt route as TMR drives it -- never a class. `provides` lists what a step served
+# by that route may REQUIRE; a step that requires a token its provider lacks is refused before
+# it moves (TMR's path library today; TSA's capability resolution from M3.2). A token joins a
+# row in the commit that makes the route honour it, never before. The application never names
+# a velocity-profile shape: `time_parameterization` is informational provider metadata.
+# The C++ mirror is motion_providers.cpp (option A of ADR-0021 Decision 4), checked entry by
+# entry against this file by test_planner_registry.
+# Who consumes a token today: TMR's path library refuses a path whose provider lacks one of
+# multi_segment_path, blending, cartesian_linear, cartesian_circular, continuous_path,
+# velocity_scaling, acceleration_scaling, goal_tolerance; TSA's capability resolution (vNext M3.2)
+# consumes every token, joint_ptp, collision_free_planning, tcp_limits and process_path included
+# (tcp_limits is honoured by MoveIt's Pilz Cartesian limits, not by TMR code).
+capabilities:
+  # live: provided by at least one row below
+  live: [joint_ptp, collision_free_planning, cartesian_linear, cartesian_circular,
+         multi_segment_path, blending, continuous_path, velocity_scaling, acceleration_scaling,
+         tcp_limits, goal_tolerance, process_path]
+  # reserved: declared so that a request for one is REFUSED by name; no row provides them
+  reserved: [orientation_constraints, jerk_constraints, precomputed_trajectory]
+
+# goal_tolerance: the motion_sequence rows send the request's goal tolerance in every item; the
+# plan_and_execute rows send it since vNext M3.4 (TMR 2.3.0) for a POSE goal (a joint target's
+# Cartesian tolerance is refused at run time); cartesian_path has no goal tolerance.
+# Each row names its route and points into the sections above (`planner_mode` or `cartesian`)
+# instead of repeating their pipeline/planner. Routes:
+#   plan_and_execute  MoveGroupInterface plan -> TMR validation -> execution (MotionRuntime's
+#                     movePtp / moveLinear / moveCollisionFree)
+#   motion_sequence   ONE Pilz MoveGroupSequence goal (plan + execute), LIN/CIRC items, a blend
+#                     radius per item, the last always 0 (executeProcessSequence)
+#   cartesian_path    computeCartesianPath + TOTG retiming through every sample: a continuous
+#                     Cartesian path (executeCartesianProcess, cartesian_waypoints backend)
+providers:
+  pilz_ptp:
+    route: plan_and_execute
+    planner_mode: pilz
+    provides: [joint_ptp, velocity_scaling, acceleration_scaling, goal_tolerance]
+    time_parameterization: pilz_trapezoidal
+    stability: stable
+  ompl:
+    route: plan_and_execute
+    planner_mode: ompl
+    provides: [collision_free_planning, velocity_scaling, acceleration_scaling, goal_tolerance]
+    time_parameterization: totg
+    stability: stable
+  ompl_chomp:
+    route: plan_and_execute
+    planner_mode: ompl_chomp
+    provides: [collision_free_planning, velocity_scaling, acceleration_scaling, goal_tolerance]
+    time_parameterization: totg
+    stability: stable
+  pilz_lin:
+    route: plan_and_execute
+    cartesian: linear
+    provides: [cartesian_linear, velocity_scaling, acceleration_scaling, tcp_limits, goal_tolerance]
+    time_parameterization: pilz_trapezoidal
+    stability: stable
+  pilz_circ:
+    route: motion_sequence
+    cartesian: circular
+    provides: [cartesian_circular, velocity_scaling, acceleration_scaling, tcp_limits,
+               goal_tolerance]
+    time_parameterization: pilz_trapezoidal
+    stability: stable
+  # Folded from config/process_path_profiles.yaml (pilz_sequence: supports_blending,
+  # supports_circular), which is now only a pointer here.
+  pilz_sequence:
+    route: motion_sequence
+    cartesian: process_path
+    provides: [multi_segment_path, blending, cartesian_linear, cartesian_circular,
+               velocity_scaling, acceleration_scaling, tcp_limits, goal_tolerance, process_path]
+    time_parameterization: pilz_trapezoidal
+    stability: stable
+  # Folded from config/process_path_profiles.yaml (cartesian_waypoints): the numbers are the
+  # backend's defaults (cartesian_waypoint_backend.hpp, MoveItMotionRuntime::Config).
+  cartesian_waypoints:
+    route: cartesian_path
+    provides: [continuous_path, velocity_scaling, acceleration_scaling]
+    time_parameterization: totg
+    smoothing: ruckig_optional
+    eef_step_m: 0.005
+    jump_threshold: 0.0
+    fraction_threshold: 1.0
+    stability: stable
+
+# The row a step of each kind gets when nothing chooses one. `free` is a collision-AVOIDING
+# move, so it defaults to a sampling planner, not to default_planner_mode (whose Pilz PTP only
+# CHECKS collisions); `dense_path` is a sampled path executed as one continuous motion.
+provider_defaults:
+  ptp: pilz_ptp
+  free: ompl
+  lin: pilz_lin
+  circ: pilz_circ
+  path: pilz_sequence
+  dense_path: cartesian_waypoints
