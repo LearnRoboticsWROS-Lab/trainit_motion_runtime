@@ -123,8 +123,10 @@ process-path metrics (Section 21, FK-based deviation) are collected and logged.
 
 ## Execution & robot adapter
 Trajectories execute through `FollowJointTrajectory` (ros2_control), the same in
-mock / Isaac / real. A future `RobotMotionAdapter` (robot_motion_adapter.hpp)
-will allow a vendor-native backend without touching the engine.
+mock / Isaac / real. Robot- and vendor-specific execution stays behind the robot's
+controllers and bridges, never in TMR (ADR-0015: MoveIt is the motion backend). The
+declared but never implemented `RobotMotionAdapter` (`robot_motion_adapter.hpp`) was
+removed in 2.5.0.
 
 ## Online servoing (ADR-0015)
 `execution: servo` is a PER-MOVE field on its own axis, orthogonal to `motion`

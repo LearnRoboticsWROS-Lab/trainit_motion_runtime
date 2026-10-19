@@ -11,9 +11,11 @@
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>   <!-- ament_python_install_package: the launch helper module -->
 
   <depend>rclcpp</depend>
   <depend>rclcpp_action</depend>
+  <depend>rcl_interfaces</depend>   <!-- scene_manager_node: a dynamically typed parameter's descriptor -->
   <depend>action_msgs</depend>   <!-- ServoTrack arbitration: is a trajectory execution in flight? -->
   <depend>geometry_msgs</depend>
   <depend>std_msgs</depend>
@@ -32,11 +34,13 @@
   <depend>moveit_ros_move_group</depend>   <!-- capability_names.h: the runners' MoveIt start-up wait (vNext M2.7); and the move_group node -->
   <depend>tf2_ros</depend>
   <depend>tf2_eigen</depend>
+  <depend>eigen</depend>   <!-- Eigen in the sources and in the installed grasp_candidates.hpp -->
   <depend>tf2_geometry_msgs</depend>
   <depend>vision_msgs</depend>   <!-- the perception contract (Detection3DArray), consumed by DetectObject -->
   <depend>yaml-cpp</depend>
   <depend>behaviortree_cpp</depend>
   <depend>geometric_shapes</depend>   <!-- scene loader: mesh -> shape_msgs/Mesh -->
+  <build_depend>boost</build_depend>   <!-- scene_manager_node: boost::get on a geometric_shapes variant -->
   <exec_depend>resource_retriever</exec_depend>   <!-- resolve package:// mesh URIs -->
 
 
@@ -45,6 +49,8 @@
   <exec_depend>moveit_planners_chomp</exec_depend>
   <exec_depend>pilz_industrial_motion_planner</exec_depend>
   <exec_depend>moveit_configs_utils</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>   <!-- the launch helper module (trainit_moveit_config.py) -->
+  <exec_depend>python3-yaml</exec_depend>         <!-- the launch helper module (trainit_moveit_config.py) -->
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
