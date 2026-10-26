@@ -703,7 +703,7 @@ requests from /scene_manager_node:
   ApplyPlanningScene world=[] attached=[] acm(entries=[] defaults=[part=1]) -> success=true
 --- step 2: the harness publishes true on /m26_SM_02/grasp
 requests from /scene_manager_node:
-  ApplyPlanningScene world=[REMOVE part] attached=[ADD part@tcp] -> success=false (EMULATED REFUSAL: this fake refuses a diff that ADDs an attached object)
+  ApplyPlanningScene world=[] attached=[ADD part@tcp] -> success=false (EMULATED REFUSAL: this fake refuses a diff that ADDs an attached object)
 --- step 3: the harness publishes false on /m26_SM_02/grasp
 requests from /scene_manager_node: (none)
 whole requests, per manager:
@@ -908,7 +908,7 @@ events /scene_manager_node:
           data: []
     is_diff: true
 [4] SERVICE /apply_planning_scene ApplyPlanningScene.request #3 -> success=false (EMULATED REFUSAL: this fake refuses a diff that ADDs an attached object)
-  | world=[REMOVE part] attached=[ADD part@tcp]
+  | world=[] attached=[ADD part@tcp]
   scene:
     name: ""
     robot_state:
@@ -993,33 +993,7 @@ events /scene_manager_node:
     link_scale: []
     object_colors: []
     world:
-      collision_objects:
-      -
-        header:
-          frame_id: "base_link"
-        pose:
-          position:
-            x: 0.0000000000000000
-            y: 0.0000000000000000
-            z: 0.0000000000000000
-          orientation:
-            x: 0.0000000000000000
-            y: 0.0000000000000000
-            z: 0.0000000000000000
-            w: 1.0000000000000000
-        id: "part"
-        type:
-          key: ""
-          db: ""
-        primitives: []
-        primitive_poses: []
-        meshes: []
-        mesh_poses: []
-        planes: []
-        plane_poses: []
-        subframe_names: []
-        subframe_poses: []
-        operation: 0x01
+      collision_objects: []
       octomap:
         header:
           frame_id: ""
@@ -1046,7 +1020,7 @@ manager /scene_manager_node after SIGINT: exit code 0
 semantic: command sent=grasp Bool on /m26_SM_02/grasp: true, false | ack=none (a topic has no ack) | state=step 1 /scene_manager_node: 3 request(s); step 2 /scene_manager_node: 1 request(s); step 3 /scene_manager_node: no request | grasp confirmation=Bool subscriptions of /scene_manager_node: [/m26_SM_02/grasp] -- its only Bool input is the command topic the harness drives | BT result=none (no tree: the scene manager is driven by the topic) | timeout=none | release result=step 3 /scene_manager_node: no request | result code=/scene_manager_node: ApplyPlanningScene success=true x2, success=false x1
 
 === scenario SM-03
-pins: grasp_attach_mode attach_box accepted: true REMOVES the world part and ATTACHES its box, then the ACM; false DETACHES and re-ADDS it, then the ACM
+pins: grasp_attach_mode attach_box accepted: true ATTACHES the part's box with NO world REMOVE (move_group moves an attached id off the world itself; the fake refuses the REMOVE + ATTACH diff as move_group does), then the ACM; false DETACHES and re-ADDS it, then the ACM
 params (every manager):
   /**:
     ros__parameters:
@@ -1087,7 +1061,7 @@ requests from /scene_manager_node:
   ApplyPlanningScene world=[] attached=[] acm(entries=[] defaults=[part=1]) -> success=true
 --- step 2: the harness publishes true on /m26_SM_03/grasp
 requests from /scene_manager_node:
-  ApplyPlanningScene world=[REMOVE part] attached=[ADD part@tcp] -> success=true
+  ApplyPlanningScene world=[] attached=[ADD part@tcp] -> success=true
   GetPlanningScene components=128
   ApplyPlanningScene world=[] attached=[] acm(entries=[part, table] defaults=[part=1]) -> success=true
 --- step 3: the harness publishes false on /m26_SM_03/grasp
@@ -1297,7 +1271,7 @@ events /scene_manager_node:
           data: []
     is_diff: true
 [4] SERVICE /apply_planning_scene ApplyPlanningScene.request #3 -> success=true
-  | world=[REMOVE part] attached=[ADD part@tcp]
+  | world=[] attached=[ADD part@tcp]
   scene:
     name: ""
     robot_state:
@@ -1382,33 +1356,7 @@ events /scene_manager_node:
     link_scale: []
     object_colors: []
     world:
-      collision_objects:
-      -
-        header:
-          frame_id: "base_link"
-        pose:
-          position:
-            x: 0.0000000000000000
-            y: 0.0000000000000000
-            z: 0.0000000000000000
-          orientation:
-            x: 0.0000000000000000
-            y: 0.0000000000000000
-            z: 0.0000000000000000
-            w: 1.0000000000000000
-        id: "part"
-        type:
-          key: ""
-          db: ""
-        primitives: []
-        primitive_poses: []
-        meshes: []
-        mesh_poses: []
-        planes: []
-        plane_poses: []
-        subframe_names: []
-        subframe_poses: []
-        operation: 0x01
+      collision_objects: []
       octomap:
         header:
           frame_id: ""

@@ -910,13 +910,29 @@ public:
       "apply_planning_scene",
       [this, apply_name](const std::shared_ptr<ApplyScene::Request> req, std::shared_ptr<ApplyScene::Response> res) {
         bool adds_attached = false;
-        for (const auto& a : req->scene.robot_state.attached_collision_objects)
-          adds_attached = adds_attached || a.object.operation == moveit_msgs::msg::CollisionObject::ADD;
-        const bool refuse = refuse_attach_ && adds_attached;
+        std::set<std::string> attached_ids;
+        for (const auto& a : req->scene.robot_state.attached_collision_objects) {
+          const bool add = a.object.operation == moveit_msgs::msg::CollisionObject::ADD;
+          adds_attached = adds_attached || add;
+          if (add) attached_ids.insert(a.object.id);
+        }
+        // move_group's own rule (MoveIt Humble PlanningScene::setPlanningSceneDiffMsg, seen on a real
+        // move_group in vNext I0): the robot state is applied first, and an attach under a world
+        // object's id MOVES it off the world, so a world REMOVE of that id in the same diff fails and
+        // the apply answers false (while the attach stays).
+        bool remove_after_attach = false;
+        for (const auto& o : req->scene.world.collision_objects)
+          remove_after_attach = remove_after_attach ||
+            (o.operation == moveit_msgs::msg::CollisionObject::REMOVE && attached_ids.count(o.id) > 0);
+        const bool refuse = (refuse_attach_ && adds_attached) || remove_after_attach;
         res->success = !refuse;
         const int k = applies_.load() + 1;
         const std::string answer = "success=" + boolText(res->success) +
-                                   (refuse ? " (EMULATED REFUSAL: this fake refuses a diff that ADDs an attached object)" : "");
+                                   (refuse_attach_ && adds_attached
+                                      ? " (EMULATED REFUSAL: this fake refuses a diff that ADDs an attached object)"
+                                      : remove_after_attach
+                                          ? " (as move_group: the attach already moved the object off the world)"
+                                          : "");
         log_.event("SERVICE", apply_name, "ApplyPlanningScene.request #" + std::to_string(k) + " -> " + answer,
                    sceneSummary(req->scene), yaml17(*req));
         {

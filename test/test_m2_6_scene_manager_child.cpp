@@ -277,8 +277,9 @@ TEST(M26SceneManagerChild, eef_scene_manager_child)
               "committed, so the following false finds nothing to release and sends nothing",
      {{"/"}}, "attach_box", true, false, false,
      {{K::START, false, "", {{"/", 2}}}, {K::BOOL, true, "", {{"/", 3}}}, {K::BOOL, false, "", {{"/", 3}}}}},
-    {"SM-03", "grasp_attach_mode attach_box accepted: true REMOVES the world part and ATTACHES its box, then the ACM; "
-              "false DETACHES and re-ADDS it, then the ACM",
+    {"SM-03", "grasp_attach_mode attach_box accepted: true ATTACHES the part's box with NO world REMOVE (move_group "
+              "moves an attached id off the world itself; the fake refuses the REMOVE + ATTACH diff as move_group does), "
+              "then the ACM; false DETACHES and re-ADDS it, then the ACM",
      {{"/"}}, "attach_box", false, false, false,
      {{K::START, false, "", {{"/", 2}}}, {K::BOOL, true, "", {{"/", 4}}}, {K::BOOL, false, "", {{"/", 6}}}}},
     {"SM-04", "a LATCHED true published before the manager starts arrives before the scene is loaded: it is consumed "
