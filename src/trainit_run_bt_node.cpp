@@ -360,7 +360,12 @@ int main(int argc, char** argv)
   // already spins this node, so the listener's subscriptions ride on it.
   // CELL-GLOBAL (ADR-0023): tf2 subscribes to the absolute /tf and /tf_static, one tree for the
   // cell whatever this runner's namespace.
+  // The spinner thread fills the buffer while the tree ticks on this one, so a lookup may WAIT (its
+  // timeout): without the flag tf2 refuses every timeout, logs an error and answers at once (ROS2ML-SYNC D3).
+  // The wait runs on the node's clock: under use_sim_time a FROZEN /clock never ends it (a paused
+  // simulator; Ctrl-C still does) -- a wall-time bound is H0's bounded waits (KNOWN_DEBT).
   auto tf_buffer = std::make_shared<tf2_ros::Buffer>(node->get_clock());
+  tf_buffer->setUsingDedicatedThread(true);
   auto tf_listener = std::make_shared<tf2_ros::TransformListener>(*tf_buffer, node, false);
   ctx.tf = tf_buffer;
   ctx.eefs = eefs.get();   // null on the LEGACY contract
