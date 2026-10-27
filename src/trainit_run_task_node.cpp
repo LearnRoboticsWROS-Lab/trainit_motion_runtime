@@ -106,6 +106,16 @@ int main(int argc, char** argv)
   cfg.process_backend = *backend;
   cfg.available_pipelines = getStrArray(node, "available_pipelines", defaultAvailablePipelines());
   cfg.enforce_validation = getBool(node, "enforce_validation", true);
+  // TMR 2.6.0 (ADR-0028): how a PTP / free move to a pose gets its joint configuration
+  {
+    std::string pose_refused;
+    if (!MoveItMotionRuntime::poseConfigurationParams(node, cfg, pose_refused))
+    {
+      RCLCPP_FATAL(node->get_logger(), "invalid %s", pose_refused.c_str());
+      rclcpp::shutdown();
+      return 2;
+    }
+  }
 
   const std::string gripper_action = getStr(node, "gripper_action", "");
   const std::string process_kind   = getStr(node, "process_controller", "mock");

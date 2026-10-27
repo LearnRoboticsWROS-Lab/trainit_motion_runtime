@@ -20,6 +20,7 @@ find_package(trainit_interfaces 0.2.0 REQUIRED)   # ADR-0022: EndEffectorState (
 find_package(diagnostic_msgs REQUIRED)   # ADR-0026: a grasp candidate's metadata
 find_package(shape_msgs REQUIRED)
 find_package(moveit_core REQUIRED)
+find_package(random_numbers REQUIRED)
 find_package(moveit_msgs REQUIRED)
 find_package(moveit_ros_planning REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
@@ -72,6 +73,7 @@ set(TRAINIT_DEPS
   diagnostic_msgs
   shape_msgs
   moveit_core
+  random_numbers
   moveit_msgs
   moveit_ros_planning
   moveit_ros_planning_interface
@@ -86,6 +88,7 @@ set(TRAINIT_DEPS
 add_library(trainit_motion_runtime SHARED
   src/motion_types.cpp
   src/motion_failure.cpp   # vNext M2.7: whose failure a failed motion is (pure; seam scan kPlain)
+  src/pose_configuration.cpp   # TMR 2.6.0 (ADR-0028): a pose goal's joint configuration (pure; kPlain)
   src/manual_motion_strategy_selector.cpp
   src/gripper_controller.cpp
   src/planning_scene_manager.cpp
@@ -267,6 +270,13 @@ if(BUILD_TESTING)
     TRAINIT_M31_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/data/m3_1")
 
   # BT node registration/load test needs the behaviortree_cpp headers too.
+  # TMR 2.6.0 (ADR-0028): which joint configuration a pose goal takes (pure)
+  ament_add_gtest(test_pose_configuration test/test_pose_configuration.cpp TIMEOUT 30)
+  target_link_libraries(test_pose_configuration trainit_motion_runtime)
+  ament_add_gtest(test_pose_configuration_params test/test_pose_configuration_params.cpp TIMEOUT 30)
+  target_link_libraries(test_pose_configuration_params trainit_motion_runtime)
+  ament_target_dependencies(test_pose_configuration_params rclcpp)
+
   ament_add_gtest(test_bt_nodes test/test_bt_nodes.cpp)
   target_link_libraries(test_bt_nodes trainit_motion_runtime)
   link_btcpp(test_bt_nodes)

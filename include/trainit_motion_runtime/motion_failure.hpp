@@ -74,6 +74,11 @@ inline constexpr const char* kCauseCircleGeometry    = "CIRCLE_GEOMETRY";     //
 inline constexpr const char* kCauseUnknownPlanner    = "UNKNOWN_PLANNER";     // not a planner mode (R-M3-19)
 inline constexpr const char* kCauseStateUnavailable  = "STATE_UNAVAILABLE";   // no fresh robot state (R-M3-20)
 inline constexpr const char* kCauseUnsupportedTolerance = "UNSUPPORTED_TOLERANCE";   // a goal tolerance not honourable
+// ... TMR 2.6.0 (ADR-0028), both refused before anything is sent (phase request: a FAULT, the program's):
+// a pose that cannot be reached near the configuration it was taught in, and a taught configuration that
+// is not one (its size, a non-finite value, out of the joints' bounds)
+inline constexpr const char* kCauseConfigurationUnreachable = "CONFIGURATION_UNREACHABLE";
+inline constexpr const char* kCauseInvalidConfiguration = "INVALID_CONFIGURATION";
 // ... vNext M3.5 (ADR-0024, M3_DESIGN §9): FollowPath's event-free runs of a path (from= to=)
 inline constexpr const char* kCausePathRange         = "PATH_RANGE";          // from/to is not a run of the path
 inline constexpr const char* kCauseNotAtPathState    = "NOT_AT_PATH_STATE";   // a run ended away from its event state

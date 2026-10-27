@@ -144,6 +144,9 @@ struct MotionTarget
   std::optional<geometry_msgs::msg::Pose> pose;
   std::optional<JointTarget>              joint;
   std::string tip_link;
+  // TMR 2.6.0 (ADR-0028): the joint configuration a pose was taught in (the group's joints, in its
+  // order): the move reaches the pose in the configuration nearest it, or is refused
+  std::optional<std::vector<double>>      configuration;
 };
 
 // --- Process path: Pilz sequence segment (Section 7) -------------------------

@@ -534,7 +534,13 @@ BT::NodeStatus MoveWaypoint::tick()
         else jt.positions = parseVec(field("joints"));
         t.joint = jt;
       }
-      else { t.pose = buildPose(); }
+      else
+      {
+        t.pose = buildPose();
+        // TMR 2.6.0 (ADR-0028): the configuration the pose was taught in, when the waypoint names one
+        const std::string conf = field("configuration");
+        if (!conf.empty()) t.configuration = parseVec(conf);
+      }
 
       PlanningOptions po; po.motion = opts;
       std::optional<PlannerMode> mode = planner_mode;                // explicit per-waypoint planner

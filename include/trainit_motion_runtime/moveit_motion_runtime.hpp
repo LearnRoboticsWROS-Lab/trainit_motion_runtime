@@ -21,6 +21,7 @@
 #include "trainit_motion_runtime/manual_motion_strategy_selector.hpp"
 #include "trainit_motion_runtime/pilz_sequence_backend.hpp"
 #include "trainit_motion_runtime/planning_scene_manager.hpp"
+#include "trainit_motion_runtime/pose_configuration.hpp"
 #include "trainit_motion_runtime/trajectory_validator.hpp"
 
 namespace trainit
@@ -51,6 +52,11 @@ public:
     // vNext M3.4: how long a Pilz sequence goal (plan + execute) may take before the motion fails
     // and the goal is cancelled [s] (PilzSequenceBackend::kDefaultResultTimeoutS, as before)
     double sequence_result_timeout_s{PilzSequenceBackend::kDefaultResultTimeoutS};
+    // TMR 2.6.0 (ADR-0028): a PTP / free move to a pose reaches it in the joint configuration NEAREST
+    // its reference (the taught configuration, else the start state), or (PLANNER) leaves it to the
+    // planner's IK; a taught configuration farther than the tolerance on any joint is refused [rad]
+    PoseGoalConfiguration pose_goal_configuration{PoseGoalConfiguration::NEAREST};
+    double configuration_tolerance{kDefaultConfigurationTolerance};
   };
 
   // The move_group this runtime is a client of is the one in the node's OWN namespace (vNext M2.7,
@@ -81,6 +87,11 @@ public:
   // WARNed. The bound runs on a steady clock (a stopped sim clock does not stop it). Its probe
   // clients are destroyed on return: nothing it creates outlives the call.
   static MoveItWait waitForMoveIt(const rclcpp::Node::SharedPtr& node, double timeout_s);
+  // TMR 2.6.0 (ADR-0028): the runner parameters pose_goal_configuration ("nearest" | "planner",
+  // declared "nearest") and configuration_tolerance (a finite number of radians > 0, an integer
+  // accepted; declared pi/2) into `cfg`. false, `refused` naming the parameter and its value, on
+  // anything else: a configuration error (the runner's FATAL, exit 2). Both runners call it.
+  static bool poseConfigurationParams(const rclcpp::Node::SharedPtr& node, Config& cfg, std::string& refused);
   // ADR-0023 Decision 5: under a namespace N every robot-scoped name a runner resolves must stay
   // inside N. One entry per name a remap sends elsewhere, in the list's order ("service
   // /r1/get_planning_scene -> /r2/get_planning_scene", "topic /r1/collision_object ->
@@ -149,6 +160,23 @@ private:
               moveit::planning_interface::MoveGroupInterface::Plan& plan,
               double& planning_time, int& error_code);
 
+  // TMR 2.6.0 (ADR-0028): a pose goal resolved into the joint configuration this runtime moves to.
+  // The IK of the runner's own robot model (its kinematics plugin), from the taught configuration,
+  // the start state and a fixed series of spread seeds; solutions collision-checked in the planning
+  // scene; the nearest the reference chosen (pose_configuration.hpp).
+  struct PoseResolution
+  {
+    enum class Status { NOT_REQUESTED, RESOLVED, NO_SOLVER, NO_STATE, NO_SOLUTION, REFUSED, INVALID }
+      status{Status::NOT_REQUESTED};
+    std::vector<double> joints;
+    ConfigurationChoice choice;
+    std::string why;
+    std::string worst_joint;     // the name of the joint max_difference is on
+    bool unchecked{false};       // no planning scene: the solutions were not collision-checked
+  };
+  PoseResolution resolvePoseGoal(const geometry_msgs::msg::Pose& pose, const std::string& tip,
+                                 const std::optional<std::vector<double>>& taught) const;
+
   void fillFreeSpaceMetrics(FreeSpaceMetrics& m, const PlannerProfile& profile,
                             const std::string& stage,
                             const moveit_msgs::msg::RobotTrajectory& traj,
@@ -165,6 +193,8 @@ private:
   // requests none sends (MoveGroupInterface keeps the last value it was given)
   double mgi_goal_position_tolerance_{0.0};
   double mgi_goal_orientation_tolerance_{0.0};
+  bool warned_no_solver_{false};    // ADR-0028: said once that the planner chooses
+  bool warned_no_scene_{false};     // ADR-0028: said once that the solutions are not collision-checked
 };
 
 }  // namespace trainit

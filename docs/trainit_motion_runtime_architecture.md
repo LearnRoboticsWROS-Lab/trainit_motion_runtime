@@ -448,6 +448,30 @@ candidate); the runtime executes every candidate through ONE contract, whatever 
   sequence. Not in 2.5.0: a triggered candidate detection, a TF lookup at the observation's stamp, an
   age limit on a candidate set, a tilt limit for align_approach (KNOWN_DEBT).
 
+## A pose goal keeps its joint configuration (TMR 2.6.0, ADR-0028)
+
+A PTP / free move to a TCP target used to be sent as a POSE goal: the planner's IK (KDL, random restarts)
+chose the joint configuration, which could change between cycles (the owner's I0 Test C: the same PTP moved
+4.4 rad of joints in one cycle and 13.4 rad in the next, and the path after it failed). Now
+`MoveItMotionRuntime::moveCollisionFree` resolves the pose itself (`resolvePoseGoal`, the pure choice in
+`pose_configuration.hpp`):
+
+- IK with the runner's own robot model from a series of seeds -- the taught configuration (the entry's
+  `configuration`, when the waypoint names one), the start state, a FIXED series spread over the joint limits
+  -- each solution collision-checked in the planning scene;
+- each joint moved to its 2*pi-equivalent nearest the reference (within its bounds); the solution NEAREST
+  the reference wins (the largest joint difference, then the sum); the move is planned as a JOINT goal by the
+  same planner (Pilz PTP, or OMPL for free);
+- a taught configuration whose nearest solution is farther than `configuration_tolerance` (default pi/2, any
+  joint) is refused before anything is sent: `CONFIGURATION_UNREACHABLE` (a FAULT); no solution at all is
+  `NO_IK_SOLUTION` in the plan phase (the target's failure, as before).
+
+Runner parameters: `pose_goal_configuration` (`nearest`, the default, or `planner`: the pose goal as before,
+and a pose that names a configuration is then refused), `configuration_tolerance` [rad]. A runner whose robot
+model has no kinematics solver keeps the pose goal and logs it once. The idioms' PreGrasp / PreRelease carry
+their target's configuration when it has one; a target set from a detected candidate takes the configuration
+nearest the start. LIN / CIRC / paths are unchanged.
+
 ## Not yet (by design)
 - STOMP: declared in the registry and never loaded — there is no STOMP plugin for MoveIt
   on Humble, so it needs a port, not an install.

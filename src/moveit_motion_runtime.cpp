@@ -9,7 +9,10 @@
 #include "trainit_motion_runtime/motion_failure.hpp"
 
 #include <moveit/move_group/capability_names.h>
+#include <moveit/planning_scene/planning_scene.h>
+#include <moveit/robot_model/revolute_joint_model.h>
 #include <moveit/robot_state/robot_state.h>
+#include <random_numbers/random_numbers.h>
 #include <moveit/utils/rclcpp_utils.h>
 #include <moveit_msgs/action/execute_trajectory.hpp>
 #include <moveit_msgs/action/move_group.hpp>
@@ -19,6 +22,7 @@
 #include <tf2_eigen/tf2_eigen.hpp>
 
 #include <algorithm>
+#include <cstdint>
 #include <chrono>
 #include <cmath>
 #include <functional>
@@ -34,6 +38,12 @@ using moveit::planning_interface::MoveGroupInterface;
 
 namespace
 {
+// TMR 2.6.0 (ADR-0028): the IK series a pose goal is resolved with
+constexpr std::uint32_t kConfigurationSeed = 20261027u;   // fixed: the same seeds, the same choice
+constexpr int kConfigurationSpreadSeeds = 8;               // seeds spread over the joint limits
+constexpr double kConfigurationIkTimeoutS = 0.05;          // per seed [s]
+constexpr double kConfigurationNearEnough = 0.01;          // [rad] a solution this near the reference ends the search
+
 double durationToSec(const builtin_interfaces::msg::Duration& d)
 {
   return static_cast<double>(d.sec) + static_cast<double>(d.nanosec) * 1e-9;
@@ -515,10 +525,67 @@ MotionResult MoveItMotionRuntime::moveCollisionFree(const MotionTarget& target,
   PlannerProfile profile = selector_->selectPlanner(intent, "collision_free");
 
   arm_->clearPoseTargets();
+  std::string stage = "collision_free";
   if (target.pose.has_value())
   {
     const std::string tip = target.tip_link.empty() ? config_.tip_link : target.tip_link;
-    arm_->setPoseTarget(*target.pose, tip);
+    // TMR 2.6.0 (ADR-0028): the joint configuration is the runtime's choice, never the planner's IK
+    // restart -- the same pose from the same start, the same configuration, every cycle
+    const bool nearest = config_.pose_goal_configuration == PoseGoalConfiguration::NEAREST;
+    const PoseResolution res = nearest ? resolvePoseGoal(*target.pose, tip, target.configuration) : PoseResolution{};
+    const char* reference = target.configuration ? "the taught configuration" : "the start state";
+    auto refused = [&](const std::string& why, const char* cause) {
+      RCLCPP_ERROR(node_->get_logger(), "collision_free: %s -- nothing was sent", why.c_str());
+      MotionResult r = MotionResult::failure("collision_free: " + why);
+      r.phase = MotionPhase::REQUEST;
+      r.cause = cause;
+      return r;
+    };
+    using Status = PoseResolution::Status;
+    if (!nearest || res.status == Status::NO_SOLVER)
+    {
+      if (target.configuration)        // a taught configuration that cannot be honoured: never dropped
+        return refused("the pose names its taught configuration, and " +
+                       (nearest ? res.why : std::string("pose_goal_configuration is 'planner'")),
+                       kCauseConfigurationUnreachable);
+      if (nearest && !warned_no_solver_)
+      {
+        warned_no_solver_ = true;
+        RCLCPP_WARN(node_->get_logger(), "collision_free: %s -- a move to a pose leaves its joint "
+                    "configuration to the planner (ADR-0028)", res.why.c_str());
+      }
+      arm_->setPoseTarget(*target.pose, tip);
+    }
+    else if (res.status == Status::RESOLVED)
+    {
+      if (!arm_->setJointValueTarget(res.joints))
+        return refused("the configuration chosen for the pose is outside the joints' bounds",
+                       kCauseInvalidConfiguration);
+      if (res.unchecked && !warned_no_scene_)
+      {
+        warned_no_scene_ = true;
+        RCLCPP_WARN(node_->get_logger(), "collision_free: no planning scene to check the pose's joint "
+                    "solutions in: the planner checks the move (ADR-0028)");
+      }
+      RCLCPP_INFO(node_->get_logger(), "collision_free: the pose in the configuration nearest %s (max %.3f rad, "
+                  "joint '%s'), %zu distinct solution(s)", reference, res.choice.max_difference,
+                  res.worst_joint.c_str(), res.choice.distinct);
+      stage = "collision_free:configuration";
+    }
+    else if (res.status == Status::NO_STATE)
+      return refused(res.why, kCauseStateUnavailable);
+    else if (res.status == Status::NO_SOLUTION)
+    {
+      RCLCPP_ERROR(node_->get_logger(), "collision_free: %s", res.why.c_str());
+      MotionResult r = MotionResult::failure("collision_free: " + res.why,
+                                             moveit_msgs::msg::MoveItErrorCodes::NO_IK_SOLUTION);
+      r.phase = MotionPhase::PLAN;     // this target cannot be reached: the planner's own verdict
+      return r;
+    }
+    else if (res.status == Status::INVALID)
+      return refused(res.why, kCauseInvalidConfiguration);
+    else
+      return refused(res.why, kCauseConfigurationUnreachable);
   }
   else if (target.joint.has_value())
   {
@@ -531,7 +598,157 @@ MotionResult MoveItMotionRuntime::moveCollisionFree(const MotionTarget& target,
   {
     return MotionResult::failure("moveCollisionFree: no target set");
   }
-  return planAndExecute(profile, options.motion, intent, "collision_free");
+  return planAndExecute(profile, options.motion, intent, stage);
+}
+
+bool MoveItMotionRuntime::poseConfigurationParams(const rclcpp::Node::SharedPtr& node, Config& cfg,
+                                                  std::string& refused)
+{
+  if (!node->has_parameter(kPoseGoalConfigurationParam))
+    node->declare_parameter(kPoseGoalConfigurationParam, std::string(toString(PoseGoalConfiguration::NEAREST)));
+  if (!node->has_parameter(kConfigurationToleranceParam))
+    node->declare_parameter(kConfigurationToleranceParam, kDefaultConfigurationTolerance);
+  const rclcpp::Parameter mode = node->get_parameter(kPoseGoalConfigurationParam);
+  const auto parsed = mode.get_type() == rclcpp::ParameterType::PARAMETER_STRING
+                        ? poseGoalConfigurationFromString(mode.as_string()) : std::nullopt;
+  if (!parsed)
+  {
+    refused = std::string(kPoseGoalConfigurationParam) + " " + mode.value_to_string() + " (" + mode.get_type_name() +
+              "): 'nearest' or 'planner'";
+    return false;
+  }
+  const rclcpp::Parameter tol = node->get_parameter(kConfigurationToleranceParam);
+  double value = std::nan("");
+  if (tol.get_type() == rclcpp::ParameterType::PARAMETER_DOUBLE) value = tol.as_double();
+  else if (tol.get_type() == rclcpp::ParameterType::PARAMETER_INTEGER) value = static_cast<double>(tol.as_int());
+  if (!(std::isfinite(value) && value > 0.0))
+  {
+    refused = std::string(kConfigurationToleranceParam) + " " + tol.value_to_string() + " (" + tol.get_type_name() +
+              "): a finite number of radians > 0";
+    return false;
+  }
+  cfg.pose_goal_configuration = *parsed;
+  cfg.configuration_tolerance = value;
+  return true;
+}
+
+MoveItMotionRuntime::PoseResolution MoveItMotionRuntime::resolvePoseGoal(
+  const geometry_msgs::msg::Pose& pose, const std::string& tip,
+  const std::optional<std::vector<double>>& taught) const
+{
+  using Status = PoseResolution::Status;
+  PoseResolution out;
+  const moveit::core::JointModelGroup* jmg = robot_model_ ? robot_model_->getJointModelGroup(config_.group) : nullptr;
+  if (!jmg || !jmg->getSolverInstance())
+  {
+    out.status = Status::NO_SOLVER;
+    out.why = "planning group '" + config_.group + "' has no kinematics solver in this runner";
+    return out;
+  }
+  // the group's variables, in the order copyJointGroupPositions gives them (a mimic one included), each
+  // with its own bounds: never the active joints' list, which a mimic joint would shift
+  const std::vector<std::string>& names = jmg->getVariableNames();
+  const std::size_t n = names.size();
+  std::vector<JointBounds> bounds;
+  for (const std::string& name : names)
+  {
+    const moveit::core::VariableBounds& b = robot_model_->getVariableBounds(name);
+    const moveit::core::JointModel* jm = robot_model_->getJointOfVariable(name);
+    const auto* rev = dynamic_cast<const moveit::core::RevoluteJointModel*>(jm);
+    bounds.push_back({b.min_position_, b.max_position_, rev != nullptr && rev->isContinuous(), rev != nullptr});
+  }
+  if (taught && (taught->size() != n || !allFinite(*taught)))
+  {
+    out.status = Status::INVALID;
+    out.why = taught->size() != n
+                ? "the taught configuration has " + std::to_string(taught->size()) + " value(s), and group '" +
+                    config_.group + "' has " + std::to_string(n) + " variable(s)"
+                : std::string("the taught configuration has a value that is not a finite number");
+    return out;
+  }
+  moveit::core::RobotStatePtr start = arm_->getCurrentState(1.0);
+  if (!start)
+  {
+    out.status = Status::NO_STATE;
+    out.why = "no fresh robot state to choose the pose's joint configuration from";
+    return out;
+  }
+  std::vector<double> start_q;
+  start->copyJointGroupPositions(jmg, start_q);
+  // the pose is given in the runtime's base frame; RobotState IK takes the model frame
+  Eigen::Isometry3d goal;
+  tf2::fromMsg(pose, goal);
+  if (config_.base_frame != robot_model_->getModelFrame())
+  {
+    if (!start->knowsFrameTransform(config_.base_frame))
+    {
+      out.status = Status::INVALID;
+      out.why = "the base frame '" + config_.base_frame + "' is not a frame of the robot model ('" +
+                robot_model_->getModelFrame() + "')";
+      return out;
+    }
+    goal = start->getFrameTransform(config_.base_frame) * goal;
+  }
+
+  planning_scene::PlanningScenePtr scene = scene_ ? scene_->snapshotForValidation() : nullptr;
+  out.unchecked = !scene;
+  const moveit::core::GroupStateValidityCallbackFn collision_free =
+    [scene](moveit::core::RobotState* state, const moveit::core::JointModelGroup* group, const double* values) {
+      state->setJointGroupPositions(group, values);
+      state->update();
+      return !scene || !scene->isStateColliding(*state, group->getName());   // the group's links (and held parts)
+    };
+  const std::vector<double>& reference = taught ? *taught : start_q;
+  std::vector<std::vector<double>> seeds;
+  if (taught) seeds.push_back(*taught);
+  seeds.push_back(start_q);
+  random_numbers::RandomNumberGenerator rng(kConfigurationSeed);   // a fixed series of spread seeds
+  moveit::core::RobotState spread(*start);
+  for (int i = 0; i < kConfigurationSpreadSeeds; ++i)
+  {
+    spread.setToRandomPositions(jmg, rng);
+    std::vector<double> q;
+    spread.copyJointGroupPositions(jmg, q);
+    seeds.push_back(std::move(q));
+  }
+  std::vector<std::vector<double>> solutions;
+  for (const auto& seed : seeds)
+  {
+    moveit::core::RobotState s(*start);
+    s.setJointGroupPositions(jmg, seed);
+    s.update();
+    if (!s.setFromIK(jmg, goal, tip, kConfigurationIkTimeoutS, collision_free)) continue;
+    std::vector<double> q;
+    s.copyJointGroupPositions(jmg, q);
+    // a solution this near the reference is the nearest there can be: no more seeds (the latency of a move)
+    const std::vector<double> eq = nearestEquivalent(q, reference, bounds);
+    double far = 0.0;
+    for (std::size_t i = 0; i < eq.size() && i < reference.size(); ++i) far = std::max(far, std::fabs(eq[i] - reference[i]));
+    solutions.push_back(std::move(q));
+    if (far < kConfigurationNearEnough) break;
+  }
+  out.choice = chooseConfiguration(solutions, reference, bounds,
+                                   taught ? std::optional<double>(config_.configuration_tolerance) : std::nullopt);
+  out.worst_joint = out.choice.worst_joint < n ? names[out.choice.worst_joint] : "?";
+  if (out.choice.refused)
+  {
+    out.status = Status::REFUSED;
+    std::ostringstream why;
+    why << "the pose is not reached near its taught configuration: the nearest of " << out.choice.distinct
+        << " collision-free solution(s) is " << out.choice.max_difference << " rad away on joint '"
+        << out.worst_joint << "' (configuration_tolerance " << config_.configuration_tolerance << " rad)";
+    out.why = why.str();
+    return out;
+  }
+  if (!out.choice.joints)
+  {
+    out.status = Status::NO_SOLUTION;
+    out.why = "no collision-free joint solution for the pose (" + std::to_string(seeds.size()) + " IK seeds)";
+    return out;
+  }
+  out.status = Status::RESOLVED;
+  out.joints = *out.choice.joints;
+  return out;
 }
 
 MotionResult MoveItMotionRuntime::executeProcessSequence(
