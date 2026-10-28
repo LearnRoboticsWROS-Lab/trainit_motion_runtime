@@ -89,6 +89,7 @@ add_library(trainit_motion_runtime SHARED
   src/motion_types.cpp
   src/motion_failure.cpp   # vNext M2.7: whose failure a failed motion is (pure; seam scan kPlain)
   src/pose_configuration.cpp   # TMR 2.6.0 (ADR-0028): a pose goal's joint configuration (pure; kPlain)
+  src/pose_configuration_search.cpp   # TMR 2.6.2 (D7): the IK solutions it is chosen from (MoveIt)
   src/manual_motion_strategy_selector.cpp
   src/gripper_controller.cpp
   src/planning_scene_manager.cpp
@@ -276,6 +277,14 @@ if(BUILD_TESTING)
   ament_add_gtest(test_pose_configuration_params test/test_pose_configuration_params.cpp TIMEOUT 30)
   target_link_libraries(test_pose_configuration_params trainit_motion_runtime)
   ament_target_dependencies(test_pose_configuration_params rclcpp)
+  # TMR 2.6.2 (D7): the IK search a pose goal's configuration is chosen from depends on the start,
+  # the pose and the scene alone (MoveIt's KDL plugin on an inline 6R arm, under load)
+  find_package(pluginlib REQUIRED)
+  find_package(srdfdom REQUIRED)
+  find_package(urdf REQUIRED)
+  ament_add_gtest(test_pose_configuration_search test/test_pose_configuration_search.cpp TIMEOUT 120)
+  target_link_libraries(test_pose_configuration_search trainit_motion_runtime)
+  ament_target_dependencies(test_pose_configuration_search rclcpp moveit_core pluginlib srdfdom urdf)
   # TMR 2.6.1 (ROS2ML-SYNC D3): the runner's tf2 Buffer is told the spinner thread fills it (a scan)
   ament_add_gtest(test_tf_dedicated_thread test/test_tf_dedicated_thread.cpp TIMEOUT 30)
   target_compile_definitions(test_tf_dedicated_thread PRIVATE TRAINIT_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")

@@ -45,6 +45,7 @@ const std::vector<std::string> kPlain = {
 // Sources that legitimately name MoveIt (ADR-0015 amendment M2.5-4), not scanned.
 const std::map<std::string, std::string> kExempt = {
   {"src/moveit_motion_runtime.cpp", "B: the door's MoveIt implementation"},
+  {"src/pose_configuration_search.cpp", "B: a pose goal's IK search (RobotState::setFromIK), TMR 2.6.2"},
   {"src/pilz_sequence_backend.cpp", "B: a process-path backend (sequence_move_group)"},
   {"src/cartesian_waypoint_backend.cpp", "B: a process-path backend (computeCartesianPath)"},
   {"src/trajectory_validator.cpp", "B: validates against the robot model and scene"},

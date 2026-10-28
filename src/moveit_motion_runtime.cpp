@@ -7,12 +7,12 @@
 #include "trainit_motion_runtime/scene_service_names.hpp"
 #include "trainit_motion_runtime/end_effector_registry.hpp"
 #include "trainit_motion_runtime/motion_failure.hpp"
+#include "trainit_motion_runtime/pose_configuration_search.hpp"
 
 #include <moveit/move_group/capability_names.h>
 #include <moveit/planning_scene/planning_scene.h>
 #include <moveit/robot_model/revolute_joint_model.h>
 #include <moveit/robot_state/robot_state.h>
-#include <random_numbers/random_numbers.h>
 #include <moveit/utils/rclcpp_utils.h>
 #include <moveit_msgs/action/execute_trajectory.hpp>
 #include <moveit_msgs/action/move_group.hpp>
@@ -38,12 +38,6 @@ using moveit::planning_interface::MoveGroupInterface;
 
 namespace
 {
-// TMR 2.6.0 (ADR-0028): the IK series a pose goal is resolved with
-constexpr std::uint32_t kConfigurationSeed = 20261027u;   // fixed: the same seeds, the same choice
-constexpr int kConfigurationSpreadSeeds = 8;               // seeds spread over the joint limits
-constexpr double kConfigurationIkTimeoutS = 0.05;          // per seed [s]
-constexpr double kConfigurationNearEnough = 0.01;          // [rad] a solution this near the reference ends the search
-
 double durationToSec(const builtin_interfaces::msg::Duration& d)
 {
   return static_cast<double>(d.sec) + static_cast<double>(d.nanosec) * 1e-9;
@@ -568,8 +562,9 @@ MotionResult MoveItMotionRuntime::moveCollisionFree(const MotionTarget& target,
                     "solutions in: the planner checks the move (ADR-0028)");
       }
       RCLCPP_INFO(node_->get_logger(), "collision_free: the pose in the configuration nearest %s (max %.3f rad, "
-                  "joint '%s'), %zu distinct solution(s)", reference, res.choice.max_difference,
-                  res.worst_joint.c_str(), res.choice.distinct);
+                  "joint '%s'), %zu distinct solution(s)%s", reference, res.choice.max_difference,
+                  res.worst_joint.c_str(), res.choice.distinct,
+                  res.timed ? " -- from the time-limited IK search: the choice may differ between runs" : "");
       stage = "collision_free:configuration";
     }
     else if (res.status == Status::NO_STATE)
@@ -699,34 +694,15 @@ MoveItMotionRuntime::PoseResolution MoveItMotionRuntime::resolvePoseGoal(
       return !scene || !scene->isStateColliding(*state, group->getName());   // the group's links (and held parts)
     };
   const std::vector<double>& reference = taught ? *taught : start_q;
-  std::vector<std::vector<double>> seeds;
-  if (taught) seeds.push_back(*taught);
-  seeds.push_back(start_q);
-  random_numbers::RandomNumberGenerator rng(kConfigurationSeed);   // a fixed series of spread seeds
-  moveit::core::RobotState spread(*start);
-  for (int i = 0; i < kConfigurationSpreadSeeds; ++i)
-  {
-    spread.setToRandomPositions(jmg, rng);
-    std::vector<double> q;
-    spread.copyJointGroupPositions(jmg, q);
-    seeds.push_back(std::move(q));
-  }
-  std::vector<std::vector<double>> solutions;
-  for (const auto& seed : seeds)
-  {
-    moveit::core::RobotState s(*start);
-    s.setJointGroupPositions(jmg, seed);
-    s.update();
-    if (!s.setFromIK(jmg, goal, tip, kConfigurationIkTimeoutS, collision_free)) continue;
-    std::vector<double> q;
-    s.copyJointGroupPositions(jmg, q);
-    // a solution this near the reference is the nearest there can be: no more seeds (the latency of a move)
-    const std::vector<double> eq = nearestEquivalent(q, reference, bounds);
-    double far = 0.0;
-    for (std::size_t i = 0; i < eq.size() && i < reference.size(); ++i) far = std::max(far, std::fabs(eq[i] - reference[i]));
-    solutions.push_back(std::move(q));
-    if (far < kConfigurationNearEnough) break;
-  }
+  std::vector<std::vector<double>> head;
+  if (taught) head.push_back(*taught);
+  head.push_back(start_q);
+  // TMR 2.6.2 (D7): with no taught configuration, one KDL attempt per seed -- the choice no longer
+  // depends on the clock; a taught configuration keeps the 2.6.0 search (pose_configuration_search.hpp)
+  const ConfigurationSearch found =
+    findConfigurations(*start, jmg, goal, tip, head, taught.has_value(), collision_free, reference, bounds);
+  const std::vector<std::vector<double>>& solutions = found.solutions;
+  out.timed = found.timed;
   out.choice = chooseConfiguration(solutions, reference, bounds,
                                    taught ? std::optional<double>(config_.configuration_tolerance) : std::nullopt);
   out.worst_joint = out.choice.worst_joint < n ? names[out.choice.worst_joint] : "?";
@@ -743,7 +719,7 @@ MoveItMotionRuntime::PoseResolution MoveItMotionRuntime::resolvePoseGoal(
   if (!out.choice.joints)
   {
     out.status = Status::NO_SOLUTION;
-    out.why = "no collision-free joint solution for the pose (" + std::to_string(seeds.size()) + " IK seeds)";
+    out.why = "no collision-free joint solution for the pose (its IK seeds, single attempts and timed)";
     return out;
   }
   out.status = Status::RESOLVED;

@@ -162,8 +162,9 @@ private:
 
   // TMR 2.6.0 (ADR-0028): a pose goal resolved into the joint configuration this runtime moves to.
   // The IK of the runner's own robot model (its kinematics plugin), from the taught configuration,
-  // the start state and a fixed series of spread seeds; solutions collision-checked in the planning
-  // scene; the nearest the reference chosen (pose_configuration.hpp).
+  // the start state and a fixed series of spread seeds, one attempt each (pose_configuration_search.hpp);
+  // solutions collision-checked in the planning scene; the nearest the reference chosen
+  // (pose_configuration.hpp).
   struct PoseResolution
   {
     enum class Status { NOT_REQUESTED, RESOLVED, NO_SOLVER, NO_STATE, NO_SOLUTION, REFUSED, INVALID }
@@ -173,6 +174,7 @@ private:
     std::string why;
     std::string worst_joint;     // the name of the joint max_difference is on
     bool unchecked{false};       // no planning scene: the solutions were not collision-checked
+    bool timed{false};           // TMR 2.6.2: found by the time-limited search (may differ run to run)
   };
   PoseResolution resolvePoseGoal(const geometry_msgs::msg::Pose& pose, const std::string& tip,
                                  const std::optional<std::vector<double>>& taught) const;

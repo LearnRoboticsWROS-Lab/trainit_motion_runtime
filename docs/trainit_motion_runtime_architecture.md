@@ -472,6 +472,20 @@ model has no kinematics solver keeps the pose goal and logs it once. The idioms'
 their target's configuration when it has one; a target set from a detected candidate takes the configuration
 nearest the start. LIN / CIRC / paths are unchanged.
 
+TMR 2.6.2 (D7, the ROS2ML course cell, 2026-10-28): the seeds of 2.6.0 each had a 0.05 s IK budget, inside
+which KDL re-seeds at RANDOM; the set of solutions found -- and the nearest of them -- changed from run to run
+and with the load (the course's 'place', with no taught configuration, moved in another arm posture in 2 runs
+of 8). For a pose with NO taught configuration and MoveIt's plain KDL plugin, every seed now gets ONE attempt
+(its first, deterministic one): the start state; the start with its first joint turned about its axis to face
+the goal (the arm's own branch, pointed where the move goes), and that configuration carried to the goal in 20
+small steps, one attempt each (as the start itself); then a fixed series of 64. Spread seeds alone found 2
+solutions of the course's 'place', always the elbow branch (an 8.9 rad joint path); with the facing seed the
+shoulder branch (3.7 rad), every run. The choice depends on the start state, the pose and the scene (residual:
+KDL draws `std::rand()` to escape a singularity, on a stuck attempt only). A taught configuration (its own seed is the answer), another solver (cached_ik seeds from its cache;
+others may need time for any answer) and a pose no single attempt reached keep the 2.6.0 search, unchanged; a
+pose without a taught configuration resolved that way is logged as a choice that may differ between runs
+(`pose_configuration_search.hpp`).
+
 ## Not yet (by design)
 - STOMP: declared in the registry and never loaded — there is no STOMP plugin for MoveIt
   on Humble, so it needs a port, not an install.
