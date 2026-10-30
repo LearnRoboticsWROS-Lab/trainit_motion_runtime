@@ -40,7 +40,9 @@ const std::vector<std::string> kPlain = {
   // vNext M3.1 (ADR-0024, ADR-0025): the provider table and the path library, pure data/geometry
   "src/motion_providers.cpp", "src/path_library.cpp",
   // vNext M3.6 (ADR-0026): the grasp-candidate contract (validation, projection, align_approach)
-  "src/grasp_candidates.cpp"};
+  "src/grasp_candidates.cpp",
+  // D0.5 (ADR-0030): the execution-event observer (BehaviorTree status changes, a ROS publisher)
+  "src/execution_events.cpp"};
 
 // Sources that legitimately name MoveIt (ADR-0015 amendment M2.5-4), not scanned.
 const std::map<std::string, std::string> kExempt = {

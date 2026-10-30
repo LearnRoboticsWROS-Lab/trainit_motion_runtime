@@ -244,6 +244,9 @@ std::vector<std::string> MoveItMotionRuntime::crossNamespaceRemaps(const rclcpp:
                                                                    const eef::Contract& contract)
 {
   ScopedIds ids = runnerIds();
+  // D0.5 (ADR-0030): the run's execution events (a publisher; execution_events.hpp kExecutionEventsTopic,
+  // spelled here so this file stays free of BehaviorTree headers; test_d0_5_execution_events pins the two equal)
+  ids.emplace_back("trainit/execution_events", false);
   // ServoTrack's default servo node: its twist publisher and status subscription, its three Trigger clients
   ids.insert(ids.end(), {{"servo_node/delta_twist_cmds", false}, {"servo_node/status", false},
                          {"servo_node/start_servo", true}, {"servo_node/pause_servo", true},

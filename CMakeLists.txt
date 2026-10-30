@@ -116,6 +116,8 @@ add_library(trainit_motion_runtime SHARED
   src/path_library.cpp
   # vNext M3.6 (ADR-0026): the grasp-candidate contract's pure half (MoveIt-free; test_m2_5_seam_scan: kPlain)
   src/grasp_candidates.cpp
+  # D0.5 (ADR-0030): the execution-event observer (no MoveIt; test_m2_5_seam_scan: kPlain)
+  src/execution_events.cpp
 )
 target_include_directories(trainit_motion_runtime PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -292,6 +294,14 @@ if(BUILD_TESTING)
   ament_add_gtest(test_bt_nodes test/test_bt_nodes.cpp)
   target_link_libraries(test_bt_nodes trainit_motion_runtime)
   link_btcpp(test_bt_nodes)
+
+  # D0.5 (ADR-0030): the execution-event observer on trees shaped as TSA generates them (scripted leaves),
+  # the runner's publisher (relative, RELIABLE + VOLATILE, depth 100) and the remap guard's knowledge of it.
+  ament_add_gtest(test_d0_5_execution_events test/test_d0_5_execution_events.cpp TIMEOUT 30)
+  target_link_libraries(test_d0_5_execution_events trainit_motion_runtime)
+  link_btcpp(test_d0_5_execution_events)
+  target_compile_definitions(test_d0_5_execution_events PRIVATE
+    TRAINIT_D0_5_TSA_GOLDEN="${CMAKE_CURRENT_SOURCE_DIR}/test/data/d0_5/task_program.xml")
 
   # DetectObject's write path TICKED against a live detector (node + subscription +
   # TF), so the blackboard contract the rest of the system reads is executed, not

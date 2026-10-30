@@ -486,6 +486,27 @@ others may need time for any answer) and a pose no single attempt reached keep t
 pose without a taught configuration resolved that way is logged as a choice that may differ between runs
 (`pose_configuration_search.hpp`).
 
+## Execution events (D0.5, TMR 2.7.0, ADR-0030)
+
+`trainit_run_bt` is the ONE producer of `trainit_interfaces/ExecutionEvent`: what the application DID, in its own
+vocabulary, on the relative `trainit/execution_events` of the runner's robot slot (RELIABLE, VOLATILE, keep-last
+100: a late subscriber never receives the past; in the cross-namespace remap guard).
+
+- **One observer, no code in the nodes** (`execution_events.{hpp,cpp}`): a `BT::StatusChangeLogger` maps the tree
+  once -- `task_<name>` SubTree nodes are tasks, nodes named `trainit_step:<id>:<kind>` (TSA's wrapper of a step the
+  user identified, ADR-0024 Amendment D0.5) are steps; every other node produces nothing. ENTERED when a node that
+  is not active starts (also a step re-ticked by a reactive parent), EXITED on SUCCESS / FAILURE, HALTED when a
+  RUNNING node is reset by its parent.
+- **Process events** through `ObservedProcessController`, a decorator of the process controller (the controllers are
+  unchanged): every DISPATCHED event, with the innermost active task / identified step.
+- **A grasp step** carries `attempt_index` (its entries in the run) and, when it grasps from a literal candidate set,
+  the candidate's ADR-0026 `id` / `provider` read from the blackboard.
+- **The run:** RUN_STARTED before the first tick; RUN_ENDED after the last. A shutdown ends the run from a
+  PRE-shutdown callback (`EndEventsOnShutdown`): every open scope EXITED HALTED, innermost first, then RUN_ENDED
+  HALTED, while the context can still publish. Nothing after RUN_ENDED.
+- **Observation never changes execution:** an error while observing or publishing is counted and dropped, never
+  thrown into the tick. Nothing here records data (the data foundation is a consumer, ADR-0029).
+
 ## Not yet (by design)
 - STOMP: declared in the registry and never loaded — there is no STOMP plugin for MoveIt
   on Humble, so it needs a port, not an install.

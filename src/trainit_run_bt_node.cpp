@@ -32,6 +32,7 @@
 #include "trainit_motion_runtime/bt_profiles.hpp"
 #include "trainit_motion_runtime/end_effector_contract.hpp"
 #include "trainit_motion_runtime/end_effector_registry.hpp"
+#include "trainit_motion_runtime/execution_events.hpp"
 #include "trainit_motion_runtime/path_library.hpp"
 
 using namespace trainit;
@@ -64,6 +65,41 @@ std::vector<std::string> getStrArray(const rclcpp::Node::SharedPtr& n, const std
   if (!n->has_parameter(name)) n->declare_parameter(name, def);
   return n->get_parameter(name).as_string_array();
 }
+
+// D0.5 (ADR-0030): a run stopped by a shutdown ends its execution events -- every open scope HALTED, then
+// RUN_ENDED HALTED -- from a PRE-shutdown callback, while the context can still publish (after it, publish is a
+// silent no-op). Same pattern and lifetime rules as StopOnShutdown below; the publisher outlives this object.
+class EndEventsOnShutdown
+{
+public:
+  explicit EndEventsOnShutdown(ExecutionEventPublisher& events)
+  : context_(rclcpp::contexts::get_global_default_context()), state_(std::make_shared<State>())
+  {
+    handle_ = context_->add_pre_shutdown_callback([state = state_, &events]() {
+      std::lock_guard<std::mutex> lock(state->m);
+      if (state->armed) events.runEnded(BT::NodeStatus::RUNNING, true);
+      state->armed = false;
+    });
+  }
+  ~EndEventsOnShutdown()
+  {
+    context_->remove_pre_shutdown_callback(handle_);
+    std::lock_guard<std::mutex> lock(state_->m);
+    state_->armed = false;
+  }
+  EndEventsOnShutdown(const EndEventsOnShutdown&) = delete;
+  EndEventsOnShutdown& operator=(const EndEventsOnShutdown&) = delete;
+
+private:
+  struct State
+  {
+    std::mutex m;
+    bool armed{true};
+  };
+  rclcpp::Context::SharedPtr context_;
+  std::shared_ptr<State> state_;
+  rclcpp::PreShutdownCallbackHandle handle_;
+};
 
 // vNext M3.4 (owner decision D8, the MINIMAL stop scope): when orchestration stops while the tree
 // runs -- SIGINT/SIGTERM, or any rclcpp::shutdown() -- the motion in flight gets the runtime's stop
@@ -309,6 +345,10 @@ int main(int argc, char** argv)
   std::unique_ptr<ProcessController> process;
   if (process_kind == "ros") process = std::make_unique<RosProcessController>(node);
   else                       process = std::make_unique<MockProcessController>(node->get_logger());
+  // D0.5 (ADR-0030): every DISPATCHED process event is also an execution event; the observer is set once
+  // the tree exists. The controller itself is unchanged.
+  auto process_observer = std::make_shared<ObservedProcessController::Observer>();
+  process = std::make_unique<ObservedProcessController>(std::move(process), process_observer);
 
   MotionProfileRegistry profiles = loadMotionProfiles(profiles_file);
   // vNext M3.1: a path or segment that names a profile this runner did not load is refused here,
@@ -430,6 +470,22 @@ int main(int argc, char** argv)
   (void)groot_monitor; (void)groot_port;
 #endif
 
+  // D0.5 (ADR-0030): the run's canonical execution events, observed centrally (never code in the nodes),
+  // on the relative trainit/execution_events -- created BEFORE the DDS settle below, so a subscriber in
+  // this slot has matched before RUN_STARTED.
+  const auto events = ExecutionEventPublisher::forNode(node, tree);
+  *process_observer = [&events](const ProcessEvent& e) { events->processDispatched(e); };
+  // the observer never outlives `events`, whichever way this scope is left (a rethrow included)
+  struct ResetObserver
+  {
+    std::shared_ptr<ObservedProcessController::Observer> observer;
+    ~ResetObserver() { *observer = nullptr; }
+  } const observer_reset{process_observer};
+  const EndEventsOnShutdown end_events_on_shutdown(*events);
+  const std::string events_ns = node->get_namespace();
+  RCLCPP_INFO(log, "execution events: run %s on %s/%s", events->runId().c_str(),
+              events_ns == "/" ? "" : events_ns.c_str(), kExecutionEventsTopic);
+
   RCLCPP_INFO(log, "trainit_run_bt: tree='%s' id=%s planner_mode=%s backend=%s",
               bt_tree_file.c_str(), bt_tree_id.c_str(), mode_str.c_str(), backend_str.c_str());
   std::this_thread::sleep_for(std::chrono::seconds(3));  // let DDS action channels settle
@@ -446,6 +502,7 @@ int main(int argc, char** argv)
   }
 
   BT::NodeStatus status = BT::NodeStatus::RUNNING;
+  events->runStarted();
   try
   {
     const StopOnShutdown stop_on_shutdown(*runtime, log);   // vNext M3.4 (D8): only while the tree runs
@@ -457,7 +514,11 @@ int main(int argc, char** argv)
   }
   catch (const std::exception& e)
   {
-    if (!eefs) throw;   // LEGACY: unchanged, the exception ends the process as it always has (ADR-0022 D9)
+    if (!eefs)          // LEGACY: unchanged, the exception ends the process as it always has (ADR-0022 D9)
+    {
+      events->runEnded(BT::NodeStatus::FAILURE, false);   // D0.5: the run's events still end
+      throw;
+    }
     // A canonical node threw (e.g. a ROS call once a shutdown has begun): the run FAILS and the
     // tree is halted -- HOLD, no end-effector action -- never std::terminate (ADR-0022 D5).
     RCLCPP_FATAL(log, "the tree threw: %s; it is halted and the run fails (ADR-0022)", e.what());
@@ -472,6 +533,8 @@ int main(int argc, char** argv)
     status = BT::NodeStatus::FAILURE;
   }
   RCLCPP_INFO(log, "BT finished: %s", BT::toStr(status).c_str());
+  events->runEnded(status, status == BT::NodeStatus::RUNNING);   // RUNNING here: stopped by a shutdown
+  *process_observer = nullptr;
 
   int rc = (status == BT::NodeStatus::SUCCESS) ? 0 : 1;
   // Exit code 3 (canonical projects only, ADR-0022 D5): the tree ended SUCCESS, but an
