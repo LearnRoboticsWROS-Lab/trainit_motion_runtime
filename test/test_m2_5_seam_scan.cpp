@@ -36,11 +36,18 @@ const std::vector<std::string> kUnits = {
 const std::vector<std::string> kPlain = {
   "src/bt_profiles.cpp", "src/process_path_generators.cpp", "src/process_path_loaders.cpp",
   "src/task_loader.cpp", "src/end_effector_contract.cpp", "src/actuator_outcome.cpp",
-  "src/verify_grasp.cpp", "src/end_effector_registry.cpp", "src/motion_failure.cpp"};
+  "src/verify_grasp.cpp", "src/end_effector_registry.cpp", "src/motion_failure.cpp", "src/pose_configuration.cpp",
+  // vNext M3.1 (ADR-0024, ADR-0025): the provider table and the path library, pure data/geometry
+  "src/motion_providers.cpp", "src/path_library.cpp",
+  // vNext M3.6 (ADR-0026): the grasp-candidate contract (validation, projection, align_approach)
+  "src/grasp_candidates.cpp",
+  // D0.5 (ADR-0030): the execution-event observer (BehaviorTree status changes, a ROS publisher)
+  "src/execution_events.cpp"};
 
 // Sources that legitimately name MoveIt (ADR-0015 amendment M2.5-4), not scanned.
 const std::map<std::string, std::string> kExempt = {
   {"src/moveit_motion_runtime.cpp", "B: the door's MoveIt implementation"},
+  {"src/pose_configuration_search.cpp", "B: a pose goal's IK search (RobotState::setFromIK), TMR 2.6.2"},
   {"src/pilz_sequence_backend.cpp", "B: a process-path backend (sequence_move_group)"},
   {"src/cartesian_waypoint_backend.cpp", "B: a process-path backend (computeCartesianPath)"},
   {"src/trajectory_validator.cpp", "B: validates against the robot model and scene"},

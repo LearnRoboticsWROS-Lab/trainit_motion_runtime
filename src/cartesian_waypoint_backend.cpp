@@ -2,9 +2,11 @@
 // cartesian_waypoint_backend.cpp
 // =============================================================================
 #include "trainit_motion_runtime/cartesian_waypoint_backend.hpp"
+#include "trainit_motion_runtime/motion_failure.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <string>
 #include <vector>
 
 #include <Eigen/Geometry>
@@ -29,6 +31,31 @@ double pointToSegment(const Eigen::Vector3d& p, const Eigen::Vector3d& a, const 
   t = std::clamp(t, 0.0, 1.0);
   return (p - (a + t * ab)).norm();
 }
+
+// vNext M3.4 (owner D3): run() points the SHARED MoveGroupInterface at the path's frame and link;
+// this puts the previous pose reference frame and end-effector link back on EVERY exit (success,
+// a refused fraction, a failed retiming, a failed execution), so a path in another frame or for
+// another link never changes how the next motion's pose is read.
+class ScopedFrameAndLink
+{
+public:
+  explicit ScopedFrameAndLink(moveit::planning_interface::MoveGroupInterface& arm)
+  : arm_(arm), frame_(arm.getPoseReferenceFrame()), link_(arm.getEndEffectorLink())
+  {
+  }
+  ~ScopedFrameAndLink()
+  {
+    if (arm_.getPoseReferenceFrame() != frame_) arm_.setPoseReferenceFrame(frame_);
+    if (arm_.getEndEffectorLink() != link_) arm_.setEndEffectorLink(link_);
+  }
+  ScopedFrameAndLink(const ScopedFrameAndLink&) = delete;
+  ScopedFrameAndLink& operator=(const ScopedFrameAndLink&) = delete;
+
+private:
+  moveit::planning_interface::MoveGroupInterface& arm_;
+  const std::string frame_;
+  const std::string link_;
+};
 }  // namespace
 
 CartesianWaypointBackend::CartesianWaypointBackend(
@@ -56,15 +83,28 @@ MotionResult CartesianWaypointBackend::run(const CartesianProcessPath& path,
   for (const auto& wp : path.waypoints)
     poses.push_back(wp.pose);
 
+  // vNext M3.4 (R-M3-20, review): the trajectory is built from the CURRENT state; none within 2 s is
+  // a failure before anything is sent (it was replaced by the model's default state, and executed).
+  const moveit::core::RobotStatePtr start = arm_.getCurrentState(2.0);
+  if (!start)
+  {
+    MotionResult r = MotionResult::failure("cartesian_waypoints: no fresh robot state within 2 s -- nothing was sent");
+    r.phase = MotionPhase::REQUEST;
+    r.cause = kCauseStateUnavailable;
+    RCLCPP_ERROR(node_->get_logger(), "%s", r.stage.c_str());
+    return r;
+  }
+
   const std::string tip = path.tcp_link.empty() ? tip_ : path.tcp_link;
+  const ScopedFrameAndLink restore(arm_);
   arm_.setEndEffectorLink(tip);
   arm_.setPoseReferenceFrame(path.reference_frame.empty() ? base_ : path.reference_frame);
 
   moveit_msgs::msg::RobotTrajectory traj_msg;
   moveit_msgs::msg::MoveItErrorCodes ec;
-  const double eef_step = path.waypoint_resolution > 0.0 ? path.waypoint_resolution : 0.005;
+  const double eef_step = path.waypoint_resolution > 0.0 ? path.waypoint_resolution : kCartesianDefaultEefStep;
   const double fraction = arm_.computeCartesianPath(
-    poses, eef_step, 0.0, traj_msg, path.collision_checking_enabled, &ec);
+    poses, eef_step, kCartesianJumpThreshold, traj_msg, path.collision_checking_enabled, &ec);
 
   mr.process.cartesian_fraction = fraction;
   RCLCPP_INFO(node_->get_logger(), "cartesian_waypoints: fraction=%.3f (err=%d)", fraction, ec.val);
@@ -75,12 +115,6 @@ MotionResult CartesianWaypointBackend::run(const CartesianProcessPath& path,
 
   // Wrap + time-parameterize (computeCartesianPath returns zero timing).
   robot_trajectory::RobotTrajectory rt(robot_model_, group_);
-  moveit::core::RobotStatePtr start = arm_.getCurrentState(2.0);
-  if (!start)
-  {
-    start = std::make_shared<moveit::core::RobotState>(robot_model_);
-    start->setToDefaultValues();
-  }
   rt.setRobotTrajectoryMsg(*start, traj_msg);
 
   trajectory_processing::TimeOptimalTrajectoryGeneration totg;

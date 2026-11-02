@@ -32,7 +32,10 @@ const std::vector<std::string> kNewSources = {
   "include/trainit_motion_runtime/end_effector_registry.hpp",
   "include/trainit_motion_runtime/end_effector_reason.hpp",
   // vNext M2.7 (owner Q8.2): the motion-failure classification held to the same rules
-  "src/motion_failure.cpp", "include/trainit_motion_runtime/motion_failure.hpp"};
+  "src/motion_failure.cpp", "include/trainit_motion_runtime/motion_failure.hpp",
+  // vNext M3.1 (ADR-0024, ADR-0025): the provider table and the path library, the same rules
+  "src/motion_providers.cpp", "include/trainit_motion_runtime/motion_providers.hpp",
+  "src/path_library.cpp", "include/trainit_motion_runtime/path_library.hpp"};
 
 std::string read(const std::string& rel)
 {
@@ -136,12 +139,20 @@ TEST(M26EefStaticScan, the_legacy_units_gained_no_static_and_no_absolute_name)
 {
   // bt_nodes.cpp's legacy statics (SetReleasePolicy's publisher, DetectionFeed, latestFeedFor,
   // triggerClientFor, publisherFor, the TF fallback, ServoStartRegistry, runningSceneManagers)
-  // and its legacy absolute defaults, as they are at the M2.6 BEFORE freeze.
+  // and its legacy absolute defaults, as they are at the M2.6 BEFORE freeze. vNext M3.5 adds ONE
+  // name, not robot-scoped: DetectObject trigger's "/perception/<detector>/detect", the on-demand
+  // service of the same CELL-GLOBAL detector whose "/perception/<detector>/detections" was already
+  // here (ADR-0023 Decision 4: a detector serves a station, not a robot). vNext M3.6 (ADR-0026) adds
+  // DetectCandidates' feed of grasp-candidate arrays -- the SAME per-topic static pair as DetectionFeed
+  // (its map and its mutex: the node-keyed cache KNOWN_DEBT records) -- and its CELL-GLOBAL topics,
+  // "/perception/<producer>/grasp_candidates" or ".../detections" (ADR-0023 Decision 4, like detections).
   const Split bt = split(read("src/bt_nodes.cpp"));
-  EXPECT_EQ(statics(bt), 19);
+  EXPECT_EQ(statics(bt), 21);
   EXPECT_EQ(absoluteNames(bt),
-            (std::vector<std::string>{"/delta_twist_cmds", "/detections", "/isaac_release_policy",
-                                      "/isaac_release_policy", "/pause_servo", "/perception/",
+            (std::vector<std::string>{"/delta_twist_cmds", "/detect", "/detections", "/detections",
+                                      "/grasp_candidates", "/isaac_release_policy",
+                                      "/isaac_release_policy", "/pause_servo", "/perception/", "/perception/",
+                                      "/perception/",
                                       "/scene_manager_node", "/start_servo", "/status",
                                       "/trainit_policy_runtime/run", "/trainit_policy_runtime/run",
                                       "/trainit_policy_runtime/status", "/trainit_policy_runtime/status",

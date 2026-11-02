@@ -28,6 +28,8 @@
 #include "trainit_motion_runtime/manual_motion_strategy_selector.hpp"
 #include "trainit_motion_runtime/moveit_motion_runtime.hpp"
 #include "trainit_motion_runtime/motion_types.hpp"
+#include "trainit_motion_runtime/motion_providers.hpp"
+#include "trainit_motion_runtime/cartesian_waypoint_backend.hpp"
 
 using namespace trainit;
 namespace fs = std::filesystem;
@@ -96,8 +98,10 @@ Problems registryProblems(const std::string& path, const std::string& pipelines_
     return {"cannot read the registry " + path + ": " + e.what()};
   }
   const YAML::Node reg = loaded_file;   // every lookup below is const: none can insert a key
-  if (str(reg["schema_version"]) != "1")
-    return {"schema_version is '" + str(reg["schema_version"]) + "': this TMR maps schema 1"};
+  // vNext M3.1 (ADR-0025): schema 2 = schema 1 + the provider capability sections, which TMR maps
+  // (motion_providers.cpp) and checks below.
+  if (str(reg["schema_version"]) != "2")
+    return {"schema_version is '" + str(reg["schema_version"]) + "': this TMR maps schema 2"};
 
   // --- pipelines ------------------------------------------------------------------------
   std::vector<std::string> declared, loaded;
@@ -313,6 +317,110 @@ Problems registryProblems(const std::string& path, const std::string& pipelines_
     if (planned && node != "MoveWaypoint")
       out.push_back("execution '" + token + "' is planned, so MoveWaypoint runs it, not '" + node + "'");
   }
+
+  // --- schema 2 (vNext M3.1, ADR-0025): capabilities, providers, provider_defaults ---------------
+  auto seq = [](const YAML::Node& n) {
+    std::vector<std::string> v;
+    if (n && n.IsSequence())
+      for (const auto& e : n) v.push_back(e.as<std::string>());
+    return v;
+  };
+  const std::vector<std::string> live = seq(reg["capabilities"]["live"]);
+  const std::vector<std::string> reserved = seq(reg["capabilities"]["reserved"]);
+  if (live != liveCapabilities())
+    out.push_back("capabilities.live is " + join(live) + "; TMR maps " + join(liveCapabilities()));
+  if (reserved != reservedCapabilities())
+    out.push_back("capabilities.reserved is " + join(reserved) + "; TMR maps " +
+                  join(reservedCapabilities()));
+  for (const auto& r : reserved)
+    if (std::count(live.begin(), live.end(), r))
+      out.push_back("capability '" + r + "' is both live and reserved");
+
+  std::vector<std::string> registry_providers;
+  std::set<std::string> provided;
+  for (const auto& kv : reg["providers"])
+  {
+    const std::string id = kv.first.as<std::string>();
+    registry_providers.push_back(id);
+    const YAML::Node row = kv.second;
+    const MotionProvider* mapped = findMotionProvider(id);
+    if (!mapped)
+    {
+      out.push_back("provider '" + id + "' is in the registry but TMR maps no such row "
+                    "(motion_providers.cpp)");
+      continue;
+    }
+    const std::vector<std::string> provides = seq(row["provides"]);
+    if (provides != mapped->provides)
+      out.push_back("provider '" + id + "' provides " + join(provides) + " in the registry, " +
+                    join(mapped->provides) + " in TMR");
+    for (const auto& t : provides)
+    {
+      provided.insert(t);
+      if (!std::count(live.begin(), live.end(), t))
+        out.push_back("provider '" + id + "' provides '" + t + "', which is not a live capability" +
+                      (std::count(reserved.begin(), reserved.end(), t) ? " (it is reserved)" : ""));
+    }
+    if (str(row["route"]) != mapped->route)
+      out.push_back("provider '" + id + "' route is '" + str(row["route"]) + "' in the registry, '" +
+                    mapped->route + "' in TMR");
+    if (str(row["planner_mode"]) != mapped->planner_mode)
+      out.push_back("provider '" + id + "' planner_mode is '" + str(row["planner_mode"]) +
+                    "' in the registry, '" + mapped->planner_mode + "' in TMR");
+    if (str(row["cartesian"]) != mapped->cartesian)
+      out.push_back("provider '" + id + "' cartesian is '" + str(row["cartesian"]) +
+                    "' in the registry, '" + mapped->cartesian + "' in TMR");
+    if (str(row["time_parameterization"]) != mapped->time_parameterization)
+      out.push_back("provider '" + id + "' time_parameterization differs from TMR's");
+    if (str(row["stability"]) != mapped->stability)
+      out.push_back("provider '" + id + "' stability differs from TMR's");
+    // a row points into the sections above; the pointer must resolve
+    if (!mapped->planner_mode.empty() && !reg["planner_modes"][mapped->planner_mode])
+      out.push_back("provider '" + id + "' names planner_mode '" + mapped->planner_mode +
+                    "', which the registry does not declare");
+    if (!mapped->cartesian.empty() && !reg["cartesian"][mapped->cartesian])
+      out.push_back("provider '" + id + "' names cartesian '" + mapped->cartesian +
+                    "', which the registry does not declare");
+  }
+  std::vector<std::string> cpp_providers;
+  for (const auto& p : motionProviders()) cpp_providers.push_back(p.id);
+  for (const auto& id : cpp_providers)
+    if (!std::count(registry_providers.begin(), registry_providers.end(), id))
+      out.push_back("provider '" + id + "' is mapped by TMR but the registry declares no such row");
+  for (const auto& t : live)
+    if (!provided.count(t))
+      out.push_back("live capability '" + t + "' is provided by no row: reserve it or provide it");
+  // every STABLE planner mode is a provider row (a reserved/experimental one, stomp, is not)
+  for (const auto& kv : reg["planner_modes"])
+  {
+    const std::string mode = kv.first.as<std::string>();
+    if (str(kv.second["stability"]) != "stable") continue;
+    const bool has_row = std::any_of(motionProviders().begin(), motionProviders().end(),
+                                     [&mode](const MotionProvider& p) { return p.planner_mode == mode; });
+    if (!has_row)
+      out.push_back("stable planner mode '" + mode + "' has no provider row");
+  }
+  // the folded backend numbers are the code's defaults
+  const YAML::Node cw = reg["providers"]["cartesian_waypoints"];
+  if (cw)
+  {
+    if (!cw["eef_step_m"] || cw["eef_step_m"].as<double>() != kCartesianDefaultEefStep)
+      out.push_back("providers.cartesian_waypoints.eef_step_m is not the backend's default");
+    if (!cw["jump_threshold"] || cw["jump_threshold"].as<double>() != kCartesianJumpThreshold)
+      out.push_back("providers.cartesian_waypoints.jump_threshold is not the backend's");
+    if (!cw["fraction_threshold"] ||
+        cw["fraction_threshold"].as<double>() != MoveItMotionRuntime::Config{}.cartesian_fraction_threshold)
+      out.push_back("providers.cartesian_waypoints.fraction_threshold is not the runtime's default");
+  }
+  // provider_defaults
+  std::vector<std::pair<std::string, std::string>> defaults;
+  for (const auto& kv : reg["provider_defaults"])
+    defaults.emplace_back(kv.first.as<std::string>(), str(kv.second));
+  if (defaults != motionProviderDefaults())
+    out.push_back("provider_defaults differ from TMR's (motion_providers.cpp)");
+  for (const auto& [kind, id] : defaults)
+    if (!findMotionProvider(id))
+      out.push_back("provider_defaults." + kind + " names '" + id + "', which is no provider row");
   return out;
 }
 
@@ -452,8 +560,12 @@ TEST(PlannerRegistryMutation, AnExecutionModeNoNodeRunsIsCaught)
 
 TEST(PlannerRegistryMutation, AnotherSchemaIsRefused)
 {
-  const auto p = Mutated([](YAML::Node& r) { r["schema_version"] = 2; }).problems();
-  EXPECT_TRUE(mentions(p, "schema_version is '2': this TMR maps schema 1")) << all(p);
+  for (int other : {1, 3})
+  {
+    const auto p = Mutated([other](YAML::Node& r) { r["schema_version"] = other; }).problems();
+    EXPECT_TRUE(mentions(p, "schema_version is '" + std::to_string(other) + "': this TMR maps schema 2"))
+      << all(p);
+  }
 }
 
 TEST(PlannerRegistryMutation, ADegradeToAModeTheRegistryDoesNotHaveIsCaught)
@@ -520,4 +632,95 @@ TEST(PlannerRegistry, AnUnsetPlannerPortMeansTheRuntimesMode)
       << ports.at("planner").defaultValueString()
       << "'): it must be the registry's default_planner_mode, or none";
   }
+}
+
+// --- vNext M3.1 (ADR-0025): the provider capability rows ---------------------------------------
+
+TEST(ProviderRegistry, EveryLiveTokenHasAProviderAndNoReservedTokenHasOne)
+{
+  std::set<std::string> provided;
+  for (const auto& p : motionProviders())
+    provided.insert(p.provides.begin(), p.provides.end());
+  for (const auto& t : liveCapabilities()) EXPECT_TRUE(provided.count(t)) << t;
+  for (const auto& t : reservedCapabilities()) EXPECT_FALSE(provided.count(t)) << t;
+}
+
+TEST(ProviderRegistry, MissingCapabilitiesNamesWhatAProviderLacks)
+{
+  const MotionProvider* dense = findMotionProvider(kProviderCartesianWaypoints);
+  ASSERT_NE(dense, nullptr);
+  EXPECT_EQ(missingCapabilities(*dense, {kCapContinuousPath, kCapBlending, kCapGoalTolerance}),
+            (std::vector<std::string>{kCapBlending, kCapGoalTolerance}));
+  const MotionProvider* seq = findMotionProvider(kProviderPilzSequence);
+  ASSERT_NE(seq, nullptr);
+  EXPECT_TRUE(missingCapabilities(*seq, {kCapMultiSegmentPath, kCapBlending, kCapCartesianCircular})
+                .empty());
+  EXPECT_EQ(missingCapabilities(*seq, {kCapJerkConstraints}),
+            (std::vector<std::string>{kCapJerkConstraints}));
+  EXPECT_EQ(findMotionProvider("cumotion"), nullptr);
+  EXPECT_EQ(defaultMotionProvider("path"), kProviderPilzSequence);
+  EXPECT_EQ(defaultMotionProvider("spline"), "");
+}
+
+TEST(ProviderRegistryMutation, ARowOnlyTheRegistryHasIsCaught)
+{
+  const auto p = Mutated([](YAML::Node& r) {
+    r["providers"]["cumotion"]["route"] = "move_group";
+    r["providers"]["cumotion"]["provides"].push_back("collision_free_planning");
+  }).problems();
+  EXPECT_TRUE(mentions(p, "provider 'cumotion' is in the registry but TMR maps no such row")) << all(p);
+}
+
+TEST(ProviderRegistryMutation, ARowRemovedFromTheRegistryIsCaught)
+{
+  const auto p = Mutated([](YAML::Node& r) { r["providers"].remove("pilz_sequence"); }).problems();
+  EXPECT_TRUE(mentions(p, "provider 'pilz_sequence' is mapped by TMR but the registry declares no such row"))
+    << all(p);
+}
+
+TEST(ProviderRegistryMutation, ATokenAddedOnlyToTheRegistryIsCaught)
+{
+  const auto p = Mutated([](YAML::Node& r) {
+    r["providers"]["cartesian_waypoints"]["provides"].push_back("blending");
+  }).problems();
+  EXPECT_TRUE(mentions(p, "provider 'cartesian_waypoints' provides")) << all(p);
+}
+
+TEST(ProviderRegistryMutation, AReservedTokenCannotBeProvided)
+{
+  const auto p = Mutated([](YAML::Node& r) {
+    r["providers"]["pilz_sequence"]["provides"].push_back("jerk_constraints");
+  }).problems();
+  EXPECT_TRUE(mentions(p, "provides 'jerk_constraints', which is not a live capability (it is reserved)"))
+    << all(p);
+}
+
+TEST(ProviderRegistryMutation, AnUnprovidedLiveTokenIsCaught)
+{
+  const auto p = Mutated([](YAML::Node& r) {
+    r["capabilities"]["live"].push_back("spline_interpolation");
+  }).problems();
+  EXPECT_TRUE(mentions(p, "capabilities.live is")) << all(p);
+  EXPECT_TRUE(mentions(p, "live capability 'spline_interpolation' is provided by no row")) << all(p);
+}
+
+TEST(ProviderRegistryMutation, APointerIntoAMissingSectionIsCaught)
+{
+  const auto p = Mutated([](YAML::Node& r) { r["planner_modes"].remove("ompl_chomp"); }).problems();
+  EXPECT_TRUE(mentions(p, "provider 'ompl_chomp' names planner_mode 'ompl_chomp', which the registry "
+                          "does not declare")) << all(p);
+}
+
+TEST(ProviderRegistryMutation, AChangedDefaultIsCaught)
+{
+  const auto p = Mutated([](YAML::Node& r) { r["provider_defaults"]["free"] = "pilz_ptp"; }).problems();
+  EXPECT_TRUE(mentions(p, "provider_defaults differ from TMR's")) << all(p);
+}
+
+TEST(ProviderRegistryMutation, AFoldedBackendNumberThatDriftsIsCaught)
+{
+  const auto p = Mutated([](YAML::Node& r) {
+    r["providers"]["cartesian_waypoints"]["eef_step_m"] = 0.01;
+  }).problems();
+  EXPECT_TRUE(mentions(p, "eef_step_m is not the backend's default")) << all(p);
 }

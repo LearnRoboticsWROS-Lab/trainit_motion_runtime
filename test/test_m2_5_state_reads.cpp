@@ -258,37 +258,37 @@ TEST(M25StateReads, a_read_is_the_arms_analytic_fk)
 }
 
 // READ-D (vNext M2.5, 4/7; oracle replaced in M2.6 when moveGroup() was removed): the door's
-// read is the tip link's FK in the robot model frame with a fresh state, and the identity pose,
-// still in the model frame, with none (the silent identity read, KNOWN_DEBT).
+// read is the tip link's FK in the robot model frame with a fresh state. With none it returned the
+// identity pose (the silent identity read, KNOWN_DEBT); since vNext M3.4 (R-M3-20, owner D3) it
+// throws RobotStateUnavailable, naming the reason -- never a pose.
 TEST(M25StateReads, current_tip_pose_is_the_tip_fk_in_the_model_frame)
 {
   m25::World& w = m25::world();
-  for (const bool publishing : {true, false})
+  w.js.set(kReady);
+  w.js.on(true);
+  w.rig.build(m25::defaultConfig());
+  const trainit::MotionRuntime& door = *w.rig.runtime();
+  const geometry_msgs::msg::PoseStamped read = door.currentTipPose();
+  EXPECT_EQ(read.header.frame_id, "world");
+  const auto [p, r] = analyticTcp(kReady);
+  EXPECT_NEAR(read.pose.position.x, p.x(), 1e-9);
+  EXPECT_NEAR(read.pose.position.y, p.y(), 1e-9);
+  EXPECT_NEAR(read.pose.position.z, p.z(), 1e-9);
+  const Eigen::Quaterniond got(read.pose.orientation.w, read.pose.orientation.x,
+                               read.pose.orientation.y, read.pose.orientation.z);
+  EXPECT_NEAR(std::abs(got.dot(Eigen::Quaterniond(r))), 1.0, 1e-9);
+
+  w.js.on(false);
+  w.rig.build(m25::defaultConfig());
+  const trainit::MotionRuntime& stale = *w.rig.runtime();
+  try
   {
-    w.js.set(kReady);
-    w.js.on(publishing);
-    w.rig.build(m25::defaultConfig());
-    const trainit::MotionRuntime& door = *w.rig.runtime();
-    const geometry_msgs::msg::PoseStamped read = door.currentTipPose();
-    EXPECT_EQ(read.header.frame_id, "world") << "publishing=" << publishing;
-    geometry_msgs::msg::Pose want;
-    want.orientation.w = 1.0;                       // the identity pose without a state
-    if (publishing)
-    {
-      const auto [p, r] = analyticTcp(kReady);
-      const Eigen::Quaterniond q(r);
-      want.position.x = p.x(); want.position.y = p.y(); want.position.z = p.z();
-      want.orientation.x = q.x(); want.orientation.y = q.y(); want.orientation.z = q.z();
-      want.orientation.w = q.w();
-    }
-    EXPECT_NEAR(read.pose.position.x, want.position.x, 1e-9) << "publishing=" << publishing;
-    EXPECT_NEAR(read.pose.position.y, want.position.y, 1e-9) << "publishing=" << publishing;
-    EXPECT_NEAR(read.pose.position.z, want.position.z, 1e-9) << "publishing=" << publishing;
-    const Eigen::Quaterniond got(read.pose.orientation.w, read.pose.orientation.x,
-                                 read.pose.orientation.y, read.pose.orientation.z);
-    const Eigen::Quaterniond exp(want.orientation.w, want.orientation.x, want.orientation.y,
-                                 want.orientation.z);
-    EXPECT_NEAR(std::abs(got.dot(exp)), 1.0, 1e-9) << "publishing=" << publishing;
+    const auto none = stale.currentTipPose();
+    ADD_FAILURE() << "no robot state, yet a pose was returned: " << m25::describe(none.pose);
+  }
+  catch (const trainit::RobotStateUnavailable& e)
+  {
+    EXPECT_NE(std::string(e.what()).find("no fresh robot state"), std::string::npos) << e.what();
   }
   w.js.on(true);
 }

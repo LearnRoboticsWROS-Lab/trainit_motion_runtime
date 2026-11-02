@@ -79,6 +79,16 @@
       <input_port name="path_file"/>
       <input_port name="profile" default="process"/>
     </Action>
+    <!-- vNext M3.1 (ADR-0024): one named path of the runner's paths_file, as ONE motion through
+         the MotionRuntime door (a Pilz sequence, or a continuous Cartesian path). -->
+    <Action ID="FollowPath">
+      <input_port name="path">the path's name in the runner's paths_file</input_port>
+      <input_port name="profile">the profile of a path that names none (approach)</input_port>
+      <!-- vNext M3.5: an event-free run states[from..to] of the path (default: the whole path) -->
+      <input_port name="from" default="">first state of the run (index; default 0)</input_port>
+      <input_port name="to" default="">last state of the run (index; default the last state)</input_port>
+      <output_port name="fault">MOTION_FAULT: CAUSE during PHASE (written only for a failure that is not the target's)</output_port>
+    </Action>
     <!-- ADR-0022: with the canonical end-effector contract (an `eef` block in bt_params) the
          gripper nodes command a SITE's grip actuator and report reason/fault/subject on
          FAILURE; without it they run their legacy bodies and write nothing. -->
@@ -126,6 +136,13 @@
     </Action>
     <Action ID="DisableProcess">
       <input_port name="channel"/>
+    </Action>
+    <!-- vNext M3.5: the generic process event on a LOGICAL channel (EnableProcess / DisableProcess
+         are its legacy aliases) -->
+    <Action ID="ProcessEvent">
+      <input_port name="kind">process_on | process_off | set_value | external</input_port>
+      <input_port name="channel">a logical channel id (never a topic, a PLC address or a symbol)</input_port>
+      <input_port name="value" default="">set_value: the value</input_port>
     </Action>
     <Action ID="AddCollisionObject">
       <input_port name="id"/>
@@ -199,8 +216,10 @@
       <input_port name="min_score" default="0"/>
       <input_port name="keep" default="1"/>
       <input_port name="out_key" default="detected"/>
+      <!-- vNext M3.5: true = a capture: trigger the detector, accept only a result taken after it began -->
+      <input_port name="trigger" default="false"/>
       <!-- ADR-0022: written only when no fresh message arrived or a TF lookup failed -->
-      <output_port name="fault">DETECTION_TIMEOUT | TF_LOOKUP_FAILED</output_port>
+      <output_port name="fault">DETECTION_TIMEOUT | TF_LOOKUP_FAILED | TRIGGER_UNAVAILABLE</output_port>
     </Action>
     <Action ID="SetWaypointFromDetection">
       <input_port name="waypoint"/>
@@ -222,6 +241,39 @@
       <input_port name="dpitch" default="0"/>
       <input_port name="dyaw" default="0"/>
       <input_port name="type" default="tcp"/>
+    </Action>
+    <!-- vNext M3.6 (ADR-0026): the grasp-candidate contract -->
+    <Action ID="DetectCandidates">
+      <input_port name="source">candidates | detections</input_port>
+      <input_port name="detector"/>
+      <input_port name="topic" default=""/>
+      <input_port name="target_frame" default="base_link"/>
+      <input_port name="timeout_ms" default="3000"/>
+      <input_port name="keep" default="1"/>
+      <input_port name="out_key"/>
+      <input_port name="class_id" default="">detections: keep this class only</input_port>
+      <input_port name="min_score" default="">detections: the lowest hypothesis score</input_port>
+      <input_port name="default_approach" default="">detections: the approach without a normal (target_frame)</input_port>
+      <input_port name="standoff_m" default="">detections: the projected standoff</input_port>
+      <input_port name="eef" default="">detections: the projected device</input_port>
+      <input_port name="site" default="">detections: the projected site</input_port>
+      <output_port name="reason"/>
+      <output_port name="fault"/>
+    </Action>
+    <Action ID="SetWaypointFromCandidate">
+      <input_port name="from"/>
+      <input_port name="index" default="0"/>
+      <input_port name="grasp"/>
+      <input_port name="pregrasp"/>
+      <input_port name="retract" default=""/>
+      <input_port name="standoff_m" default="">replaces the candidate's standoff</input_port>
+      <input_port name="retract_along_approach" default=""/>
+      <input_port name="retract_dz" default=""/>
+      <input_port name="orientation">align_approach</input_port>
+      <input_port name="orientation_from">the reference waypoint of align_approach</input_port>
+      <input_port name="eef" default=""/>
+      <input_port name="site" default=""/>
+      <output_port name="reason"/>
     </Action>
     <Action ID="Wait">
       <input_port name="duration_ms" default="100"/>

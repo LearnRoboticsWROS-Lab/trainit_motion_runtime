@@ -1,0 +1,57 @@
+m2_5 capture servo_track_2
+moveit_ros_planning_interface 2.5.10 | behaviortree_cpp 4.10.0 | rmw rmw_fastrtps_cpp
+
+=== scenario SERVO-13
+pins: the arm ARRIVES after the first twist (the fake joint states jump to the target): the feedback read sees it and the move converges
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: t.position=0.45123562560121699;0.13958353611373253;0.47709163653358294; t.type=tcp
+script: default (SUCCEED; chomp refuses a pose goal with -16)
+--- tick 1: <ServoTrack waypoint="t" servo_node="m25_servo_s13"/>
+events:
+[1] SERVICE /m25_servo_s13/start_servo Trigger.call
+[2] SERVICE /m25_servo_s13/unpause_servo Trigger.call
+[3] SERVICE /m25_servo_s13/pause_servo Trigger.call
+bt: SUCCESS
+twist first: frame=world lin=(-0.014622241727738886,0.041854821915207528,0.023116313055974901) ang=(0,0,0)
+twist last:  frame=world lin=(0,0,0) ang=(0,0,0)
+planner_mode_after: ompl
+counts: /m25_servo_s13/pause_servo=1 /m25_servo_s13/start_servo=1 /m25_servo_s13/unpause_servo=1
+
+=== scenario SERVO-14
+pins: no joint state at all: the frame and the feedback come from the identity pose (KNOWN_DEBT: the silent identity read); the stream times out
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states OFF
+blackboard: t.position=0.05;0;0; t.type=tcp
+script: default (SUCCEED; chomp refuses a pose goal with -16)
+--- tick 1: <ServoTrack waypoint="t" servo_node="m25_servo_s14" timeout_ms="500"/>
+events:
+bt: FAILURE
+twists: none
+planner_mode_after: ompl
+counts: none
+
+=== scenario SERVO-15
+pins: arbitration OFF (port unset) streams although an execution IS in flight; with the port set and the execution still in flight it refuses before any call
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: t.position=0.5;0;0.4; t.type=tcp
+script: default (SUCCEED; chomp refuses a pose goal with -16)
+--- tick 1: <ServoTrack waypoint="t" servo_node="m25_servo_s15"/>
+events:
+[1] SERVICE /m25_servo_s15/start_servo Trigger.call
+[2] SERVICE /m25_servo_s15/unpause_servo Trigger.call
+[3] SERVICE /m25_servo_s15/pause_servo Trigger.call
+bt: SUCCESS
+twist first: frame=world lin=(0,0,0) ang=(0,0,0)
+twist last:  frame=world lin=(0,0,0) ang=(0,0,0)
+planner_mode_after: ompl
+counts: /m25_servo_s15/pause_servo=1 /m25_servo_s15/start_servo=1 /m25_servo_s15/unpause_servo=1
+--- tick 2: <ServoTrack waypoint="t" servo_node="m25_servo_s15" execution_status_topic="/execute_trajectory/_action/status"/>
+events:
+bt: FAILURE
+twist first: frame=world lin=(0,0,0) ang=(0,0,0)
+twist last:  frame=world lin=(0,0,0) ang=(0,0,0)
+planner_mode_after: ompl
+counts: none
+

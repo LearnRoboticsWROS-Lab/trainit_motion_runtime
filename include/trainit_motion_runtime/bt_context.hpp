@@ -34,6 +34,9 @@ class EndEffectorRegistry;   // end_effector_registry.hpp (ADR-0022)
 inline constexpr const char* BB_BT_CONTEXT      = "trainit_context";
 inline constexpr const char* BB_MOTION_PROFILES = "trainit_profiles";
 inline constexpr const char* BB_ROS_NODE        = "ros_node";
+// vNext M3.1 (ADR-0024): the runner's path library (std::shared_ptr<const PathLibrary>, from its
+// `paths_file` parameter); absent when no paths file was given. FollowPath reads it.
+inline constexpr const char* BB_PATH_LIBRARY    = "trainit_paths";
 
 // Non-owning handles to the runtime stack, shared with every BT node.
 struct BtContext

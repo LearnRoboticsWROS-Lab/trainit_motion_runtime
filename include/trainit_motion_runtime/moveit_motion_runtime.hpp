@@ -19,7 +19,9 @@
 
 #include "trainit_motion_runtime/motion_runtime.hpp"
 #include "trainit_motion_runtime/manual_motion_strategy_selector.hpp"
+#include "trainit_motion_runtime/pilz_sequence_backend.hpp"
 #include "trainit_motion_runtime/planning_scene_manager.hpp"
+#include "trainit_motion_runtime/pose_configuration.hpp"
 #include "trainit_motion_runtime/trajectory_validator.hpp"
 
 namespace trainit
@@ -47,6 +49,14 @@ public:
     double max_joint_jump{0.5};      // [rad] between consecutive waypoints
     double cartesian_fraction_threshold{1.0};   // accept cartesian path only if fraction >= this
     bool   allow_partial_cartesian{false};      // execute a partial cartesian path
+    // vNext M3.4: how long a Pilz sequence goal (plan + execute) may take before the motion fails
+    // and the goal is cancelled [s] (PilzSequenceBackend::kDefaultResultTimeoutS, as before)
+    double sequence_result_timeout_s{PilzSequenceBackend::kDefaultResultTimeoutS};
+    // TMR 2.6.0 (ADR-0028): a PTP / free move to a pose reaches it in the joint configuration NEAREST
+    // its reference (the taught configuration, else the start state), or (PLANNER) leaves it to the
+    // planner's IK; a taught configuration farther than the tolerance on any joint is refused [rad]
+    PoseGoalConfiguration pose_goal_configuration{PoseGoalConfiguration::NEAREST};
+    double configuration_tolerance{kDefaultConfigurationTolerance};
   };
 
   // The move_group this runtime is a client of is the one in the node's OWN namespace (vNext M2.7,
@@ -77,6 +87,11 @@ public:
   // WARNed. The bound runs on a steady clock (a stopped sim clock does not stop it). Its probe
   // clients are destroyed on return: nothing it creates outlives the call.
   static MoveItWait waitForMoveIt(const rclcpp::Node::SharedPtr& node, double timeout_s);
+  // TMR 2.6.0 (ADR-0028): the runner parameters pose_goal_configuration ("nearest" | "planner",
+  // declared "nearest") and configuration_tolerance (a finite number of radians > 0, an integer
+  // accepted; declared pi/2) into `cfg`. false, `refused` naming the parameter and its value, on
+  // anything else: a configuration error (the runner's FATAL, exit 2). Both runners call it.
+  static bool poseConfigurationParams(const rclcpp::Node::SharedPtr& node, Config& cfg, std::string& refused);
   // ADR-0023 Decision 5: under a namespace N every robot-scoped name a runner resolves must stay
   // inside N. One entry per name a remap sends elsewhere, in the list's order ("service
   // /r1/get_planning_scene -> /r2/get_planning_scene", "topic /r1/collision_object ->
@@ -113,9 +128,10 @@ public:
   MotionResult stop() override;
   void setPlannerMode(PlannerMode mode) override;
   PlannerMode plannerMode() const override;
-  // MoveGroupInterface::getCurrentPose(tip): waits up to 1 s for a fresh joint state and, when
-  // none arrives, returns the identity pose (still stamped in the model frame) without reporting
-  // a failure -- KNOWN_DEBT, kept as it is by vNext M2.5.
+  // The read MoveGroupInterface::getCurrentPose(tip) makes -- the same state monitor, started on
+  // first use, the same wait of up to 1 s for a fresh joint state, the same FK -- except that no
+  // fresh state (or a tip that is not a link of the model) throws RobotStateUnavailable (vNext
+  // M3.4, R-M3-20): getCurrentPose returned the identity pose and reported nothing.
   geometry_msgs::msg::PoseStamped currentTipPose() const override;
 
   // --- the frames and the named-state FK: MotionRuntime methods since vNext M2.7 ---------
@@ -144,6 +160,25 @@ private:
               moveit::planning_interface::MoveGroupInterface::Plan& plan,
               double& planning_time, int& error_code);
 
+  // TMR 2.6.0 (ADR-0028): a pose goal resolved into the joint configuration this runtime moves to.
+  // The IK of the runner's own robot model (its kinematics plugin), from the taught configuration,
+  // the start state and a fixed series of spread seeds, one attempt each (pose_configuration_search.hpp);
+  // solutions collision-checked in the planning scene; the nearest the reference chosen
+  // (pose_configuration.hpp).
+  struct PoseResolution
+  {
+    enum class Status { NOT_REQUESTED, RESOLVED, NO_SOLVER, NO_STATE, NO_SOLUTION, REFUSED, INVALID }
+      status{Status::NOT_REQUESTED};
+    std::vector<double> joints;
+    ConfigurationChoice choice;
+    std::string why;
+    std::string worst_joint;     // the name of the joint max_difference is on
+    bool unchecked{false};       // no planning scene: the solutions were not collision-checked
+    bool timed{false};           // TMR 2.6.2: found by the time-limited search (may differ run to run)
+  };
+  PoseResolution resolvePoseGoal(const geometry_msgs::msg::Pose& pose, const std::string& tip,
+                                 const std::optional<std::vector<double>>& taught) const;
+
   void fillFreeSpaceMetrics(FreeSpaceMetrics& m, const PlannerProfile& profile,
                             const std::string& stage,
                             const moveit_msgs::msg::RobotTrajectory& traj,
@@ -156,6 +191,12 @@ private:
   std::unique_ptr<PlanningSceneManager> scene_;
   std::unique_ptr<TrajectoryValidator> validator_;
   moveit::core::RobotModelConstPtr robot_model_;
+  // vNext M3.4: MoveGroupInterface's own goal tolerances, read at construction: what a plan that
+  // requests none sends (MoveGroupInterface keeps the last value it was given)
+  double mgi_goal_position_tolerance_{0.0};
+  double mgi_goal_orientation_tolerance_{0.0};
+  bool warned_no_solver_{false};    // ADR-0028: said once that the planner chooses
+  bool warned_no_scene_{false};     // ADR-0028: said once that the solutions are not collision-checked
 };
 
 }  // namespace trainit

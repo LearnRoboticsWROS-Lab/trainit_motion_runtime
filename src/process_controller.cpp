@@ -6,8 +6,6 @@
 // =============================================================================
 #include "trainit_motion_runtime/process_controller.hpp"
 
-#include <std_msgs/msg/bool.hpp>
-#include <std_msgs/msg/float64.hpp>
 
 namespace trainit
 {
@@ -46,25 +44,44 @@ RosProcessController::RosProcessController(rclcpp::Node::SharedPtr node)
 {
 }
 
+// Latched so a late-joining process driver still receives the last command: the publisher is kept,
+// so its one-sample history is there when the driver subscribes (vNext M3.5).
+rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr RosProcessController::enabledPublisher(const std::string& channel)
+{
+  std::lock_guard<std::mutex> lk(m_);
+  auto& pub = enabled_[channel];
+  if (!pub) pub = node_->create_publisher<std_msgs::msg::Bool>(channel + "/process_enabled", rclcpp::QoS(1).transient_local());
+  return pub;
+}
+
+rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr RosProcessController::valuePublisher(const std::string& channel)
+{
+  std::lock_guard<std::mutex> lk(m_);
+  auto& pub = value_[channel];
+  if (!pub) pub = node_->create_publisher<std_msgs::msg::Float64>(channel + "/process_value", rclcpp::QoS(1).transient_local());
+  return pub;
+}
+
+void RosProcessController::prepare(const std::string& channel, bool analog)
+{
+  if (analog) valuePublisher(channel);
+  else enabledPublisher(channel);
+}
+
 bool RosProcessController::executeEvent(const ProcessEvent& event)
 {
-  // Latched so a late-joining process driver still receives the last command.
-  const rclcpp::QoS qos = rclcpp::QoS(1).transient_local();
-
   if (event.type == ProcessEventType::SET_ANALOG_VALUE)
   {
-    auto pub = node_->create_publisher<std_msgs::msg::Float64>(event.channel + "/process_value", qos);
     std_msgs::msg::Float64 m;
     m.data = event.value;
-    pub->publish(m);
+    valuePublisher(event.channel)->publish(m);
   }
   else
   {
-    auto pub = node_->create_publisher<std_msgs::msg::Bool>(event.channel + "/process_enabled", qos);
     std_msgs::msg::Bool m;
     m.data = (event.type == ProcessEventType::ENABLE_PROCESS ||
               event.type == ProcessEventType::TRIGGER);
-    pub->publish(m);
+    enabledPublisher(event.channel)->publish(m);
   }
   RCLCPP_INFO(node_->get_logger(), "[process] %s channel='%s' value=%.3f",
               toStr(event.type), event.channel.c_str(), event.value);

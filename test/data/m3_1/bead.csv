@@ -1,0 +1,5 @@
+# a short bead along +y at the start pose of the test arm (base_link)
+0.5,0.0,0.3
+0.5,0.02,0.3
+0.5,0.04,0.3
+0.5,0.06,0.3

@@ -1,0 +1,121 @@
+m2_5 capture state_reads
+moveit_ros_planning_interface 2.5.10 | behaviortree_cpp 4.10.0 | rmw rmw_fastrtps_cpp
+
+=== scenario READ-01
+pins: StoreCurrentPose stores FK(tcp) in the model frame (world); the frame is dropped
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0.29999999999999999, -0.40000000000000002, 0.59999999999999998]
+blackboard: (none)
+script: default (SUCCEED; chomp refuses a pose goal with -16)
+--- tick 1: <StoreCurrentPose pose_key="cur"/>
+events:
+bt: SUCCESS
+stored: cur=Pose(0.45123562560121699,0.13958353611373253,0.47709163653358294 | -0.014918919342160721,0.098712394991922289,0.14869156426260061,0.98383134105280556)
+planner_mode_after: ompl
+counts: none
+
+=== scenario READ-02
+pins: ComputeTcpTarget: the current orientation is read; the quat and fixed_rpy branches read nothing
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0.29999999999999999, -0.40000000000000002, 0.59999999999999998]
+blackboard: (none)
+script: default (SUCCEED; chomp refuses a pose goal with -16)
+--- tick 1: <ComputeTcpTarget target_xyz="0.4;0.1;0.3" out_key="t_current"/>
+events:
+bt: SUCCESS
+stored: t_current=Pose(0.40000000000000002,0.10000000000000001,0.29999999999999999 | -0.014918919342160721,0.098712394991922289,0.14869156426260061,0.98383134105280556)
+stored: t_quat=(none)
+stored: t_rpy=(none)
+stored: t_offset=(none)
+planner_mode_after: ompl
+counts: none
+--- tick 2: <ComputeTcpTarget target_xyz="0.4;0.1;0.3" quat="1;0;0;0" out_key="t_quat"/>
+events:
+bt: SUCCESS
+stored: t_current=Pose(0.40000000000000002,0.10000000000000001,0.29999999999999999 | -0.014918919342160721,0.098712394991922289,0.14869156426260061,0.98383134105280556)
+stored: t_quat=Pose(0.40000000000000002,0.10000000000000001,0.29999999999999999 | 1,0,0,0)
+stored: t_rpy=(none)
+stored: t_offset=(none)
+planner_mode_after: ompl
+counts: none
+--- tick 3: <ComputeTcpTarget target_xyz="0.4;0.1;0.3" use_current_orientation="false" fixed_rpy_deg="180;0;0" out_key="t_rpy"/>
+events:
+bt: SUCCESS
+stored: t_current=Pose(0.40000000000000002,0.10000000000000001,0.29999999999999999 | -0.014918919342160721,0.098712394991922289,0.14869156426260061,0.98383134105280556)
+stored: t_quat=Pose(0.40000000000000002,0.10000000000000001,0.29999999999999999 | 1,0,0,0)
+stored: t_rpy=Pose(0.40000000000000002,0.10000000000000001,0.29999999999999999 | 1,0,0,6.123233995736766e-17)
+stored: t_offset=(none)
+planner_mode_after: ompl
+counts: none
+--- tick 4: <ComputeTcpTarget target_xyz="0.4;0.1;0.3" tcp_offset_xyz="0;0;0.05" out_key="t_offset"/>
+events:
+bt: SUCCESS
+stored: t_current=Pose(0.40000000000000002,0.10000000000000001,0.29999999999999999 | -0.014918919342160721,0.098712394991922289,0.14869156426260061,0.98383134105280556)
+stored: t_quat=Pose(0.40000000000000002,0.10000000000000001,0.29999999999999999 | 1,0,0,0)
+stored: t_rpy=Pose(0.40000000000000002,0.10000000000000001,0.29999999999999999 | 1,0,0,6.123233995736766e-17)
+stored: t_offset=Pose(0.4094898030489344,0.10293554008469133,0.34900332889206209 | -0.014918919342160721,0.098712394991922289,0.14869156426260061,0.98383134105280556)
+planner_mode_after: ompl
+counts: none
+
+=== scenario READ-03
+pins: CheckRobotState: inside and outside the tolerance (arm at home: tcp (0.5,0,0.4) in world)
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states=[0, 0, 0]
+blackboard: (none)
+script: default (SUCCEED; chomp refuses a pose goal with -16)
+--- tick 1: <CheckRobotState position="0.5;0;0.4"/>
+events:
+bt: SUCCESS
+planner_mode_after: ompl
+counts: none
+--- tick 2: <CheckRobotState position="0.52;0;0.4" position_tolerance="0.03"/>
+events:
+bt: SUCCESS
+planner_mode_after: ompl
+counts: none
+--- tick 3: <CheckRobotState position="0.6;0;0.4" position_tolerance="0.03"/>
+events:
+bt: FAILURE
+planner_mode_after: ompl
+counts: none
+--- tick 4: <CheckRobotState position="0.5;0;0.3"/>
+events:
+bt: FAILURE
+planner_mode_after: ompl
+counts: none
+
+=== scenario READ-04
+pins: no joint states: identity pose and SUCCESS after ~1 s; CheckRobotState fails far, passes at 0;0;0
+config: ns=/ group=arm base=base_link tip=tcp mode=ompl backend=pilz_sequence pipelines=[ompl,pilz_industrial_motion_planner,chomp] validation=on retries=3 max_jump=0.5 frac=1 partial=off profiles=config/bt/trainit_profiles.yaml
+state: joint_states /joint_states OFF
+blackboard: (none)
+script: default (SUCCEED; chomp refuses a pose goal with -16)
+--- tick 1: <StoreCurrentPose pose_key="cur"/>
+events:
+bt: FAILURE
+stored: cur=(none)
+stored: t_current=(none)
+planner_mode_after: ompl
+counts: none
+--- tick 2: <ComputeTcpTarget target_xyz="0.4;0.1;0.3" out_key="t_current"/>
+events:
+bt: FAILURE
+stored: cur=(none)
+stored: t_current=(none)
+planner_mode_after: ompl
+counts: none
+--- tick 3: <CheckRobotState position="0.5;0;0.4"/>
+events:
+bt: FAILURE
+stored: cur=(none)
+stored: t_current=(none)
+planner_mode_after: ompl
+counts: none
+--- tick 4: <CheckRobotState position="0;0;0"/>
+events:
+bt: FAILURE
+stored: cur=(none)
+stored: t_current=(none)
+planner_mode_after: ompl
+counts: none
+

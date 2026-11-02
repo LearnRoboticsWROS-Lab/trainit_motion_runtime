@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<!-- vNext M3.4 (test_m3_4_runner_stop): ONE planned move whose execution the fake move_group holds,
+     so trainit_run_bt is blocked inside the motion when SIGINT arrives. -->
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <MoveToNamed target="ready"/>
+  </BehaviorTree>
+</root>

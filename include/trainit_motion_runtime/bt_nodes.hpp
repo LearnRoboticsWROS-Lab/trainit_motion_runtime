@@ -41,6 +41,9 @@ TRAINIT_BT_NODE(MoveCollisionFree)
 // publisher, so the Community library's link line is unchanged.
 TRAINIT_BT_NODE(ServoTrack)
 TRAINIT_BT_NODE(ExecuteProcessPath)
+// vNext M3.1 (ADR-0024): ONE named path of the runner's path library (paths.yaml), executed as ONE
+// motion through the MotionRuntime door -- however many states or samples it has.
+TRAINIT_BT_NODE(FollowPath)
 
 // --- end-effector ---
 // With the canonical contract (ADR-0022, BtContext::eefs set) Open/CloseGripper command a
@@ -54,6 +57,10 @@ TRAINIT_BT_NODE(CommandActuator)   // ADR-0022: one actuator -> one named target
 TRAINIT_BT_NODE(VerifyGrasp)       // ADR-0022: held / released, at a site or tool level
 TRAINIT_BT_NODE(EnableProcess)
 TRAINIT_BT_NODE(DisableProcess)
+// vNext M3.5: the generic process event (XML name "ProcessEvent"; the C++ name avoids the
+// ProcessEvent struct of motion_types.hpp): kind process_on | process_off | set_value | external on
+// a LOGICAL channel. EnableProcess / DisableProcess are its legacy aliases (unchanged).
+TRAINIT_BT_NODE(ProcessEventNode)
 
 // --- planning scene ---
 TRAINIT_BT_NODE(AddCollisionObject)
@@ -88,6 +95,15 @@ TRAINIT_BT_NODE(DetectObject)             // wait for a FRESH detection, TF it, 
                                           // (keep>1: "<out_key>.<i>.*" + "<out_key>.count")
 TRAINIT_BT_NODE(SetWaypointFromDetection) // "<from>[.<index>].position" (+offset) -> "<waypoint>.position"
 TRAINIT_BT_NODE(SetWaypointRelative)      // "<from>" pose (+offset, +rpy delta) -> "<waypoint>" (D-017)
+// vNext M3.6 (ADR-0026): the GRASP CANDIDATE contract. DetectCandidates waits for a fresh
+// GraspCandidateArray from ANY producer (source="candidates") -- or projects a Detection3DArray onto
+// the same contract (source="detections", the minimal M3 bridge: approach = -normal) -- validates it
+// and writes the first `keep` candidates, in published order, on "<out_key>.<i>.*" + "<out_key>.count".
+// SetWaypointFromCandidate derives the grasp, PreGrasp and Retract WAYPOINTS of one candidate
+// (WHERE only: the motion type stays the idiom's): PreGrasp = grasp - standoff * approach, the TCP
+// orientation align_approach (the application's reference, tilted onto the approach).
+TRAINIT_BT_NODE(DetectCandidates)
+TRAINIT_BT_NODE(SetWaypointFromCandidate)
 
 // --- learned-policy execution (extension point; see docs POLICY_EXECUTION.md, ADR-0005) ---
 // The Community core stays torch-free: these nodes only speak a ROS contract to the

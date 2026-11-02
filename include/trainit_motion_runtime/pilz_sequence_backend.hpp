@@ -32,9 +32,15 @@ public:
   // (/r3/sequence_move_group for a runner in /r3). The cross-namespace remap guard checks
   // its entities by this one name (MoveItMotionRuntime::crossNamespaceRemaps, ADR-0023).
   static constexpr const char* kActionName = "sequence_move_group";
+  // How long run() waits for the sequence goal's RESULT (it plans AND executes) before the motion
+  // has failed: the goal is then CANCELLED (vNext M3.4, owner D3), and how long the cancel's answer
+  // is waited for.
+  static constexpr double kDefaultResultTimeoutS = 120.0;
+  static constexpr double kCancelResponseTimeoutS = 5.0;
 
   PilzSequenceBackend(rclcpp::Node::SharedPtr node,
-                      std::string group, std::string tip_link, std::string base_frame);
+                      std::string group, std::string tip_link, std::string base_frame,
+                      double result_timeout_s = kDefaultResultTimeoutS);
 
   std::string name() const override { return "pilz_sequence"; }
   bool supportsCircular() const override { return true; }
@@ -45,9 +51,12 @@ public:
 private:
   moveit_msgs::msg::MotionPlanRequest buildRequest(const ProcessSegment& seg,
                                                    const MotionOptions& options) const;
+  // Cancels a goal whose result timed out; what happened, in words (never throws).
+  std::string cancel(const rclcpp_action::ClientGoalHandle<MoveGroupSequence>::SharedPtr& handle);
 
   rclcpp::Node::SharedPtr node_;
   std::string group_, tip_, base_;
+  double result_timeout_s_;
   rclcpp_action::Client<MoveGroupSequence>::SharedPtr client_;
 };
 

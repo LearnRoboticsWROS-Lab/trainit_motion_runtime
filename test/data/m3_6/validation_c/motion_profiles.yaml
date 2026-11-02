@@ -1,0 +1,10 @@
+# The application's MOTION PROFILES as trainit_run_bt loads them (motion_profiles_file), generated
+# by the TrainIt Setup Assistant from the project's motion_profiles. Speeds and accelerations are
+# NOT here: TSA resolves them for every move (bt_params.yaml task_parameters.<waypoint>.speed and
+# .accel, in percent) and every path (paths.yaml velocity_scaling, acceleration_scaling), because a
+# TCP limit gives each motion its own scaling. A profile here carries what TMR takes only from a
+# named profile -- the planning budget and the goal tolerance -- and an empty one runs with TMR's
+# defaults. A step that names no profile runs with "default", TMR's own base profile.
+motion_profiles:
+  transit: {}
+  approach: {}

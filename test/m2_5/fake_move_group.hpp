@@ -77,8 +77,10 @@ struct Reply
 {
   // the action status the server ends the goal with; `code` is the MoveIt error code in the
   // result, independent of it (so "SUCCEEDED carrying -1" and "ABORTED carrying SUCCESS" exist).
-  // No CANCELED: a server may only cancel a goal its client asked to cancel (rcl_action refuses
-  // EXECUTING -> CANCELED), and no TMR path cancels -- PREEMPTED is an ABORT carrying -7.
+  // No CANCELED status to script: a server may only cancel a goal its client asked to cancel
+  // (rcl_action refuses EXECUTING -> CANCELED) -- PREEMPTED is an ABORT carrying -7. vNext M3.4:
+  // the Pilz backend cancels a sequence goal whose result timed out; the fake logs that request
+  // (MoveGroupSequence.cancel) and a HELD goal its client asked to cancel ends CANCELED.
   enum class Status { SUCCEED, ABORT, REJECT, HOLD };
   Status status{Status::SUCCEED};
   int code{ErrorCodes::SUCCESS};
@@ -261,6 +263,16 @@ public:
     mg_script.clear(); ex_script.clear(); seq_script.clear(); cart_script.clear();
     chomp_refuses_pose = true;
     mg_ordinal_ = 0; seq_ordinal_ = 0; cart_ordinal_ = 0;
+    std::lock_guard<std::mutex> m(goals_m_);
+    mg_goals_.clear();
+  }
+
+  // vNext M3.6: every MoveGroup goal of the scenario, in arrival order (a test reads the goal poses
+  // numerically; the Log's text is unchanged)
+  std::vector<moveit_msgs::msg::MotionPlanRequest> moveGoals() const
+  {
+    std::lock_guard<std::mutex> m(goals_m_);
+    return mg_goals_;
   }
 
   // Finish every held goal (HOLD) with ABORT.
@@ -330,7 +342,10 @@ private:
       case Reply::Status::HOLD:
       {
         std::lock_guard<std::mutex> g(held_m_);
-        held_.push_back([h, res] { if (h->is_active()) h->abort(res); });
+        held_.push_back([h, res] {
+          if (h->is_canceling()) h->canceled(res);   // its client asked (vNext M3.4)
+          else if (h->is_active()) h->abort(res);
+        });
         break;
       }
       default: h->abort(res); break;
@@ -349,6 +364,10 @@ private:
       [this, name](std::shared_ptr<GoalHandle<MoveGroup>> h) {
         const MoveGroup::Goal goal = *h->get_goal();
         const int ordinal = ++mg_ordinal_;
+        {
+          std::lock_guard<std::mutex> m(goals_m_);
+          mg_goals_.push_back(goal.request);
+        }
         std::optional<Reply> rule;
         if (chomp_refuses_pose && goal.request.pipeline_id == "chomp" && isPoseGoal(goal.request))
           rule = Reply::abort(ErrorCodes::INVALID_GOAL_CONSTRAINTS);
@@ -403,7 +422,10 @@ private:
         }
         return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
       },
-      [](std::shared_ptr<GoalHandle<Sequence>>) { return rclcpp_action::CancelResponse::ACCEPT; },
+      [this, name](std::shared_ptr<GoalHandle<Sequence>>) {
+        log_.event("ACTION", name, "MoveGroupSequence.cancel -> ACCEPT");   // vNext M3.4
+        return rclcpp_action::CancelResponse::ACCEPT;
+      },
       [this, name](std::shared_ptr<GoalHandle<Sequence>> h) {
         const Sequence::Goal goal = *h->get_goal();
         const int ordinal = ++seq_ordinal_;
@@ -543,6 +565,8 @@ private:
   rclcpp::Subscription<moveit_msgs::msg::PlanningScene>::SharedPtr scene_sub_;
   mutable std::mutex script_m_;
   std::mutex held_m_;
+  mutable std::mutex goals_m_;
+  std::vector<moveit_msgs::msg::MotionPlanRequest> mg_goals_;
   std::vector<std::function<void()>> held_;
   std::atomic<int> mg_ordinal_{0}, seq_ordinal_{0}, cart_ordinal_{0};
 };

@@ -57,9 +57,25 @@ def test_every_pipeline_is_a_community_moveit_planner():
 
 
 def test_a_registry_of_another_schema_is_refused(tmp_path, monkeypatch):
-    other = dict(REGISTRY, schema_version=2)
+    other = dict(REGISTRY, schema_version=3)
     path = tmp_path / 'planner_profiles.yaml'
     path.write_text(yaml.safe_dump(other))
     monkeypatch.setattr(helper, 'planner_registry_path', lambda: str(path))
-    with pytest.raises(RuntimeError, match='schema_version 2'):
+    with pytest.raises(RuntimeError, match='schema_version 3'):
         helper.planner_registry()
+
+
+def test_the_registry_is_schema_2_and_a_schema_1_registry_still_reads(tmp_path, monkeypatch):
+    # vNext M3.1 (ADR-0025): schema 2 adds the provider sections at the end and changes nothing
+    # the helper reads, so a schema-1 file (without them) gives the same pipelines.
+    assert REGISTRY['schema_version'] == 2
+    assert {'capabilities', 'providers', 'provider_defaults'} <= set(REGISTRY)
+    older = {k: v for k, v in REGISTRY.items()
+             if k not in ('capabilities', 'providers', 'provider_defaults')}
+    older['schema_version'] = 1
+    path = tmp_path / 'planner_profiles.yaml'
+    path.write_text(yaml.safe_dump(older, sort_keys=False))
+    monkeypatch.setattr(helper, 'planner_registry_path', lambda: str(path))
+    read = helper.planner_registry()
+    assert read['pipelines'] == REGISTRY['pipelines']
+    assert read['default_pipeline'] == REGISTRY['default_pipeline']

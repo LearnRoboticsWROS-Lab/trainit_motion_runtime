@@ -22,6 +22,12 @@
 namespace trainit
 {
 
+// The defaults computeCartesianPath is called with (the registry's providers.cartesian_waypoints
+// folds them, ADR-0025; test_planner_registry checks it): the max Cartesian step when a path sets
+// no waypoint_resolution, and the joint-jump threshold (0 = disabled).
+inline constexpr double kCartesianDefaultEefStep = 0.005;
+inline constexpr double kCartesianJumpThreshold = 0.0;
+
 class CartesianWaypointBackend : public ProcessPathBackendBase
 {
 public:

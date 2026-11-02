@@ -602,9 +602,10 @@ private:
     else        releaseObjects();
   }
 
-  // On CLOSE: record each object's pose relative to the tool, REMOVE its mesh from the
-  // world (meshes are never attached — that is what froze RViz), and in attach_box mode
-  // also attach a cheap AABB box to the tool so the planner stays payload-aware.
+  // On CLOSE: record each object's pose relative to the tool. remove mode: REMOVE its mesh
+  // from the world (meshes are never attached — that is what froze RViz). attach_box mode:
+  // attach a cheap AABB box under the same id instead (MoveIt moves the object off the
+  // world itself), so the planner stays payload-aware.
   void graspObjects()
   {
     if (attach_ids_.empty()) return;
@@ -627,12 +628,21 @@ private:
                                            : objectPose(dyn_objects_[id]), T_obj);
         pending_offset[id] = T_tcp.inverse() * T_obj;  // object in the tool frame
 
-        moveit_msgs::msg::CollisionObject rm;           // remove the world mesh
-        rm.id = id; rm.header.frame_id = frame_id_;
-        rm.operation = moveit_msgs::msg::CollisionObject::REMOVE;
-        ps.world.collision_objects.push_back(rm);
-
-        if (grasp_mode_ == "attach_box" && grasp_box_[id].size() == 3) {
+        const bool attach_box = grasp_mode_ == "attach_box" && grasp_box_[id].size() == 3;
+        if (grasp_mode_ == "attach_box" && !attach_box) {
+          RCLCPP_WARN(get_logger(), "[GRASP] '%s' has no grasp_box: removed from the world, NOT "
+                      "attached (the planner is payload-blind for this transfer).", id.c_str());
+        }
+        if (!attach_box) {
+          moveit_msgs::msg::CollisionObject rm;         // remove the world mesh
+          rm.id = id; rm.header.frame_id = frame_id_;
+          rm.operation = moveit_msgs::msg::CollisionObject::REMOVE;
+          ps.world.collision_objects.push_back(rm);
+        } else {
+          // No world REMOVE: MoveIt applies the robot state (the attach) first, and an attach
+          // under a world object's id MOVES it off the world; an explicit REMOVE in the same diff
+          // then fails ("does not exist in this scene") and the whole apply answers false while
+          // the box stays attached -- never released (vNext I0 owner test F.1, a real move_group).
           moveit_msgs::msg::AttachedCollisionObject aco;
           aco.link_name = attach_link_;
           aco.object.id = id;
@@ -656,10 +666,11 @@ private:
     if (n == 0) return;
     if (!applyScene(ps, "GRASP")) {
       RCLCPP_ERROR(get_logger(),
-                   "[GRASP] scene NOT updated -> nothing attached and the node state is "
-                   "left untouched. The planner stays payload-blind for this transfer. "
-                   "A 'does not exist in this scene' warning from move_group usually "
-                   "means a SECOND scene_manager_node is fighting over the same scene.");
+                   "[GRASP] scene NOT updated -> the node state is left untouched (nothing "
+                   "held). The planner stays payload-blind for this transfer. remove mode: a "
+                   "'does not exist in this scene' warning from move_group usually means a "
+                   "SECOND scene_manager_node is fighting over the same scene; attach_box: "
+                   "move_group did not answer, or the attach link is unknown to it.");
       return;
     }
     {                                     // commit only what the scene actually accepted
@@ -670,10 +681,9 @@ private:
       }
       for (const auto & id : pending_attached) attached_.insert(id);
     }
-    if (grasp_mode_ == "attach_box") applyAttachedAcm();
-    RCLCPP_INFO(get_logger(), "[GRASP] CLOSE -> %zu object(s) %s.", n,
-                grasp_mode_ == "attach_box" ? "attached as AABB boxes"
-                                            : "removed from the scene (held)");
+    if (!pending_attached.empty()) applyAttachedAcm();
+    RCLCPP_INFO(get_logger(), "[GRASP] CLOSE -> %zu object(s) attached as AABB boxes, %zu removed from "
+                "the scene (held).", pending_attached.size(), n - pending_attached.size());
   }
 
   // On OPEN: detach any box, and re-ADD each held object's MESH at the tool pose x the
@@ -722,8 +732,8 @@ private:
     if (released.empty()) return;
     if (!applyScene(ps, "RELEASE")) {
       RCLCPP_ERROR(get_logger(),
-                   "[RELEASE] scene NOT updated -> object stays ATTACHED (purple); node state "
-                   "left intact so the NEXT open retries (no silent desync).");
+                   "[RELEASE] scene NOT updated -> the node state is left intact (still held): "
+                   "the next CLOSE then OPEN releases it, or ~/reset_scene.");
       return;
     }
     {                                     // commit only what the scene actually accepted
@@ -793,6 +803,11 @@ private:
   {
     moveit_msgs::msg::PlanningScene ps;
     std::vector<std::string> dyn_ids;
+    // STAGED (like graspObjects / releaseObjects): the node's state changes only once
+    // /apply_planning_scene has accepted the reset. Mutating it first left a box the node
+    // believed detached still attached in RViz after a failed reset, with no later OPEN to
+    // release it -- reachable since attach_box really attaches (vNext I0, TMR 2.5.1).
+    std::map<std::string, moveit_msgs::msg::CollisionObject> pending_forced;
     {
       std::lock_guard<std::mutex> lock(scene_mutex_);
       for (auto & kv : dyn_objects_) {
@@ -809,12 +824,9 @@ private:
         obj.header.frame_id = frame_id_;
         setObjectPose(obj, initial_pose_[id]);
         ps.world.collision_objects.push_back(obj);
-        world_pose_[id] = initial_pose_[id];
-        forced_[id] = obj;
-        grasp_offset_.erase(id);
+        pending_forced[id] = obj;
         dyn_ids.push_back(id);
       }
-      attached_.clear();
     }
     if (dyn_ids.empty()) {
       res->success = false;
@@ -823,8 +835,17 @@ private:
     }
     if (!applyScene(ps, "RESET")) {
       res->success = false;
-      res->message = "reset diff failed";
+      res->message = "reset diff failed (node state left as it was)";
       return;
+    }
+    {                                     // commit only what the scene actually accepted
+      std::lock_guard<std::mutex> lock(scene_mutex_);
+      for (const auto & kv : pending_forced) {
+        world_pose_[kv.first] = initial_pose_[kv.first];
+        forced_[kv.first] = kv.second;
+        grasp_offset_.erase(kv.first);
+      }
+      attached_.clear();
     }
     allowCollisions(dyn_ids);                          // transparent again, like startup
     publishResetPulse();
