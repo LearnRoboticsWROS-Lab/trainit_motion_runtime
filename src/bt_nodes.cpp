@@ -1688,12 +1688,15 @@ DetectionFeed& feedFor(const rclcpp::Node::SharedPtr& node, const std::string& t
     // The perception contract publishes RELIABLE depth 1: a detection is an event the
     // consumer waited for and must not miss.
     auto qos = rclcpp::QoS(rclcpp::KeepLast(1)).reliable();
-    DetectionFeed* raw = f.get();
+    // a WEAK reference (vNext M4 review): an entry dropped with its node may still have a callback in flight
+    std::weak_ptr<DetectionFeed> weak = f;
     f->sub = node->create_subscription<vision_msgs::msg::Detection3DArray>(
-      topic, qos, [raw](vision_msgs::msg::Detection3DArray::SharedPtr msg) {
-        std::lock_guard<std::mutex> g(raw->m);
-        raw->latest = std::move(msg);
-        ++raw->arrivals;
+      topic, qos, [weak](vision_msgs::msg::Detection3DArray::SharedPtr msg) {
+        const auto feed = weak.lock();
+        if (!feed) return;
+        std::lock_guard<std::mutex> g(feed->m);
+        feed->latest = std::move(msg);
+        ++feed->arrivals;
       });
   }
   return *f;
@@ -2257,13 +2260,15 @@ CandidateFeed& candidateFeedFor(const rclcpp::Node::SharedPtr& node, const std::
   if (!f)
   {
     f = std::make_shared<CandidateFeed>();
-    CandidateFeed* raw = f.get();
+    std::weak_ptr<CandidateFeed> weak = f;     // weak: see feedFor (vNext M4 review)
     // the contract: RELIABLE, depth 1 (ADR-0026), like detections
     f->sub = node->create_subscription<GraspCandidateArrayMsg>(
-      topic, rclcpp::QoS(rclcpp::KeepLast(1)).reliable(), [raw](GraspCandidateArrayMsg::SharedPtr msg) {
-        std::lock_guard<std::mutex> g(raw->m);
-        raw->latest = std::move(msg);
-        ++raw->arrivals;
+      topic, rclcpp::QoS(rclcpp::KeepLast(1)).reliable(), [weak](GraspCandidateArrayMsg::SharedPtr msg) {
+        const auto feed = weak.lock();
+        if (!feed) return;
+        std::lock_guard<std::mutex> g(feed->m);
+        feed->latest = std::move(msg);
+        ++feed->arrivals;
       });
   }
   return *f;
@@ -2352,10 +2357,12 @@ auto captureFresh(BtContext* ctx, Feed& feed, const std::string& topic, const st
   constexpr int64_t kFutureSlackNs = 1000000000LL;
   auto client = triggerClientFor(ctx->node, service);
   int triggers = 0, answered = 0, stale = 0, future_stamped = 0;
+  int64_t oldest_lag_ns = 0;
   std::string last_refusal;
   MsgPtr msg;
   while (!msg && std::chrono::steady_clock::now() < deadline)
   {
+    if (!rclcpp::ok()) break;                  // the context is shutting down: never spin on it (vNext M4 review)
     if (!client->service_is_ready() && !client->wait_for_service(std::chrono::milliseconds(100))) continue;
     auto future = client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
     ++triggers;
@@ -2369,7 +2376,12 @@ auto captureFresh(BtContext* ctx, Feed& feed, const std::string& topic, const st
     ++answered;
     const auto answer = future.get();
     const bool sampled = answer->success;
-    if (!sampled) last_refusal = answer->message;
+    if (!sampled)
+    {
+      last_refusal = answer->message;
+      RCLCPP_WARN(log, "DetectCandidates capture: trigger %d of '%s' answered: %s -- triggering again", triggers,
+                  service.c_str(), answer->message.c_str());
+    }
     const auto retrigger = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
     while (!msg && std::chrono::steady_clock::now() < std::min(deadline, retrigger))
     {
@@ -2382,9 +2394,19 @@ auto captureFresh(BtContext* ctx, Feed& feed, const std::string& topic, const st
       if (!sampled) continue;
       const int64_t stamp_ns = rclcpp::Time(got->header.stamp).nanoseconds();
       const int64_t now_ns = ctx->node->now().nanoseconds();
-      if (stamp_ns > now_ns + kFutureSlackNs) { ++future_stamped; continue; }
+      if (stamp_ns > now_ns + kFutureSlackNs)
+      {
+        ++future_stamped;
+        RCLCPP_WARN(log, "DetectCandidates capture: result rejected on '%s': stamped %.3f s, AHEAD of this clock "
+                    "(%.3f s): the producer and the robot are not on one clock", topic.c_str(), stamp_ns * 1e-9,
+                    now_ns * 1e-9);
+        continue;
+      }
       if (stamp_ns >= boundary_ns) { msg = got; break; }
       ++stale;
+      oldest_lag_ns = std::max(oldest_lag_ns, boundary_ns - stamp_ns);
+      RCLCPP_WARN(log, "DetectCandidates capture: stale result rejected on '%s': stamped %.3f s, before the capture "
+                  "began at %.3f s", topic.c_str(), stamp_ns * 1e-9, boundary_ns * 1e-9);
     }
   }
   if (msg)
@@ -2399,11 +2421,13 @@ auto captureFresh(BtContext* ctx, Feed& feed, const std::string& topic, const st
     fault = "TRIGGER_UNAVAILABLE";
     why = "the producer's service '" + service + "' did not answer (is it running?)";
   }
-  else if (future_stamped > 0 && stale == 0)
+  else if ((future_stamped > 0 && stale == 0) || (stale > 0 && oldest_lag_ns > 60 * kFutureSlackNs))
   {
+    // ahead of the clock, or over a minute behind it: another clock (sim vs wall time), not a slow producer
     fault = "CLOCK_MISMATCH";
     why = "no result on '" + topic + "' is on this node's clock (" + std::to_string(future_stamped) +
-          " stamped ahead of it): the producer and the robot must share a clock";
+          " stamped ahead of it, " + std::to_string(stale) + " over a minute behind it): the producer and the robot "
+          "must share a clock";
   }
   else
   {

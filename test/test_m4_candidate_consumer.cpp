@@ -107,11 +107,17 @@ public:
       [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>, std::shared_ptr<std_srvs::srv::Trigger::Response> r) {
         std::lock_guard<std::mutex> g(m);
         ++triggers;
-        if (!cands) { r->success = false; r->message = "no image yet"; return; }
+        if (!cands || refuse_first > 0)
+        {
+          if (refuse_first > 0) --refuse_first;
+          r->success = false;
+          r->message = "no image yet";
+          return;
+        }
         Candidates out = *cands;
         if (stamp_now)
         {
-          out.header.stamp = node->now();
+          out.header.stamp = rclcpp::Time(node->now().nanoseconds() + static_cast<int64_t>(offset_s * 1e9));
           for (auto& c : out.candidates) c.header.stamp = out.header.stamp;
         }
         pub->publish(out);
@@ -119,12 +125,14 @@ public:
         r->message = "sampled";
       });
   }
-  void set(std::optional<Candidates> c, bool cont, bool now_stamp)
+  void set(std::optional<Candidates> c, bool cont, bool now_stamp, double offset = 0.0, int refuse = 0)
   {
     std::lock_guard<std::mutex> g(m);
     cands = std::move(c);
     continuous = cont;
     stamp_now = now_stamp;
+    offset_s = offset;
+    refuse_first = refuse;
   }
   rclcpp::Node::SharedPtr node;
   rclcpp::Publisher<Candidates>::SharedPtr pub;
@@ -134,6 +142,8 @@ public:
   std::optional<Candidates> cands;
   bool continuous{true};
   bool stamp_now{false};
+  double offset_s{0.0};     // a sampled result is stamped now + offset_s
+  int refuse_first{0};      // answer "could not sample" to this many triggers first
   std::atomic<int> triggers{0};
 };
 
@@ -193,10 +203,10 @@ protected:
     while (s == BT::NodeStatus::RUNNING) s = tree.tickOnce();
     return BT::toStr(s);
   }
-  static std::string detect(const std::string& extra = "")
+  static std::string detect(const std::string& extra = "", int keep = 1)
   {
     return "<DetectCandidates source=\"candidates\" detector=\"m4grasp\" target_frame=\"base_link\" timeout_ms=\"2000\" "
-           "keep=\"1\" out_key=\"cands\" " + extra + " reason=\"{r}\" fault=\"{f}\"/>";
+           "keep=\"" + std::to_string(keep) + "\" out_key=\"cands\" " + extra + " reason=\"{r}\" fault=\"{f}\"/>";
   }
   static rclcpp::Node::SharedPtr node_;
   static std::shared_ptr<tf2_ros::Buffer> tf_;
@@ -255,6 +265,42 @@ TEST_F(Consumer, TS_03_a_stamp_outside_the_tf_history_is_a_tf_failure_never_the_
   EXPECT_EQ(bbStr(bb, "cands.count"), "0");
 }
 
+TEST_F(Consumer, TS_04_two_candidates_of_one_frame_at_two_stamps_each_take_their_own_pose)
+{
+  Candidates a;
+  a.header = onCamera("x", at(100.0)).header;
+  a.candidates = {onCamera("early", at(100.0)), onCamera("late", at(100.5))};
+  producer_->set(a, true, false);
+  auto bb = BT::Blackboard::create();
+  ASSERT_EQ(tick(detect("", 2), bb), "SUCCESS") << bbStr(bb, "r");
+  EXPECT_NEAR(vecOf(bb, "cands.0.position").x(), 0.0, 1e-9);           // the camera over x = 0 at 100.0 s
+  EXPECT_NEAR(vecOf(bb, "cands.1.position").x(), 0.2, 1e-9);           // and over x = 0.2 at 100.5 s
+}
+
+TEST_F(Consumer, TS_05_the_candidates_own_orientation_is_transformed_with_it_and_used_by_candidate_mode)
+{
+  // in the camera frame: approach = optical +Z, orientation = 30 deg about +Z (a producer's own yaw); the camera
+  // looks down, so in base_link the approach is -Z and the TCP's +Z must be that, its yaw the producer's
+  Candidate c = onCamera("own", at(100.0));
+  const Eigen::Quaterniond own(Eigen::AngleAxisd(M_PI / 6, Eigen::Vector3d::UnitZ()));
+  c.grasp_pose.orientation.x = own.x();
+  c.grasp_pose.orientation.y = own.y();
+  c.grasp_pose.orientation.z = own.z();
+  c.grasp_pose.orientation.w = own.w();
+  producer_->set(arrayOf(c), true, false);
+  auto bb = BT::Blackboard::create();
+  ASSERT_EQ(tick(detect(), bb), "SUCCESS") << bbStr(bb, "r");
+  bb->set<std::string>("ref.orientation", "1;0;0;0");
+  bb->set<std::string>("ref.frame", "base_link");
+  ASSERT_EQ(tick("<SetWaypointFromCandidate from=\"cands\" index=\"0\" grasp=\"g\" pregrasp=\"pg\" "
+                 "orientation=\"candidate\" orientation_from=\"ref\" max_tilt_deg=\"10\" eef=\"main\" "
+                 "site=\"suction\" reason=\"{r}\"/>", bb), "SUCCESS") << bbStr(bb, "r");
+  const Eigen::Quaterniond R_cam(0.0, std::sqrt(0.5), -std::sqrt(0.5), 0.0);     // base_link <- wrist_cam
+  const Eigen::Quaterniond q = quatOf(bb, "g.orientation");
+  EXPECT_NEAR(q.angularDistance(R_cam * own), 0.0, 1e-9);
+  EXPECT_NEAR((q * Eigen::Vector3d::UnitZ() - Eigen::Vector3d(0, 0, -1)).norm(), 0.0, 1e-9);
+}
+
 // --- CP: the capture ---------------------------------------------------------------------------------------------
 TEST_F(Consumer, CP_01_a_capture_triggers_the_producer_and_takes_its_fresh_result)
 {
@@ -272,12 +318,64 @@ TEST_F(Consumer, CP_01_a_capture_triggers_the_producer_and_takes_its_fresh_resul
 
 TEST_F(Consumer, CP_02_a_result_stamped_before_the_capture_began_is_rejected)
 {
-  Candidate c = onCamera("stale", at(1.0));      // stamped long ago, republished on every trigger
+  Candidate c = onCamera("stale", at(0.0));      // stamped 2 s before each trigger: a slow producer, not a clock
   c.header.frame_id = "base_link";
-  producer_->set(arrayOf(c), false, false);
+  producer_->set(arrayOf(c), false, true, -2.0);
   auto bb = BT::Blackboard::create();
   EXPECT_EQ(tick(detect("trigger=\"true\""), bb), "FAILURE");
   EXPECT_EQ(bbStr(bb, "f"), "DETECTION_TIMEOUT");
+  EXPECT_EQ(bbStr(bb, "cands.count"), "0");
+}
+
+TEST_F(Consumer, CP_04_a_result_on_another_clock_is_a_clock_mismatch_ahead_or_long_behind)
+{
+  Candidate c = onCamera("other_clock", at(0.0));
+  c.header.frame_id = "base_link";
+  producer_->set(arrayOf(c), false, true, +5.0);                       // 5 s AHEAD of this clock
+  auto ahead = BT::Blackboard::create();
+  EXPECT_EQ(tick(detect("trigger=\"true\""), ahead), "FAILURE");
+  EXPECT_EQ(bbStr(ahead, "f"), "CLOCK_MISMATCH");
+  Candidate old = onCamera("sim_time", at(12.5));                      // a sim-time stamp seen by a wall clock
+  old.header.frame_id = "base_link";
+  producer_->set(arrayOf(old), false, false);
+  auto behind = BT::Blackboard::create();
+  EXPECT_EQ(tick(detect("trigger=\"true\""), behind), "FAILURE");
+  EXPECT_EQ(bbStr(behind, "f"), "CLOCK_MISMATCH");
+}
+
+TEST_F(Consumer, CP_05_a_producer_that_could_not_sample_is_triggered_again_and_its_fresh_result_taken)
+{
+  Candidate c = onCamera("after_refusal", at(0.0));
+  c.header.frame_id = "base_link";
+  producer_->set(arrayOf(c), false, true, 0.0, 1);                    // the first trigger: "no image yet"
+  const int before = producer_->triggers.load();
+  auto bb = BT::Blackboard::create();
+  ASSERT_EQ(tick(detect("trigger=\"true\""), bb), "SUCCESS") << bbStr(bb, "r");
+  EXPECT_GE(producer_->triggers.load() - before, 2);
+  EXPECT_EQ(bbStr(bb, "cands.0.id"), "after_refusal");
+}
+
+TEST_F(Consumer, CP_06_a_capture_on_a_clock_that_is_not_running_is_refused)
+{
+  // in the suite's own context (a test that shut the context down and re-initialised it would destroy cached
+  // entities of the dead context -- a test artefact a runner never meets)
+  rclcpp::NodeOptions opts;
+  opts.parameter_overrides({rclcpp::Parameter("use_sim_time", true)});  // no /clock on this domain: time 0
+  auto node = std::make_shared<rclcpp::Node>("m4_no_clock", "/", opts);
+  trainit::BtContext ctx;
+  ctx.node = node;
+  ctx.tf = std::make_shared<tf2_ros::Buffer>(node->get_clock());
+  BT::BehaviorTreeFactory factory;
+  trainit::registerAllNodes(factory);
+  auto bb = BT::Blackboard::create();
+  bb->set<trainit::BtContext*>(trainit::BB_BT_CONTEXT, &ctx);
+  factory.registerBehaviorTreeFromText(
+    "<root BTCPP_format=\"4\" main_tree_to_execute=\"T\"><BehaviorTree ID=\"T\"><DetectCandidates source=\"candidates\" "
+    "detector=\"m4_nobody\" timeout_ms=\"500\" out_key=\"cands\" trigger=\"true\" reason=\"{r}\" fault=\"{f}\"/>"
+    "</BehaviorTree></root>");
+  auto tree = factory.createTree("T", bb);
+  EXPECT_EQ(BT::toStr(tree.tickOnce()), "FAILURE");
+  EXPECT_EQ(bbStr(bb, "f"), "CLOCK_UNAVAILABLE");
 }
 
 TEST_F(Consumer, CP_03_no_service_and_a_trigger_without_a_detector_are_refused)
@@ -356,6 +454,7 @@ TEST_F(Consumer, OR_02_an_orientation_that_does_not_carry_the_approach_is_refuse
   EXPECT_EQ(tick(setWp("candidate", ""), bb), "FAILURE");
   EXPECT_EQ(bbStr(bb, "r"), "CANDIDATE_ORIENTATION_INCONSISTENT");
   EXPECT_EQ(bbStr(bb, "g.position"), "<unset>");
+  EXPECT_EQ(bbStr(bb, "pg.position"), "<unset>");
   // just inside / just outside the 1e-3 rad consistency tolerance
   const Eigen::Quaterniond in = Eigen::Quaterniond(Eigen::AngleAxisd(0.9e-3, Eigen::Vector3d::UnitY())) * producerOwn();
   const Eigen::Quaterniond out = Eigen::Quaterniond(Eigen::AngleAxisd(1.1e-3, Eigen::Vector3d::UnitY())) * producerOwn();
@@ -388,6 +487,24 @@ TEST_F(Consumer, EN_01_the_envelope_boundary_is_inclusive_and_past_it_is_refused
   }
 }
 
+TEST_F(Consumer, EN_01b_an_approach_exactly_at_the_limit_is_accepted_and_a_hair_inside_refused)
+{
+  // a tool-down reference and a horizontal approach: the tilt is EXACTLY 90 deg (atan2(1, 0))
+  for (const char* mode : {"align_approach", "candidate"})
+  {
+    const Eigen::Quaterniond own(Eigen::AngleAxisd(M_PI / 2, Eigen::Vector3d::UnitY()));   // +Z -> +X
+    auto ok = candidateSet(own);
+    ok->set<std::string>("cands.0.approach", "1;0;0");
+    EXPECT_EQ(tick(setWp(mode, "orientation_from=\"ref\" max_tilt_deg=\"90\""), ok), "SUCCESS")
+      << mode << " " << bbStr(ok, "r");
+    auto no = candidateSet(own);
+    no->set<std::string>("cands.0.approach", "1;0;0");
+    EXPECT_EQ(tick(setWp(mode, "orientation_from=\"ref\" max_tilt_deg=\"89.999999\""), no), "FAILURE") << mode;
+    EXPECT_EQ(bbStr(no, "r"), "APPROACH_OUTSIDE_ENVELOPE") << mode;
+    EXPECT_EQ(bbStr(no, "pg.position"), "<unset>") << mode;
+  }
+}
+
 TEST_F(Consumer, EN_02_the_envelope_needs_a_reference_and_a_sane_angle)
 {
   for (const std::string& extra : {std::string("max_tilt_deg=\"30\""),                       // no reference
@@ -413,21 +530,32 @@ TEST_F(Consumer, EN_03_a_candidate_for_another_site_is_still_refused)
 // --- NK: the node-keyed feed ---------------------------------------------------------------------------------------
 TEST_F(Consumer, NK_01_a_second_node_gets_its_own_feed_after_the_first_is_gone)
 {
+  // a topic NO other test (and not the fixture's node) ever subscribes to: with a per-topic cache, round 1 would be
+  // handed round 0's feed -- a subscription on a node that is no longer spun -- and time out
+  auto pnode = std::make_shared<rclcpp::Node>("m4_nk_producer", "/");
+  auto pub = pnode->create_publisher<Candidates>("/perception/m4nk/grasp_candidates",
+                                                  rclcpp::QoS(rclcpp::KeepLast(1)).reliable());
   Candidate c = onCamera("nk", at(0.0));
   c.header.frame_id = "base_link";
-  producer_->set(arrayOf(c), true, false);
-  for (int round = 0; round < 2; ++round)
+  auto timer = pnode->create_wall_timer(std::chrono::milliseconds(20), [&] { pub->publish(arrayOf(c)); });
+  exec_->add_node(pnode);
+  for (int round = 0; round < 3; ++round)
   {
-    auto other = std::make_shared<rclcpp::Node>("m4_consumer_" + std::to_string(round), "/");
+    auto other = std::make_shared<rclcpp::Node>("m4_consumer_nk_" + std::to_string(round), "/");
     exec_->add_node(other);
-    trainit::BtContext ctx;
-    ctx.node = other;
-    ctx.tf = tf_;
     auto bb = BT::Blackboard::create();
-    EXPECT_EQ(tick(detect(), bb, &ctx), "SUCCESS") << "round " << round << ": " << bbStr(bb, "r");
+    {
+      trainit::BtContext ctx;
+      ctx.node = other;
+      ctx.tf = tf_;
+      EXPECT_EQ(tick("<DetectCandidates source=\"candidates\" detector=\"m4nk\" target_frame=\"base_link\" "
+                     "timeout_ms=\"1500\" out_key=\"cands\" reason=\"{r}\" fault=\"{f}\"/>", bb, &ctx), "SUCCESS")
+        << "round " << round << ": " << bbStr(bb, "r");
+    }
     exec_->remove_node(other);
     other.reset();                                   // gone: its feed must never be handed to the next node
   }
+  exec_->remove_node(pnode);
 }
 
 // --- PF: the pure helpers ------------------------------------------------------------------------------------------
