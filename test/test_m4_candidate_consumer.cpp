@@ -463,6 +463,10 @@ TEST(M4Live, LV_01_a_live_provider_is_consumed_through_the_canonical_nodes)
   rclcpp::executors::MultiThreadedExecutor exec(rclcpp::ExecutorOptions(), 2);
   exec.add_node(node);
   std::thread spin([&exec] { exec.spin(); });
+  // on sim time the clock is 0 until the first /clock: a capture refuses that (CLOCK_UNAVAILABLE), so wait for it as a
+  // runner's start-up does (bounded)
+  for (int i = 0; i < 200 && node->now().nanoseconds() <= 0; ++i)
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
   trainit::BtContext ctx;
   ctx.node = node;
   ctx.tf = tf;
