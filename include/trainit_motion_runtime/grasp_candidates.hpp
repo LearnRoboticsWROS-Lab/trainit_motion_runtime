@@ -21,6 +21,11 @@
 //   alignApproach        `orientation: align_approach` (owner decision M3.6-1): R_tcp =
 //                        MinRot(R_ref e_z -> a) * R_ref, the application's reference orientation
 //                        tilted as little as possible; refused when R_ref's +Z opposes the approach
+//   approachTiltDeg      the angle [deg] between a reference's tool +Z and an approach: what the
+//                        fail-closed orientation envelope `max_tilt_deg` bounds (vNext M4)
+//   candidateOrientationProblem  `orientation: candidate` (vNext M4, ADR-0026 D5's reserved mode): ""
+//                        when the candidate's own orientation carries the approach on its +Z (within
+//                        kOrientationConsistencyRad), else why it cannot be used
 //
 // The blackboard layout DetectCandidates writes and SetWaypointFromCandidate reads (always indexed,
 // strings, 12 significant digits; geometry in the candidate set's frame):
@@ -54,6 +59,8 @@ inline constexpr double kUnitTolerance = 1e-3;
 inline constexpr double kIdentityAngle = 1e-6;
 // how close to antiparallel two unit vectors may be before the minimal rotation's axis is undefined
 inline constexpr double kAntiparallelSine = 1e-6;
+// how far a candidate orientation's +Z may be from its approach [rad] for `orientation: candidate` (vNext M4)
+inline constexpr double kOrientationConsistencyRad = 1e-3;
 // the provider id of the detection projection
 inline constexpr const char* kProjectionProvider = "tmr.candidates_from_detections";
 
@@ -98,6 +105,14 @@ Projection projectDetection(const vision_msgs::msg::Detection3D& d, const std_ms
 // --- orientation -------------------------------------------------------------------------------------
 std::optional<Eigen::Quaterniond> minimalRotation(const Eigen::Vector3d& z, const Eigen::Vector3d& a);
 std::optional<Eigen::Quaterniond> alignApproach(const Eigen::Quaterniond& reference, const Eigen::Vector3d& approach);
+
+// --- vNext M4: the orientation envelope and the candidate's own orientation ------------------------------
+// the angle [deg] between unit vectors, exact near 0 and 180 (atan2 of |u x v| and u . v)
+double angleDeg(const Eigen::Vector3d& u, const Eigen::Vector3d& v);
+// the tilt [deg] of the approach from the reference's tool +Z
+double approachTiltDeg(const Eigen::Quaterniond& reference, const Eigen::Vector3d& approach);
+// "" when R e_z is the approach within kOrientationConsistencyRad; else the reason
+std::string candidateOrientationProblem(const Eigen::Quaterniond& orientation, const Eigen::Vector3d& approach);
 
 }  // namespace trainit
 

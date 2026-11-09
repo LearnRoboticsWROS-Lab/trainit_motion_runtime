@@ -447,8 +447,10 @@ TEST_F(CandidateNodes, SW_03_every_refusal_writes_nothing)
     {"two retract forms", candidateSet(), setWp("retract_dz=\"0.1\" retract_along_approach=\"0.1\""),
      "INVALID_CONFIGURATION"},
     {"no retract form", candidateSet(), setWp(""), "INVALID_CONFIGURATION"},
+    // vNext M4 added orientation="candidate" (ADR-0026 D5's reserved mode, test_m4_candidate_consumer): an
+    // orientation that is neither mode is still refused
     {"another orientation", candidateSet(),
-     "<SetWaypointFromCandidate from=\"cands\" grasp=\"g\" pregrasp=\"pg\" orientation=\"candidate\" "
+     "<SetWaypointFromCandidate from=\"cands\" grasp=\"g\" pregrasp=\"pg\" orientation=\"free\" "
      "orientation_from=\"ref\" reason=\"{r}\"/>", "INVALID_CONFIGURATION"},
     {"no reference", candidateSet(),
      "<SetWaypointFromCandidate from=\"cands\" grasp=\"g\" pregrasp=\"pg\" orientation=\"align_approach\" "

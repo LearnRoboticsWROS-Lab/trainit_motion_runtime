@@ -200,4 +200,29 @@ std::optional<Eigen::Quaterniond> alignApproach(const Eigen::Quaterniond& refere
   return (*m * R).normalized();
 }
 
+double angleDeg(const Eigen::Vector3d& u, const Eigen::Vector3d& v)
+{
+  const Eigen::Vector3d a = u.normalized(), b = v.normalized();
+  return std::atan2(a.cross(b).norm(), a.dot(b)) * 180.0 / M_PI;
+}
+
+double approachTiltDeg(const Eigen::Quaterniond& reference, const Eigen::Vector3d& approach)
+{
+  return angleDeg(reference.normalized() * Eigen::Vector3d::UnitZ(), approach);
+}
+
+std::string candidateOrientationProblem(const Eigen::Quaterniond& orientation, const Eigen::Vector3d& approach)
+{
+  if (!orientation.coeffs().allFinite() || std::abs(orientation.norm() - 1.0) > kUnitTolerance)
+    return "its orientation is not a finite unit quaternion";
+  if (!approach.allFinite() || std::abs(approach.norm() - 1.0) > kUnitTolerance)
+    return "its approach is not a finite unit vector";
+  const double off = angleDeg(orientation.normalized() * Eigen::Vector3d::UnitZ(), approach);
+  if (off * M_PI / 180.0 > kOrientationConsistencyRad)
+    return "its orientation's tool +Z is " + num(off) + " deg from its approach (tolerance " +
+           num(kOrientationConsistencyRad * 180.0 / M_PI) + " deg): the producer does not own a full grasp orientation "
+           "consistent with the direction it says the tool travels";
+  return "";
+}
+
 }  // namespace trainit

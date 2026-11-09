@@ -601,6 +601,12 @@ if(BUILD_TESTING)
     ENV ROS_DOMAIN_ID=73 ROS_LOCALHOST_ONLY=1 RMW_IMPLEMENTATION=rmw_fastrtps_cpp)
   target_link_libraries(test_m3_6_candidate_nodes trainit_motion_runtime)
   link_btcpp(test_m3_6_candidate_nodes)
+  # vNext M4 (ADR-0026 amendment M4): the consumer hardened for the SurfaceGrasp provider -- TF at the observation
+  # stamp, the capture, orientation="candidate", the max_tilt_deg envelope, the node-keyed feed (domain 76).
+  ament_add_gtest(test_m4_candidate_consumer test/test_m4_candidate_consumer.cpp TIMEOUT 180
+    ENV ROS_DOMAIN_ID=76 ROS_LOCALHOST_ONLY=1 RMW_IMPLEMENTATION=rmw_fastrtps_cpp)
+  target_link_libraries(test_m4_candidate_consumer trainit_motion_runtime)
+  link_btcpp(test_m4_candidate_consumer)
   # vNext M3.6 / M3-D (ADR-0026): Validation C -- the trees TSA generates (byte copies), ticked with the REAL
   # nodes against the M2.5 fake move_group and the M2.6 fake end effector, with two synthetic producers
   # (domain 74, an AFTER record: test/data/m3_6/captures/).

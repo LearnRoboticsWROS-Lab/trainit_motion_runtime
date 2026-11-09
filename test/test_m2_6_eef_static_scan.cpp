@@ -146,13 +146,15 @@ TEST(M26EefStaticScan, the_legacy_units_gained_no_static_and_no_absolute_name)
   // DetectCandidates' feed of grasp-candidate arrays -- the SAME per-topic static pair as DetectionFeed
   // (its map and its mutex: the node-keyed cache KNOWN_DEBT records) -- and its CELL-GLOBAL topics,
   // "/perception/<producer>/grasp_candidates" or ".../detections" (ADR-0023 Decision 4, like detections).
+  // vNext M4 adds ONE name, not robot-scoped: DetectCandidates trigger's "/perception/<detector>/detect", the
+  // on-demand service of the same CELL-GLOBAL producer (as DetectObject's, M3.5); its caches are keyed on the node.
   const Split bt = split(read("src/bt_nodes.cpp"));
   EXPECT_EQ(statics(bt), 21);
   EXPECT_EQ(absoluteNames(bt),
-            (std::vector<std::string>{"/delta_twist_cmds", "/detect", "/detections", "/detections",
+            (std::vector<std::string>{"/delta_twist_cmds", "/detect", "/detect", "/detections", "/detections",
                                       "/grasp_candidates", "/isaac_release_policy",
                                       "/isaac_release_policy", "/pause_servo", "/perception/", "/perception/",
-                                      "/perception/",
+                                      "/perception/", "/perception/",
                                       "/scene_manager_node", "/start_servo", "/status",
                                       "/trainit_policy_runtime/run", "/trainit_policy_runtime/run",
                                       "/trainit_policy_runtime/status", "/trainit_policy_runtime/status",
