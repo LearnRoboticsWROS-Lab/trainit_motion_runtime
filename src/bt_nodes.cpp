@@ -1333,24 +1333,83 @@ BT::NodeStatus RemoveCollisionObject::tick()
   return BT::NodeStatus::SUCCESS;
 }
 
+// TMR 2.8.1 (the M4.5 review): AttachObject / DetachObject report what move_group answered. Until 2.8.0 both
+// ignored apply_planning_scene's answer and always returned SUCCESS, so a refused attach (an unknown link) left
+// the planner blind to the held part while the tree believed it was in the scene.
+//   AttachObject  FAILURE with `fault` INVALID_CONFIGURATION when dims / position / touch_links cannot be read
+//                 (nothing is sent), PLANNING_SCENE_UPDATE_FAILED when move_group did not apply it.
+//                 `touch_links` (optional, ';'-separated): the robot links the held object may touch (the tool's
+//                 links); absent = none, the message every TMR before 2.8.1 sent.
+//   DetachObject  FAILURE with `fault` PLANNING_SCENE_UPDATE_FAILED when move_group did not apply the attached
+//                 REMOVE. A detach of an object that is NOT attached is SUCCESS (idempotent: move_group answers
+//                 success, there is nothing to remove) -- a cycle start or a retreat detaches unconditionally.
+// Both are FAULTS (no retry fixes a planning scene that refuses an update): `fault` is written for every
+// FAILURE; an unremapped `fault` writes nothing.
+namespace
+{
+constexpr const char* kSceneUpdateFailed = "PLANNING_SCENE_UPDATE_FAILED";
+
+BT::NodeStatus sceneFault(BT::TreeNode& node, const rclcpp::Logger& log, const char* who, const std::string& id,
+                          const std::string& reason, const std::string& why)
+{
+  RCLCPP_ERROR(log, "%s '%s': %s: %s", who, id.c_str(), reason.c_str(), why.c_str());
+  try { (void)node.setOutput("fault", reason); }   // refused (no write) on an unremapped port
+  catch (const std::exception&) {}
+  return BT::NodeStatus::FAILURE;
+}
+
+// "a;b;;c" -> {a, b, c}; a link name never holds a ';' or a blank
+std::vector<std::string> linkList(const std::string& text)
+{
+  std::vector<std::string> out;
+  std::istringstream ss(text);
+  std::string tok;
+  while (std::getline(ss, tok, ';'))
+  {
+    if (tok.empty()) continue;
+    if (tok.find_first_of(" \t\r\n") != std::string::npos)
+      throw std::runtime_error("touch_links '" + text + "': a link name holds no blank");
+    out.push_back(tok);
+  }
+  return out;
+}
+}  // namespace
+
 BT::PortsList AttachObject::providedPorts()
 { return {BT::InputPort<std::string>("id"), BT::InputPort<std::string>("link", "tcp"),
-          BT::InputPort<std::string>("dims"), BT::InputPort<std::string>("position", "0;0;0")}; }
+          BT::InputPort<std::string>("dims"), BT::InputPort<std::string>("position", "0;0;0"),
+          BT::InputPort<std::string>("touch_links", "", "the robot links the held object may touch (a;b;c)"),
+          BT::OutputPort<std::string>("fault", "on FAILURE: INVALID_CONFIGURATION | PLANNING_SCENE_UPDATE_FAILED")}; }
 BT::NodeStatus AttachObject::tick()
 {
   auto* ctx = ctxOf(config());
+  const std::string id = in(*this, "id"), link = in(*this, "link", "tcp");
+  std::array<double, 3> dims{}, position{};
+  std::vector<std::string> touch;
   try {
-    ctx->scene->attachBox(in(*this, "id"), in(*this, "link", "tcp"),
-      parseXyz3(in(*this, "dims")), poseFromXyz(parseXyz3(in(*this, "position", "0;0;0"))));
-  } catch (const std::exception& e) { RCLCPP_ERROR(nlog(config()), "AttachObject: %s", e.what()); return BT::NodeStatus::FAILURE; }
+    dims = parseXyz3(in(*this, "dims"));
+    position = parseXyz3(in(*this, "position", "0;0;0"));
+    touch = linkList(in(*this, "touch_links"));
+  } catch (const std::exception& e) {
+    return sceneFault(*this, safeLog(config()), "AttachObject", id, "INVALID_CONFIGURATION", e.what());
+  }
+  if (!ctx->scene->attachBox(id, link, dims, poseFromXyz(position), touch))
+    return sceneFault(*this, safeLog(config()), "AttachObject", id, kSceneUpdateFailed,
+                      "move_group did not attach it to '" + link + "' (the planning scene refused the update): the "
+                      "planner does not see the held object");
   return BT::NodeStatus::SUCCESS;
 }
 
 BT::PortsList DetachObject::providedPorts()
-{ return {BT::InputPort<std::string>("id"), BT::InputPort<std::string>("link", "tcp")}; }
+{ return {BT::InputPort<std::string>("id"), BT::InputPort<std::string>("link", "tcp"),
+          BT::OutputPort<std::string>("fault", "on FAILURE: PLANNING_SCENE_UPDATE_FAILED")}; }
 BT::NodeStatus DetachObject::tick()
 {
-  ctxOf(config())->scene->detachObject(in(*this, "id"), in(*this, "link", "tcp"));
+  const std::string id = in(*this, "id"), link = in(*this, "link", "tcp");
+  if (!ctxOf(config())->scene->detachObject(id, link))
+    return sceneFault(*this, safeLog(config()), "DetachObject", id, kSceneUpdateFailed,
+                      "move_group did not detach it from '" + link + "' (the planning scene refused the update): it "
+                      "may still be attached");
   return BT::NodeStatus::SUCCESS;
 }
 
@@ -2752,7 +2811,10 @@ BT::PortsList SetWaypointFromCandidate::providedPorts()
                                      "the approach from the reference's tool +Z (vNext M4)"),
           BT::InputPort<std::string>("eef", "", "the step's device"),
           BT::InputPort<std::string>("site", "", "the step's site"),
-          BT::OutputPort<std::string>("reason", "on FAILURE: why")}; }
+          BT::OutputPort<std::string>("reason", "on FAILURE: why"),
+          // TMR 2.8.1 (the M4.5 review): a refusal no retry or other candidate can fix is a FAULT
+          BT::OutputPort<std::string>("fault", "on FAILURE: the reason, only for INVALID_CONFIGURATION | "
+                                      "INVALID_REFERENCE | the step's own INVALID_STANDOFF")}; }
 BT::NodeStatus SetWaypointFromCandidate::tick()
 {
   auto bb = config().blackboard;
@@ -2764,10 +2826,18 @@ BT::NodeStatus SetWaypointFromCandidate::tick()
                     eef = in(*this, "eef"), site = in(*this, "site"), tilt_text = in(*this, "max_tilt_deg");
   int index = 0;
   const bool index_read = strictIntIn(*this, "index", index);
+  // TMR 2.8.1 (the M4.5 review): `fault` -- written only for a refusal of the step's own CONFIGURATION, which no
+  // retry and no other candidate can fix (INVALID_CONFIGURATION, INVALID_REFERENCE: the taught reference, and
+  // INVALID_STANDOFF when the step gives the standoff). A refusal of THIS candidate (NO_CANDIDATE,
+  // INVALID_CANDIDATE, INVALID_STANDOFF from the candidate, CANDIDATE_SITE_MISMATCH, APPROACH_OUTSIDE_ENVELOPE,
+  // APPROACH_OPPOSES_REFERENCE, CANDIDATE_ORIENTATION_INCONSISTENT) stays a verdict: `reason` only.
   auto refuse = [&](const std::string& reason, const std::string& why) {
     RCLCPP_ERROR(log, "SetWaypointFromCandidate '%s' [%d]: %s: %s -- no waypoint written", from.c_str(), index,
                  reason.c_str(), why.c_str());
     setOutput("reason", reason);
+    const bool fault = reason == "INVALID_CONFIGURATION" || reason == "INVALID_REFERENCE" ||
+                       (reason == "INVALID_STANDOFF" && !standoff_text.empty());
+    if (fault) setOutput("fault", reason);   // refused (no write) on an unremapped port
     return BT::NodeStatus::FAILURE;
   };
   auto get = [&](const std::string& key, std::string& value) {

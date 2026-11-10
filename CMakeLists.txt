@@ -553,6 +553,9 @@ if(BUILD_TESTING)
   # AFTER (owner decision 11.2): the door's types, the task_runner family through the new
   # TaskRunner constructor, the BT nodes on a fake runtime (same domain, one binary at a time)
   trainit_m27_test(test_m2_7_bt_interface 82 600 test_m2_7_bt_interface)
+  # TMR 2.8.1 (the M4.5 review): AttachObject / DetachObject report a planning-scene update move_group refused
+  # (`fault` PLANNING_SCENE_UPDATE_FAILED), touch_links, the idempotent detach -- the M2.5 fakes, domain 78
+  trainit_m27_test(test_m45_scene_faults 78 300 test_m45_scene_faults)
 
   # vNext M3.1 (ADR-0024): FollowPath and MoveWaypoint's additive keys ticked for real against the
   # M2.5 fake move_group (domain 83): what each path sends through the door, the refusals that send

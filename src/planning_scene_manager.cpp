@@ -76,27 +76,42 @@ void PlanningSceneManager::removeCollisionObject(const std::string& id)
   psi_.removeCollisionObjects({id});
 }
 
-void PlanningSceneManager::attachBox(const std::string& id, const std::string& link,
+bool PlanningSceneManager::attachBox(const std::string& id, const std::string& link,
                                      const std::array<double, 3>& dims,
-                                     const geometry_msgs::msg::Pose& pose)
+                                     const geometry_msgs::msg::Pose& pose,
+                                     const std::vector<std::string>& touch_links)
 {
   moveit_msgs::msg::AttachedCollisionObject aco;
   aco.link_name = link;
   aco.object = makeBox(id, link, dims, pose);
   aco.object.operation = aco.object.ADD;
-  psi_.applyAttachedCollisionObject(aco);
+  aco.touch_links = touch_links;
+  if (!psi_.applyAttachedCollisionObject(aco))
+  {
+    RCLCPP_ERROR(node_->get_logger(), "attaching '%s' to '%s': move_group did not apply it (apply_planning_scene "
+                 "answered failure): the planning scene does NOT hold the object", id.c_str(), link.c_str());
+    return false;
+  }
   RCLCPP_INFO(node_->get_logger(), "attached '%s' to '%s'", id.c_str(), link.c_str());
+  return true;
 }
 
-void PlanningSceneManager::detachObject(const std::string& id, const std::string& link)
+bool PlanningSceneManager::detachObject(const std::string& id, const std::string& link)
 {
   moveit_msgs::msg::AttachedCollisionObject aco;
   aco.link_name = link;
   aco.object.id = id;
   aco.object.operation = aco.object.REMOVE;
-  psi_.applyAttachedCollisionObject(aco);
+  const bool applied = psi_.applyAttachedCollisionObject(aco);
   psi_.removeCollisionObjects({id});
+  if (!applied)
+  {
+    RCLCPP_ERROR(node_->get_logger(), "detaching '%s' from '%s': move_group did not apply it (apply_planning_scene "
+                 "answered failure): the object may still be attached", id.c_str(), link.c_str());
+    return false;
+  }
   RCLCPP_INFO(node_->get_logger(), "detached '%s'", id.c_str());
+  return true;
 }
 
 planning_scene::PlanningScenePtr PlanningSceneManager::snapshotForValidation()

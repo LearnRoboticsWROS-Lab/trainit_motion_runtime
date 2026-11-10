@@ -12,6 +12,7 @@
 
 #include <array>
 #include <string>
+#include <vector>
 
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/pose.hpp>
@@ -34,9 +35,16 @@ public:
   void removeCollisionObject(const std::string& id);
 
   // --- attach/detach to a link (grasped object) -----------------------------
-  void attachBox(const std::string& id, const std::string& link,
-                 const std::array<double, 3>& dims, const geometry_msgs::msg::Pose& pose);
-  void detachObject(const std::string& id, const std::string& link);
+  // TMR 2.8.1 (M4.5 review): both return what move_group's apply_planning_scene answered (false = the
+  // scene was NOT updated: e.g. an unknown link, a refused or unanswered request). `touch_links`: the robot
+  // links the attached object may touch (AttachedCollisionObject::touch_links); empty = none, the message
+  // MoveIt received before 2.8.1. A detach of an object that is not attached is answered true by
+  // move_group (PlanningScene::processAttachedCollisionObjectMsg REMOVE: nothing to remove), so it is
+  // idempotent; its world removal is a planning_scene TOPIC (no answer to read).
+  bool attachBox(const std::string& id, const std::string& link,
+                 const std::array<double, 3>& dims, const geometry_msgs::msg::Pose& pose,
+                 const std::vector<std::string>& touch_links = {});
+  bool detachObject(const std::string& id, const std::string& link);
 
   // --- validation scene snapshot (nullptr if no monitor) --------------------
   planning_scene::PlanningScenePtr snapshotForValidation();

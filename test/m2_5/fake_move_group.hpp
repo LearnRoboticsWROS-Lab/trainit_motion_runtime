@@ -262,6 +262,7 @@ public:
     std::lock_guard<std::mutex> g(script_m_);
     mg_script.clear(); ex_script.clear(); seq_script.clear(); cart_script.clear();
     chomp_refuses_pose = true;
+    apply_succeeds = true;
     mg_ordinal_ = 0; seq_ordinal_ = 0; cart_ordinal_ = 0;
     std::lock_guard<std::mutex> m(goals_m_);
     mg_goals_.clear();
@@ -297,6 +298,7 @@ public:
     add("sequence_move_group", seq_script);
     add("compute_cartesian_path", cart_script);
     if (!chomp_refuses_pose) s += (s.empty() ? "" : " ") + std::string("rule chomp_refuses_pose OFF");
+    if (!apply_succeeds) s += (s.empty() ? "" : " ") + std::string("rule apply_planning_scene FAILS");
     return s.empty() ? "default (SUCCEED; chomp refuses a pose goal with -16)" : s;
   }
 
@@ -306,6 +308,9 @@ public:
   std::deque<Reply> mg_script, ex_script, seq_script, cart_script;
   // the mock-verified KNOWN_DEBT behaviour: the CHOMP pipeline refuses a pose goal (-16)
   bool chomp_refuses_pose{true};
+  // TMR 2.8.1 (the M4.5 review): false = apply_planning_scene answers success=false (move_group refused the
+  // update, e.g. an attach to an unknown link); every committed capture runs with the default (true)
+  bool apply_succeeds{true};
 
 private:
   template <typename ActionT>
@@ -496,7 +501,8 @@ private:
       [this, apply_name](const std::shared_ptr<ApplyScene::Request> req,
                          std::shared_ptr<ApplyScene::Response> res) {
         log_.event("SERVICE", apply_name, "ApplyPlanningScene.request", "", yaml17(*req));
-        res->success = true;
+        std::lock_guard<std::mutex> g(script_m_);
+        res->success = apply_succeeds;
       },
       rmw_qos_profile_services_default, group_);
   }

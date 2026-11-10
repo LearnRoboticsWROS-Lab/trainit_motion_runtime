@@ -468,6 +468,51 @@ TEST_F(CandidateNodes, SW_03_every_refusal_writes_nothing)
   }
 }
 
+// TMR 2.8.1 (the M4.5 review): the same refusals with `fault` remapped -- written only for a refusal of the step's
+// own configuration, which no retry and no other candidate can fix; a refusal of the candidate stays a verdict
+TEST_F(CandidateNodes, SW_03b_a_configuration_refusal_is_a_fault_a_candidates_is_a_verdict)
+{
+  struct Case { std::string what; BT::Blackboard::Ptr bb; std::string xml; std::string fault; };
+  auto opposed = candidateSet();
+  opposed->set<std::string>("ref.orientation", "0;0;0;1");
+  opposed->set<std::string>("cands.0.approach", "0;0;-1");
+  auto long_a = candidateSet();
+  long_a->set<std::string>("cands.0.approach", "0;0;-2");
+  auto other_frame = candidateSet();
+  other_frame->set<std::string>("ref.frame", "world");
+  auto tilted = candidateSet();   // the approach 0.6;0;-0.8 is ~36.9 deg from the tool-down reference
+  const std::vector<Case> cases = {
+    // verdicts: `reason` only
+    {"antiparallel reference", opposed, setWp("retract_dz=\"0.1\""), "<unset>"},
+    {"another site", candidateSet("0.05", "other"), setWp("retract_dz=\"0.1\""), "<unset>"},
+    {"the candidate's zero standoff", candidateSet("0"), setWp("retract_dz=\"0.1\""), "<unset>"},
+    {"index past the set", candidateSet(), setWp("retract_dz=\"0.1\"", 1), "<unset>"},
+    {"a non-unit approach", long_a, setWp("retract_dz=\"0.1\""), "<unset>"},
+    {"outside the envelope", tilted, setWp("retract_dz=\"0.1\" max_tilt_deg=\"10\""), "<unset>"},
+    // faults: the step's own configuration
+    {"the step's zero standoff", candidateSet(), setWp("standoff_m=\"0\" retract_dz=\"0.1\""), "INVALID_STANDOFF"},
+    {"the reference in another frame", other_frame, setWp("retract_dz=\"0.1\""), "INVALID_REFERENCE"},
+    {"two retract forms", candidateSet(), setWp("retract_dz=\"0.1\" retract_along_approach=\"0.1\""),
+     "INVALID_CONFIGURATION"},
+    {"no retract form", candidateSet(), setWp(""), "INVALID_CONFIGURATION"},
+    {"an envelope out of range", candidateSet(), setWp("retract_dz=\"0.1\" max_tilt_deg=\"180\""),
+     "INVALID_CONFIGURATION"},
+  };
+  for (const auto& c : cases)
+  {
+    std::string xml = c.xml;
+    xml.replace(xml.rfind("/>"), 2, " fault=\"{f}\"/>");
+    EXPECT_EQ(tick(xml, c.bb), "FAILURE") << c.what;
+    EXPECT_NE(bbStr(c.bb, "r"), "<unset>") << c.what;
+    EXPECT_EQ(bbStr(c.bb, "f"), c.fault) << c.what << " (reason " << bbStr(c.bb, "r") << ")";
+    if (c.fault != "<unset>") EXPECT_EQ(bbStr(c.bb, "r"), c.fault) << c.what;
+  }
+  // a success writes no fault
+  auto ok = candidateSet();
+  ASSERT_EQ(tick(setWp("retract_dz=\"0.1\" fault=\"{f}\""), ok), "SUCCESS");
+  EXPECT_EQ(bbStr(ok, "f"), "<unset>");
+}
+
 int main(int argc, char** argv)
 {
   ::testing::InitGoogleTest(&argc, argv);
