@@ -515,9 +515,9 @@ TEST(M27MotionFailure, a_fault_write_that_throws_never_escapes_tick)
     return n;
   };
   EXPECT_EQ(count("setOutput(\"fault\""), 1);
-  EXPECT_EQ(count("try { return setOutput(\"fault\", text).has_value(); }"), 1);
-  // vNext M4.5d: + a failure while a part is held (ADR-0024 amendment M4.5d)
-  EXPECT_EQ(count("writeFault("), 4) << "the refusals, the catch block, a runtime FAULT and a held failure";
+  // vNext M4.5d: the helper also appends " while holding" and names an unremapped held fault (review MAJOR-1)
+  EXPECT_EQ(count("try { written = setOutput(\"fault\", text).has_value(); }"), 1);
+  EXPECT_EQ(count("writeFault("), 3) << "the refusals, the catch block and a runtime FAULT (held or not)";
 }
 
 // MoveWaypoint declares exactly {waypoint: input, fault: output, holding: input (vNext M4.5d)}; `fault` and

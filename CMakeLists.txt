@@ -497,6 +497,7 @@ if(BUILD_TESTING)
     TRAINIT_M27_MF_REPORT_DIR="${CMAKE_CURRENT_BINARY_DIR}/m2_7_mf_actual/motion_fault")
   # vNext M4.5d (ADR-0024 amendment M4.5d): a motion failing while a part is HELD is a FAULT (domain 98)
   trainit_m25_test(test_m45d_held_motion_fault 98 600 test_m45d_held_motion_fault)
+  ament_target_dependencies(test_m45d_held_motion_fault tf2_ros)
   # M6: the real trainit_run_bt as a child: exit 2, exit 3, the pinned lines (domain 88)
   trainit_m26_test(test_m2_6_eef_runner_child 88 900 test_m2_6_eef_runner_child)
   target_compile_definitions(test_m2_6_eef_runner_child PRIVATE TRAINIT_M26_CONTRACT_DIR="${_m26c}"

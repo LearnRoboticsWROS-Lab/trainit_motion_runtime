@@ -342,9 +342,11 @@ std::optional<MotionOptions> namedProfile(const BT::NodeConfig& cfg, const std::
 // vNext M4.5d (ADR-0024 amendment M4.5d, owner-approved 2026-11-11): a motion that FAILS while the cycle HOLDS a
 // part is a FAULT whatever its cause -- never a verdict a fallback, a retry or the next candidate may consume with
 // the part still in the gripper. The optional input `holding` (MoveWaypoint, FollowPath) is the runtime's held state
-// (a canonical program's `trainit__holding`, set after a verified grasp, cleared after every open). Not remapped:
-// false (every 2.8 tree is unchanged). Remapped but unreadable: TRUE (fail closed -- a held state that cannot be read
-// is never assumed empty), with an ERROR line.
+// (a canonical program's `trainit__holding`: set when CloseGripper succeeds -- before any verification, fail closed --
+// and cleared when OpenGripper succeeds or a hold verification fails). Not remapped: false (every 2.8 tree is
+// unchanged). Remapped but unreadable (absent, empty, not a boolean): TRUE (fail closed -- a held state that cannot
+// be read is never assumed empty), with an ERROR line. Remap `holding` TOGETHER with `fault`: the held rule changes
+// only what `fault` says (and an ERROR line), never the BT status; a tree that remaps `holding` alone is only logged.
 namespace
 {
 bool holdingOf(const BT::TreeNode& node, const std::string& who)
@@ -378,14 +380,28 @@ BT::NodeStatus MoveWaypoint::tick()
   // port is refused without a write (false). setOutput THROWS when the remapped key already holds a
   // value of another type (BT.CPP Blackboard::set; e.g. a Script wrote a number into it): that write
   // is dropped with an ERROR line, and the node still returns FAILURE.
-  auto writeFault = [this, &wp](const std::string& text) {
-    try { return setOutput("fault", text).has_value(); }
+  // vNext M4.5d: the held state, read once and only when something fails; every fault this node writes while a
+  // part is held carries " while holding" (a refusal and an exception included), and a held failure whose `fault` is
+  // not remapped says so -- the tree could not stop on it (review M4.5d, MAJOR-1)
+  int held_state = -1;
+  auto held = [this, &wp, &held_state]() {
+    if (held_state < 0) held_state = holdingOf(*this, "MoveWaypoint '" + wp + "'") ? 1 : 0;
+    return held_state == 1;
+  };
+  auto writeFault = [this, &wp, &held](std::string text) {
+    const bool h = held();
+    if (h) text += kWhileHolding;
+    bool written = false;
+    try { written = setOutput("fault", text).has_value(); }
     catch (const std::exception& e)
     {
       RCLCPP_ERROR(safeLog(config()), "MoveWaypoint '%s': its fault output was not written (%s): %s",
                    wp.c_str(), e.what(), text.c_str());
-      return false;
     }
+    if (h)
+      RCLCPP_ERROR(safeLog(config()), "MoveWaypoint '%s': %s -- the part is still in the gripper (M4.5d)%s",
+                   wp.c_str(), text.c_str(), written ? "" : "; its `fault` is NOT remapped: the tree cannot stop on it");
+    return written;
   };
   // vNext M2.7: a refusal before the runtime is asked is the configuration's, never the target's.
   auto refused = [&writeFault](const char* cause) {
@@ -599,18 +615,11 @@ BT::NodeStatus MoveWaypoint::tick()
   RCLCPP_INFO(nlog(config()), "MoveWaypoint '%s' (type=%s motion=%s planner=%s speed=%s%%)",
               wp.c_str(), type.c_str(), motion.c_str(),
               planner.empty() ? "mode" : planner.c_str(), speed.empty() ? "profile" : speed.c_str());
-  if (!r.success && holdingOf(*this, "MoveWaypoint '" + wp + "'"))
-  {
-    // M4.5d: holding a part, EVERY failure is a fault (a TARGET failure included)
-    const std::string why = motionFaultText(r) + kWhileHolding;
-    writeFault(why);
-    RCLCPP_ERROR(nlog(config()), "MoveWaypoint '%s': %s -- the part is still in the gripper (M4.5d)", wp.c_str(),
-                 why.c_str());
-  }
-  else if (!r.success && classifyMotionFailure(r) == MotionFailureClass::FAULT)
+  // M4.5d: holding a part, EVERY failure is a fault (a TARGET failure included); otherwise only a FAULT-class one
+  if (!r.success && (held() || classifyMotionFailure(r) == MotionFailureClass::FAULT))
   {
     const std::string why = motionFaultText(r);
-    if (writeFault(why))   // only a tree that remaps `fault` gets it -- and only then is it logged
+    if (writeFault(why) && !held())   // only a tree that remaps `fault` gets it -- and only then is it logged
       RCLCPP_ERROR(nlog(config()), "MoveWaypoint '%s': %s -- not this target's failure (vNext M2.7)",
                    wp.c_str(), why.c_str());
   }
@@ -787,14 +796,26 @@ BT::PortsList FollowPath::providedPorts()
 BT::NodeStatus FollowPath::tick()
 {
   const std::string name = in(*this, "path");
-  auto writeFault = [this, &name](const std::string& text) {
-    try { return setOutput("fault", text).has_value(); }
+  // vNext M4.5d: as MoveWaypoint -- the held state read once on a failure, " while holding" on every fault
+  int held_state = -1;
+  auto held = [this, &name, &held_state]() {
+    if (held_state < 0) held_state = holdingOf(*this, "FollowPath '" + name + "'") ? 1 : 0;
+    return held_state == 1;
+  };
+  auto writeFault = [this, &name, &held](std::string text) {
+    const bool h = held();
+    if (h) text += kWhileHolding;
+    bool written = false;
+    try { written = setOutput("fault", text).has_value(); }
     catch (const std::exception& e)
     {
       RCLCPP_ERROR(safeLog(config()), "FollowPath '%s': its fault output was not written (%s): %s",
                    name.c_str(), e.what(), text.c_str());
-      return false;
     }
+    if (h)
+      RCLCPP_ERROR(safeLog(config()), "FollowPath '%s': %s -- the part is still in the gripper (M4.5d)%s",
+                   name.c_str(), text.c_str(), written ? "" : "; its `fault` is NOT remapped: the tree cannot stop on it");
+    return written;
   };
   auto refused = [this, &writeFault, &name](const char* cause, const std::string& why) {
     RCLCPP_ERROR(safeLog(config()), "FollowPath '%s': %s -- nothing was sent", name.c_str(), why.c_str());
@@ -1075,17 +1096,10 @@ BT::NodeStatus FollowPath::tick()
     RCLCPP_INFO(nlog(config()), "FollowPath '%s' (%zu states, provider=%s, continuity=%s): %s", name.c_str(),
                 states.size(), path->provider.c_str(),
                 path->continuity == PathContinuity::BLEND ? "blend" : "stop", r.success ? "OK" : r.stage.c_str());
-  if (!r.success && holdingOf(*this, "FollowPath '" + name + "'"))
-  {
-    const std::string why = motionFaultText(r) + kWhileHolding;   // M4.5d: holding, every failure is a fault
-    writeFault(why);
-    RCLCPP_ERROR(nlog(config()), "FollowPath '%s': %s -- the part is still in the gripper (M4.5d)", name.c_str(),
-                 why.c_str());
-  }
-  else if (!r.success && classifyMotionFailure(r) == MotionFailureClass::FAULT)
+  if (!r.success && (held() || classifyMotionFailure(r) == MotionFailureClass::FAULT))   // M4.5d: held = any
   {
     const std::string why = motionFaultText(r);
-    if (writeFault(why))
+    if (writeFault(why) && !held())
       RCLCPP_ERROR(nlog(config()), "FollowPath '%s': %s -- not this target's failure", name.c_str(), why.c_str());
   }
   if (!r.success) return BT::NodeStatus::FAILURE;
