@@ -516,11 +516,12 @@ TEST(M27MotionFailure, a_fault_write_that_throws_never_escapes_tick)
   };
   EXPECT_EQ(count("setOutput(\"fault\""), 1);
   EXPECT_EQ(count("try { return setOutput(\"fault\", text).has_value(); }"), 1);
-  EXPECT_EQ(count("writeFault("), 3) << "the refusals, the catch block and a runtime FAULT";
+  // vNext M4.5d: + a failure while a part is held (ADR-0024 amendment M4.5d)
+  EXPECT_EQ(count("writeFault("), 4) << "the refusals, the catch block, a runtime FAULT and a held failure";
 }
 
-// MoveWaypoint declares exactly {waypoint: input, fault: output}; `fault` has NO default (a tree that
-// does not remap it writes nothing), and the Groot palette lists the same ports.
+// MoveWaypoint declares exactly {waypoint: input, fault: output, holding: input (vNext M4.5d)}; `fault` and
+// `holding` have NO default (a tree that does not remap them is unchanged), and the Groot palette lists the same.
 TEST(M27MotionFailure, move_waypoint_ports_are_waypoint_and_an_optional_fault)
 {
   BT::BehaviorTreeFactory factory;
@@ -529,7 +530,9 @@ TEST(M27MotionFailure, move_waypoint_ports_are_waypoint_and_an_optional_fault)
   std::map<std::string, std::string> manifest;
   for (const auto& [port, info] : factory.manifests().at("MoveWaypoint").ports)
     manifest[port] = info.direction() == BT::PortDirection::OUTPUT ? "output" : "input";
-  EXPECT_EQ(manifest, (std::map<std::string, std::string>{{"waypoint", "input"}, {"fault", "output"}}));
+  EXPECT_EQ(manifest, (std::map<std::string, std::string>{{"waypoint", "input"}, {"fault", "output"},
+                                                           {"holding", "input"}}));
+  EXPECT_TRUE(factory.manifests().at("MoveWaypoint").ports.at("holding").defaultValueString().empty());
   const auto& fault = factory.manifests().at("MoveWaypoint").ports.at("fault");
   EXPECT_TRUE(fault.defaultValueString().empty()) << "'" << fault.defaultValueString() << "'";
   EXPECT_EQ(fault.description(), "MOTION_FAULT: CAUSE during PHASE");

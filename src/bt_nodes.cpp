@@ -339,10 +339,38 @@ std::optional<MotionOptions> namedProfile(const BT::NodeConfig& cfg, const std::
 // an exception) -- "MOTION_FAULT: <CAUSE>[ during <phase>]". It is written ONLY then: never on SUCCESS,
 // never when the target itself cannot be reached (no IK, no plan, the goal in collision, a joint jump).
 // A tree that does not remap it is unaffected: nothing is written, nothing more is logged.
+// vNext M4.5d (ADR-0024 amendment M4.5d, owner-approved 2026-11-11): a motion that FAILS while the cycle HOLDS a
+// part is a FAULT whatever its cause -- never a verdict a fallback, a retry or the next candidate may consume with
+// the part still in the gripper. The optional input `holding` (MoveWaypoint, FollowPath) is the runtime's held state
+// (a canonical program's `trainit__holding`, set after a verified grasp, cleared after every open). Not remapped:
+// false (every 2.8 tree is unchanged). Remapped but unreadable: TRUE (fail closed -- a held state that cannot be read
+// is never assumed empty), with an ERROR line.
+namespace
+{
+bool holdingOf(const BT::TreeNode& node, const std::string& who)
+{
+  if (node.config().input_ports.find("holding") == node.config().input_ports.end()) return false;
+  try
+  {
+    const auto v = node.getInput<bool>("holding");
+    if (v) return *v;
+    RCLCPP_ERROR(safeLog(node.config()), "%s: its `holding` input is unreadable (%s): treated as HOLDING",
+                 who.c_str(), v.error().c_str());
+  }
+  catch (const std::exception& e)
+  {
+    RCLCPP_ERROR(safeLog(node.config()), "%s: its `holding` input is unreadable (%s): treated as HOLDING",
+                 who.c_str(), e.what());
+  }
+  return true;
+}
+}  // namespace
+
 BT::PortsList MoveWaypoint::providedPorts()
 { return {BT::InputPort<std::string>("waypoint"),
           // two arguments = a DESCRIPTION and no default: an unremapped port writes nothing
-          BT::OutputPort<std::string>("fault", "MOTION_FAULT: CAUSE during PHASE")}; }
+          BT::OutputPort<std::string>("fault", "MOTION_FAULT: CAUSE during PHASE"),
+          BT::InputPort<bool>("holding", "M4.5d: true = a part is held; any failure is then a FAULT")}; }
 BT::NodeStatus MoveWaypoint::tick()
 {
   const std::string wp = in(*this, "waypoint");
@@ -571,7 +599,15 @@ BT::NodeStatus MoveWaypoint::tick()
   RCLCPP_INFO(nlog(config()), "MoveWaypoint '%s' (type=%s motion=%s planner=%s speed=%s%%)",
               wp.c_str(), type.c_str(), motion.c_str(),
               planner.empty() ? "mode" : planner.c_str(), speed.empty() ? "profile" : speed.c_str());
-  if (!r.success && classifyMotionFailure(r) == MotionFailureClass::FAULT)
+  if (!r.success && holdingOf(*this, "MoveWaypoint '" + wp + "'"))
+  {
+    // M4.5d: holding a part, EVERY failure is a fault (a TARGET failure included)
+    const std::string why = motionFaultText(r) + kWhileHolding;
+    writeFault(why);
+    RCLCPP_ERROR(nlog(config()), "MoveWaypoint '%s': %s -- the part is still in the gripper (M4.5d)", wp.c_str(),
+                 why.c_str());
+  }
+  else if (!r.success && classifyMotionFailure(r) == MotionFailureClass::FAULT)
   {
     const std::string why = motionFaultText(r);
     if (writeFault(why))   // only a tree that remaps `fault` gets it -- and only then is it logged
@@ -746,7 +782,8 @@ BT::PortsList FollowPath::providedPorts()
           BT::InputPort<std::string>("profile", "the profile of a path that names none (approach)"),
           BT::InputPort<std::string>("from", "", "first state of the run (index; default 0)"),
           BT::InputPort<std::string>("to", "", "last state of the run (index; default the last state)"),
-          BT::OutputPort<std::string>("fault", "MOTION_FAULT: CAUSE during PHASE")}; }
+          BT::OutputPort<std::string>("fault", "MOTION_FAULT: CAUSE during PHASE"),
+          BT::InputPort<bool>("holding", "M4.5d: true = a part is held; any failure is then a FAULT")}; }
 BT::NodeStatus FollowPath::tick()
 {
   const std::string name = in(*this, "path");
@@ -1038,7 +1075,14 @@ BT::NodeStatus FollowPath::tick()
     RCLCPP_INFO(nlog(config()), "FollowPath '%s' (%zu states, provider=%s, continuity=%s): %s", name.c_str(),
                 states.size(), path->provider.c_str(),
                 path->continuity == PathContinuity::BLEND ? "blend" : "stop", r.success ? "OK" : r.stage.c_str());
-  if (!r.success && classifyMotionFailure(r) == MotionFailureClass::FAULT)
+  if (!r.success && holdingOf(*this, "FollowPath '" + name + "'"))
+  {
+    const std::string why = motionFaultText(r) + kWhileHolding;   // M4.5d: holding, every failure is a fault
+    writeFault(why);
+    RCLCPP_ERROR(nlog(config()), "FollowPath '%s': %s -- the part is still in the gripper (M4.5d)", name.c_str(),
+                 why.c_str());
+  }
+  else if (!r.success && classifyMotionFailure(r) == MotionFailureClass::FAULT)
   {
     const std::string why = motionFaultText(r);
     if (writeFault(why))

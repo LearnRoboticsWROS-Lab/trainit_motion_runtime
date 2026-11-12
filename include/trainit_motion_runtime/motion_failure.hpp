@@ -91,6 +91,10 @@ MotionFailureClass classifyMotionFailure(const MotionResult& r);
 // unless the phase is NONE. It carries no project data (the waypoint's name is not in it).
 std::string motionFaultText(const MotionResult& r);
 
+// vNext M4.5d (ADR-0024 amendment M4.5d): appended to the fault text of a motion that failed while a part is held
+// (MoveWaypoint / FollowPath `holding`): "MOTION_FAULT: <CAUSE> during <phase> while holding". Any cause, any class.
+inline constexpr const char* kWhileHolding = " while holding";
+
 // The name moveit_msgs gives an error code ("NO_IK_SOLUTION"); "" when it names no such value.
 const char* moveItErrorCodeName(int code);
 
