@@ -42,6 +42,7 @@
 #include <vision_msgs/msg/detection3_d_array.hpp>
 #include <map>
 #include <memory>
+#include <utility>
 #include <mutex>
 #include <optional>
 #include <set>
@@ -338,10 +339,40 @@ std::optional<MotionOptions> namedProfile(const BT::NodeConfig& cfg, const std::
 // an exception) -- "MOTION_FAULT: <CAUSE>[ during <phase>]". It is written ONLY then: never on SUCCESS,
 // never when the target itself cannot be reached (no IK, no plan, the goal in collision, a joint jump).
 // A tree that does not remap it is unaffected: nothing is written, nothing more is logged.
+// vNext M4.5d (ADR-0024 amendment M4.5d, owner-approved 2026-11-11): a motion that FAILS while the cycle HOLDS a
+// part is a FAULT whatever its cause -- never a verdict a fallback, a retry or the next candidate may consume with
+// the part still in the gripper. The optional input `holding` (MoveWaypoint, FollowPath) is the runtime's held state
+// (a canonical program's `trainit__holding`: set when CloseGripper succeeds -- before any verification, fail closed --
+// and cleared when OpenGripper succeeds or a hold verification fails). Not remapped: false (every 2.8 tree is
+// unchanged). Remapped but unreadable (absent, empty, not a boolean): TRUE (fail closed -- a held state that cannot
+// be read is never assumed empty), with an ERROR line. Remap `holding` TOGETHER with `fault`: the held rule changes
+// only what `fault` says (and an ERROR line), never the BT status; a tree that remaps `holding` alone is only logged.
+namespace
+{
+bool holdingOf(const BT::TreeNode& node, const std::string& who)
+{
+  if (node.config().input_ports.find("holding") == node.config().input_ports.end()) return false;
+  try
+  {
+    const auto v = node.getInput<bool>("holding");
+    if (v) return *v;
+    RCLCPP_ERROR(safeLog(node.config()), "%s: its `holding` input is unreadable (%s): treated as HOLDING",
+                 who.c_str(), v.error().c_str());
+  }
+  catch (const std::exception& e)
+  {
+    RCLCPP_ERROR(safeLog(node.config()), "%s: its `holding` input is unreadable (%s): treated as HOLDING",
+                 who.c_str(), e.what());
+  }
+  return true;
+}
+}  // namespace
+
 BT::PortsList MoveWaypoint::providedPorts()
 { return {BT::InputPort<std::string>("waypoint"),
           // two arguments = a DESCRIPTION and no default: an unremapped port writes nothing
-          BT::OutputPort<std::string>("fault", "MOTION_FAULT: CAUSE during PHASE")}; }
+          BT::OutputPort<std::string>("fault", "MOTION_FAULT: CAUSE during PHASE"),
+          BT::InputPort<bool>("holding", "M4.5d: true = a part is held; any failure is then a FAULT")}; }
 BT::NodeStatus MoveWaypoint::tick()
 {
   const std::string wp = in(*this, "waypoint");
@@ -349,14 +380,28 @@ BT::NodeStatus MoveWaypoint::tick()
   // port is refused without a write (false). setOutput THROWS when the remapped key already holds a
   // value of another type (BT.CPP Blackboard::set; e.g. a Script wrote a number into it): that write
   // is dropped with an ERROR line, and the node still returns FAILURE.
-  auto writeFault = [this, &wp](const std::string& text) {
-    try { return setOutput("fault", text).has_value(); }
+  // vNext M4.5d: the held state, read once and only when something fails; every fault this node writes while a
+  // part is held carries " while holding" (a refusal and an exception included), and a held failure whose `fault` is
+  // not remapped says so -- the tree could not stop on it (review M4.5d, MAJOR-1)
+  int held_state = -1;
+  auto held = [this, &wp, &held_state]() {
+    if (held_state < 0) held_state = holdingOf(*this, "MoveWaypoint '" + wp + "'") ? 1 : 0;
+    return held_state == 1;
+  };
+  auto writeFault = [this, &wp, &held](std::string text) {
+    const bool h = held();
+    if (h) text += kWhileHolding;
+    bool written = false;
+    try { written = setOutput("fault", text).has_value(); }
     catch (const std::exception& e)
     {
       RCLCPP_ERROR(safeLog(config()), "MoveWaypoint '%s': its fault output was not written (%s): %s",
                    wp.c_str(), e.what(), text.c_str());
-      return false;
     }
+    if (h)
+      RCLCPP_ERROR(safeLog(config()), "MoveWaypoint '%s': %s -- the part is still in the gripper (M4.5d)%s",
+                   wp.c_str(), text.c_str(), written ? "" : "; its `fault` is NOT remapped: the tree cannot stop on it");
+    return written;
   };
   // vNext M2.7: a refusal before the runtime is asked is the configuration's, never the target's.
   auto refused = [&writeFault](const char* cause) {
@@ -570,10 +615,11 @@ BT::NodeStatus MoveWaypoint::tick()
   RCLCPP_INFO(nlog(config()), "MoveWaypoint '%s' (type=%s motion=%s planner=%s speed=%s%%)",
               wp.c_str(), type.c_str(), motion.c_str(),
               planner.empty() ? "mode" : planner.c_str(), speed.empty() ? "profile" : speed.c_str());
-  if (!r.success && classifyMotionFailure(r) == MotionFailureClass::FAULT)
+  // M4.5d: holding a part, EVERY failure is a fault (a TARGET failure included); otherwise only a FAULT-class one
+  if (!r.success && (held() || classifyMotionFailure(r) == MotionFailureClass::FAULT))
   {
     const std::string why = motionFaultText(r);
-    if (writeFault(why))   // only a tree that remaps `fault` gets it -- and only then is it logged
+    if (writeFault(why) && !held())   // only a tree that remaps `fault` gets it -- and only then is it logged
       RCLCPP_ERROR(nlog(config()), "MoveWaypoint '%s': %s -- not this target's failure (vNext M2.7)",
                    wp.c_str(), why.c_str());
   }
@@ -745,18 +791,31 @@ BT::PortsList FollowPath::providedPorts()
           BT::InputPort<std::string>("profile", "the profile of a path that names none (approach)"),
           BT::InputPort<std::string>("from", "", "first state of the run (index; default 0)"),
           BT::InputPort<std::string>("to", "", "last state of the run (index; default the last state)"),
-          BT::OutputPort<std::string>("fault", "MOTION_FAULT: CAUSE during PHASE")}; }
+          BT::OutputPort<std::string>("fault", "MOTION_FAULT: CAUSE during PHASE"),
+          BT::InputPort<bool>("holding", "M4.5d: true = a part is held; any failure is then a FAULT")}; }
 BT::NodeStatus FollowPath::tick()
 {
   const std::string name = in(*this, "path");
-  auto writeFault = [this, &name](const std::string& text) {
-    try { return setOutput("fault", text).has_value(); }
+  // vNext M4.5d: as MoveWaypoint -- the held state read once on a failure, " while holding" on every fault
+  int held_state = -1;
+  auto held = [this, &name, &held_state]() {
+    if (held_state < 0) held_state = holdingOf(*this, "FollowPath '" + name + "'") ? 1 : 0;
+    return held_state == 1;
+  };
+  auto writeFault = [this, &name, &held](std::string text) {
+    const bool h = held();
+    if (h) text += kWhileHolding;
+    bool written = false;
+    try { written = setOutput("fault", text).has_value(); }
     catch (const std::exception& e)
     {
       RCLCPP_ERROR(safeLog(config()), "FollowPath '%s': its fault output was not written (%s): %s",
                    name.c_str(), e.what(), text.c_str());
-      return false;
     }
+    if (h)
+      RCLCPP_ERROR(safeLog(config()), "FollowPath '%s': %s -- the part is still in the gripper (M4.5d)%s",
+                   name.c_str(), text.c_str(), written ? "" : "; its `fault` is NOT remapped: the tree cannot stop on it");
+    return written;
   };
   auto refused = [this, &writeFault, &name](const char* cause, const std::string& why) {
     RCLCPP_ERROR(safeLog(config()), "FollowPath '%s': %s -- nothing was sent", name.c_str(), why.c_str());
@@ -1037,10 +1096,10 @@ BT::NodeStatus FollowPath::tick()
     RCLCPP_INFO(nlog(config()), "FollowPath '%s' (%zu states, provider=%s, continuity=%s): %s", name.c_str(),
                 states.size(), path->provider.c_str(),
                 path->continuity == PathContinuity::BLEND ? "blend" : "stop", r.success ? "OK" : r.stage.c_str());
-  if (!r.success && classifyMotionFailure(r) == MotionFailureClass::FAULT)
+  if (!r.success && (held() || classifyMotionFailure(r) == MotionFailureClass::FAULT))   // M4.5d: held = any
   {
     const std::string why = motionFaultText(r);
-    if (writeFault(why))
+    if (writeFault(why) && !held())
       RCLCPP_ERROR(nlog(config()), "FollowPath '%s': %s -- not this target's failure", name.c_str(), why.c_str());
   }
   if (!r.success) return BT::NodeStatus::FAILURE;
@@ -1332,24 +1391,83 @@ BT::NodeStatus RemoveCollisionObject::tick()
   return BT::NodeStatus::SUCCESS;
 }
 
+// TMR 2.8.1 (the M4.5 review): AttachObject / DetachObject report what move_group answered. Until 2.8.0 both
+// ignored apply_planning_scene's answer and always returned SUCCESS, so a refused attach (an unknown link) left
+// the planner blind to the held part while the tree believed it was in the scene.
+//   AttachObject  FAILURE with `fault` INVALID_CONFIGURATION when dims / position / touch_links cannot be read
+//                 (nothing is sent), PLANNING_SCENE_UPDATE_FAILED when move_group did not apply it.
+//                 `touch_links` (optional, ';'-separated): the robot links the held object may touch (the tool's
+//                 links); absent = none, the message every TMR before 2.8.1 sent.
+//   DetachObject  FAILURE with `fault` PLANNING_SCENE_UPDATE_FAILED when move_group did not apply the attached
+//                 REMOVE. A detach of an object that is NOT attached is SUCCESS (idempotent: move_group answers
+//                 success, there is nothing to remove) -- a cycle start or a retreat detaches unconditionally.
+// Both are FAULTS (no retry fixes a planning scene that refuses an update): `fault` is written for every
+// FAILURE; an unremapped `fault` writes nothing.
+namespace
+{
+constexpr const char* kSceneUpdateFailed = "PLANNING_SCENE_UPDATE_FAILED";
+
+BT::NodeStatus sceneFault(BT::TreeNode& node, const rclcpp::Logger& log, const char* who, const std::string& id,
+                          const std::string& reason, const std::string& why)
+{
+  RCLCPP_ERROR(log, "%s '%s': %s: %s", who, id.c_str(), reason.c_str(), why.c_str());
+  try { (void)node.setOutput("fault", reason); }   // refused (no write) on an unremapped port
+  catch (const std::exception&) {}
+  return BT::NodeStatus::FAILURE;
+}
+
+// "a;b;;c" -> {a, b, c}; a link name never holds a ';' or a blank
+std::vector<std::string> linkList(const std::string& text)
+{
+  std::vector<std::string> out;
+  std::istringstream ss(text);
+  std::string tok;
+  while (std::getline(ss, tok, ';'))
+  {
+    if (tok.empty()) continue;
+    if (tok.find_first_of(" \t\r\n") != std::string::npos)
+      throw std::runtime_error("touch_links '" + text + "': a link name holds no blank");
+    out.push_back(tok);
+  }
+  return out;
+}
+}  // namespace
+
 BT::PortsList AttachObject::providedPorts()
 { return {BT::InputPort<std::string>("id"), BT::InputPort<std::string>("link", "tcp"),
-          BT::InputPort<std::string>("dims"), BT::InputPort<std::string>("position", "0;0;0")}; }
+          BT::InputPort<std::string>("dims"), BT::InputPort<std::string>("position", "0;0;0"),
+          BT::InputPort<std::string>("touch_links", "", "the robot links the held object may touch (a;b;c)"),
+          BT::OutputPort<std::string>("fault", "on FAILURE: INVALID_CONFIGURATION | PLANNING_SCENE_UPDATE_FAILED")}; }
 BT::NodeStatus AttachObject::tick()
 {
   auto* ctx = ctxOf(config());
+  const std::string id = in(*this, "id"), link = in(*this, "link", "tcp");
+  std::array<double, 3> dims{}, position{};
+  std::vector<std::string> touch;
   try {
-    ctx->scene->attachBox(in(*this, "id"), in(*this, "link", "tcp"),
-      parseXyz3(in(*this, "dims")), poseFromXyz(parseXyz3(in(*this, "position", "0;0;0"))));
-  } catch (const std::exception& e) { RCLCPP_ERROR(nlog(config()), "AttachObject: %s", e.what()); return BT::NodeStatus::FAILURE; }
+    dims = parseXyz3(in(*this, "dims"));
+    position = parseXyz3(in(*this, "position", "0;0;0"));
+    touch = linkList(in(*this, "touch_links"));
+  } catch (const std::exception& e) {
+    return sceneFault(*this, safeLog(config()), "AttachObject", id, "INVALID_CONFIGURATION", e.what());
+  }
+  if (!ctx->scene->attachBox(id, link, dims, poseFromXyz(position), touch))
+    return sceneFault(*this, safeLog(config()), "AttachObject", id, kSceneUpdateFailed,
+                      "move_group did not attach it to '" + link + "' (the planning scene refused the update): the "
+                      "planner does not see the held object");
   return BT::NodeStatus::SUCCESS;
 }
 
 BT::PortsList DetachObject::providedPorts()
-{ return {BT::InputPort<std::string>("id"), BT::InputPort<std::string>("link", "tcp")}; }
+{ return {BT::InputPort<std::string>("id"), BT::InputPort<std::string>("link", "tcp"),
+          BT::OutputPort<std::string>("fault", "on FAILURE: PLANNING_SCENE_UPDATE_FAILED")}; }
 BT::NodeStatus DetachObject::tick()
 {
-  ctxOf(config())->scene->detachObject(in(*this, "id"), in(*this, "link", "tcp"));
+  const std::string id = in(*this, "id"), link = in(*this, "link", "tcp");
+  if (!ctxOf(config())->scene->detachObject(id, link))
+    return sceneFault(*this, safeLog(config()), "DetachObject", id, kSceneUpdateFailed,
+                      "move_group did not detach it from '" + link + "' (the planning scene refused the update): it "
+                      "may still be attached");
   return BT::NodeStatus::SUCCESS;
 }
 
@@ -1656,24 +1774,46 @@ struct DetectionFeed
   rclcpp::Subscription<vision_msgs::msg::Detection3DArray>::SharedPtr sub;
 };
 
+// A cache entry bound to the NODE that made it (vNext M4, KNOWN_DEBT M3.5 / M3.6): keyed on that node and the
+// name, it is never handed to another node, and an entry whose node is gone is dropped -- before, the first node
+// that asked owned the subscription / client for every later node of the process (a test, a re-init).
+template <class T>
+using NodeKeyedCache = std::map<std::pair<const rclcpp::Node*, std::string>, std::pair<std::weak_ptr<rclcpp::Node>, T>>;
+
+template <class T>
+T& nodeKeyedEntry(NodeKeyedCache<T>& cache, const rclcpp::Node::SharedPtr& node, const std::string& name)
+{
+  for (auto it = cache.begin(); it != cache.end();) it = it->second.first.expired() ? cache.erase(it) : std::next(it);
+  auto& e = cache[{node.get(), name}];
+  if (e.first.expired())
+  {
+    e.first = node;
+    e.second = T{};
+  }
+  return e.second;
+}
+
 DetectionFeed& feedFor(const rclcpp::Node::SharedPtr& node, const std::string& topic)
 {
-  static std::map<std::string, std::shared_ptr<DetectionFeed>> feeds;
+  static NodeKeyedCache<std::shared_ptr<DetectionFeed>> feeds;
   static std::mutex feeds_m;
   std::lock_guard<std::mutex> lk(feeds_m);
-  auto& f = feeds[topic];
+  auto& f = nodeKeyedEntry(feeds, node, topic);
   if (!f)
   {
     f = std::make_shared<DetectionFeed>();
     // The perception contract publishes RELIABLE depth 1: a detection is an event the
     // consumer waited for and must not miss.
     auto qos = rclcpp::QoS(rclcpp::KeepLast(1)).reliable();
-    DetectionFeed* raw = f.get();
+    // a WEAK reference (vNext M4 review): an entry dropped with its node may still have a callback in flight
+    std::weak_ptr<DetectionFeed> weak = f;
     f->sub = node->create_subscription<vision_msgs::msg::Detection3DArray>(
-      topic, qos, [raw](vision_msgs::msg::Detection3DArray::SharedPtr msg) {
-        std::lock_guard<std::mutex> g(raw->m);
-        raw->latest = std::move(msg);
-        ++raw->arrivals;
+      topic, qos, [weak](vision_msgs::msg::Detection3DArray::SharedPtr msg) {
+        const auto feed = weak.lock();
+        if (!feed) return;
+        std::lock_guard<std::mutex> g(feed->m);
+        feed->latest = std::move(msg);
+        ++feed->arrivals;
       });
   }
   return *f;
@@ -2230,20 +2370,22 @@ struct CandidateFeed
 
 CandidateFeed& candidateFeedFor(const rclcpp::Node::SharedPtr& node, const std::string& topic)
 {
-  static std::map<std::string, std::shared_ptr<CandidateFeed>> feeds;
+  static NodeKeyedCache<std::shared_ptr<CandidateFeed>> feeds;   // keyed on the node (vNext M4)
   static std::mutex feeds_m;
   std::lock_guard<std::mutex> lk(feeds_m);
-  auto& f = feeds[topic];
+  auto& f = nodeKeyedEntry(feeds, node, topic);
   if (!f)
   {
     f = std::make_shared<CandidateFeed>();
-    CandidateFeed* raw = f.get();
+    std::weak_ptr<CandidateFeed> weak = f;     // weak: see feedFor (vNext M4 review)
     // the contract: RELIABLE, depth 1 (ADR-0026), like detections
     f->sub = node->create_subscription<GraspCandidateArrayMsg>(
-      topic, rclcpp::QoS(rclcpp::KeepLast(1)).reliable(), [raw](GraspCandidateArrayMsg::SharedPtr msg) {
-        std::lock_guard<std::mutex> g(raw->m);
-        raw->latest = std::move(msg);
-        ++raw->arrivals;
+      topic, rclcpp::QoS(rclcpp::KeepLast(1)).reliable(), [weak](GraspCandidateArrayMsg::SharedPtr msg) {
+        const auto feed = weak.lock();
+        if (!feed) return;
+        std::lock_guard<std::mutex> g(feed->m);
+        feed->latest = std::move(msg);
+        ++feed->arrivals;
       });
   }
   return *f;
@@ -2302,6 +2444,117 @@ std::string quatText(const Eigen::Quaterniond& q)
   return formatNumbers({q.x(), q.y(), q.z(), q.w()});
 }
 std::string vecText(const Eigen::Vector3d& v) { return formatNumbers({v.x(), v.y(), v.z()}); }
+
+// The M3.5 CAPTURE (DetectObject trigger="true", M3_DESIGN §9) for any feed of stamped arrays (vNext M4: a grasp
+// producer is on demand). The freshness boundary is set on the node clock BEFORE the first trigger; a result is
+// taken only if it arrived after the boundary AND is stamped at or after it; a result stamped over 1 s AHEAD of the
+// clock is another clock's; a producer that answers "could not sample" is triggered again (500 ms). Returns the
+// message, or none with `fault` (CLOCK_UNAVAILABLE | TRIGGER_UNAVAILABLE | CLOCK_MISMATCH | DETECTION_TIMEOUT) and
+// `why`.
+template <class Feed>
+auto captureFresh(BtContext* ctx, Feed& feed, const std::string& topic, const std::string& service,
+                  std::chrono::steady_clock::time_point deadline, const rclcpp::Logger& log, std::string& fault,
+                  std::string& why) -> decltype(feed.latest)
+{
+  using MsgPtr = decltype(feed.latest);
+  // a result published before this node's subscription matched the producer is lost: wait (bounded, 1 s)
+  const auto matched_by = std::min(deadline, std::chrono::steady_clock::now() + std::chrono::seconds(1));
+  while (feed.sub->get_publisher_count() == 0 && std::chrono::steady_clock::now() < matched_by)
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  const int64_t boundary_ns = ctx->node->now().nanoseconds();
+  if (boundary_ns <= 0)
+  {
+    fault = "CLOCK_UNAVAILABLE";
+    why = "the node's clock is not running (time 0: no /clock yet on sim time?): a capture cannot tell a fresh "
+          "result from an old one";
+    return MsgPtr{};
+  }
+  uint64_t seen;
+  { std::lock_guard<std::mutex> g(feed.m); seen = feed.arrivals; }
+  constexpr int64_t kFutureSlackNs = 1000000000LL;
+  auto client = triggerClientFor(ctx->node, service);
+  int triggers = 0, answered = 0, stale = 0, future_stamped = 0;
+  int64_t oldest_lag_ns = 0;
+  std::string last_refusal;
+  MsgPtr msg;
+  while (!msg && std::chrono::steady_clock::now() < deadline)
+  {
+    if (!rclcpp::ok()) break;                  // the context is shutting down: never spin on it (vNext M4 review)
+    if (!client->service_is_ready() && !client->wait_for_service(std::chrono::milliseconds(100))) continue;
+    auto future = client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+    ++triggers;
+    while (std::chrono::steady_clock::now() < deadline &&
+           future.wait_for(std::chrono::milliseconds(10)) != std::future_status::ready) {}
+    if (future.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+    {
+      client->remove_pending_request(future);
+      break;
+    }
+    ++answered;
+    const auto answer = future.get();
+    const bool sampled = answer->success;
+    if (!sampled)
+    {
+      last_refusal = answer->message;
+      RCLCPP_WARN(log, "DetectCandidates capture: trigger %d of '%s' answered: %s -- triggering again", triggers,
+                  service.c_str(), answer->message.c_str());
+    }
+    const auto retrigger = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+    while (!msg && std::chrono::steady_clock::now() < std::min(deadline, retrigger))
+    {
+      MsgPtr got;
+      {
+        std::lock_guard<std::mutex> g(feed.m);
+        if (feed.arrivals > seen) { got = feed.latest; seen = feed.arrivals; }
+      }
+      if (!got) { std::this_thread::sleep_for(std::chrono::milliseconds(10)); continue; }
+      if (!sampled) continue;
+      const int64_t stamp_ns = rclcpp::Time(got->header.stamp).nanoseconds();
+      const int64_t now_ns = ctx->node->now().nanoseconds();
+      if (stamp_ns > now_ns + kFutureSlackNs)
+      {
+        ++future_stamped;
+        RCLCPP_WARN(log, "DetectCandidates capture: result rejected on '%s': stamped %.3f s, AHEAD of this clock "
+                    "(%.3f s): the producer and the robot are not on one clock", topic.c_str(), stamp_ns * 1e-9,
+                    now_ns * 1e-9);
+        continue;
+      }
+      if (stamp_ns >= boundary_ns) { msg = got; break; }
+      ++stale;
+      oldest_lag_ns = std::max(oldest_lag_ns, boundary_ns - stamp_ns);
+      RCLCPP_WARN(log, "DetectCandidates capture: stale result rejected on '%s': stamped %.3f s, before the capture "
+                  "began at %.3f s", topic.c_str(), stamp_ns * 1e-9, boundary_ns * 1e-9);
+    }
+  }
+  if (msg)
+  {
+    RCLCPP_INFO(log, "DetectCandidates capture: fresh result on '%s' after %d trigger(s) (%d stale rejected), stamped "
+                "%.3f s >= the capture's start %.3f s", topic.c_str(), triggers, stale,
+                rclcpp::Time(msg->header.stamp).nanoseconds() * 1e-9, boundary_ns * 1e-9);
+    return msg;
+  }
+  if (answered == 0)
+  {
+    fault = "TRIGGER_UNAVAILABLE";
+    why = "the producer's service '" + service + "' did not answer (is it running?)";
+  }
+  else if ((future_stamped > 0 && stale == 0) || (stale > 0 && oldest_lag_ns > 60 * kFutureSlackNs))
+  {
+    // ahead of the clock, or over a minute behind it: another clock (sim vs wall time), not a slow producer
+    fault = "CLOCK_MISMATCH";
+    why = "no result on '" + topic + "' is on this node's clock (" + std::to_string(future_stamped) +
+          " stamped ahead of it, " + std::to_string(stale) + " over a minute behind it): the producer and the robot "
+          "must share a clock";
+  }
+  else
+  {
+    fault = "DETECTION_TIMEOUT";
+    why = "no fresh result on '" + topic + "' after " + std::to_string(triggers) + " trigger(s) (" +
+          std::to_string(stale) + " stale rejected" + (last_refusal.empty() ? "" : "; the producer last answered: " +
+          last_refusal) + ")";
+  }
+  return MsgPtr{};
+}
 }  // namespace
 
 // DetectCandidates (vNext M3.6, ADR-0026): the ONE consumption of the grasp-candidate contract.
@@ -2321,7 +2574,10 @@ std::string vecText(const Eigen::Vector3d& v) { return formatNumbers({v.x(), v.y
 // never repaired, nothing written. The first `keep` candidates IN PUBLISHED ORDER (the order is the
 // rank: never sorted) are transformed into target_frame (one TF lookup per source frame: the pose,
 // the approach and the normal by the same transform) and written on "<out_key>.<i>.*" (the layout of
-// grasp_candidates.hpp) with "<out_key>.count". "<out_key>.count" is "0" from the start of the tick, so
+// grasp_candidates.hpp) with "<out_key>.count". vNext M4: the transform is looked up AT EACH CANDIDATE'S OBSERVATION
+// STAMP (an unstamped one -- stamp 0 -- takes the latest, and its log line says UNSTAMPED); `trigger="true"` is the
+// M3.5 CAPTURE on /perception/<detector>/detect (a result stamped before the capture began is rejected; faults
+// CLOCK_UNAVAILABLE | TRIGGER_UNAVAILABLE | CLOCK_MISMATCH | DETECTION_TIMEOUT). "<out_key>.count" is "0" from the start of the tick, so
 // a failed detection never leaves an older set readable. An EMPTY array (or no matching detection) is
 // the valid "no candidate" answer: FAILURE with reason NO_CANDIDATES and no fault.
 // Outputs on FAILURE: `reason` (INVALID_CONFIGURATION | NO_CANDIDATES | INVALID_CANDIDATE |
@@ -2340,6 +2596,8 @@ BT::PortsList DetectCandidates::providedPorts()
           BT::InputPort<std::string>("standoff_m", "", "detections: the projected standoff"),
           BT::InputPort<std::string>("eef", "", "detections: the projected device"),
           BT::InputPort<std::string>("site", "", "detections: the projected site"),
+          BT::InputPort<std::string>("trigger", "false", "true: a CAPTURE -- trigger the producer, accept only a "
+                                     "result stamped after the capture began (vNext M4)"),
           BT::OutputPort<std::string>("reason", "on FAILURE: why"),
           BT::OutputPort<std::string>("fault", "on FAILURE: the reason, unless NO_CANDIDATES")}; }
 BT::NodeStatus DetectCandidates::tick()
@@ -2376,6 +2634,13 @@ BT::NodeStatus DetectCandidates::tick()
       return fail("INVALID_CONFIGURATION", "timeout_ms must be a whole number of milliseconds >= 1");
     timeout_ms = static_cast<int>(t);
   }
+  const std::string trigger_text = in(*this, "trigger", "false");
+  if (trigger_text != "true" && trigger_text != "false")
+    return fail("INVALID_CONFIGURATION", "trigger='" + trigger_text + "' is not true or false");
+  const bool trigger = trigger_text == "true";
+  if (trigger && det.empty())
+    return fail("INVALID_CONFIGURATION", "trigger=\"true\" needs 'detector' (the producer whose on-demand detect "
+                "service is called)");
   int keep = 1;
   if (!strictIntIn(*this, "keep", keep))
     return fail("INVALID_CONFIGURATION", "keep='" + config().input_ports.at("keep") + "' cannot be read as a count");
@@ -2416,7 +2681,19 @@ BT::NodeStatus DetectCandidates::tick()
   const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
   GraspCandidateArrayMsg::SharedPtr cands;
   vision_msgs::msg::Detection3DArray::SharedPtr dets;
-  if (source == "candidates")
+  if (trigger)
+  {
+    // vNext M4 (KNOWN_DEBT M3.6 on-demand): the M3.5 capture, for either source -- the service of the SAME
+    // CELL-GLOBAL producer (ADR-0023 Decision 4)
+    const std::string service = "/perception/" + det + "/detect";
+    std::string fault, why;
+    if (source == "candidates")
+      cands = captureFresh(ctx, candidateFeedFor(ctx->node, topic), topic, service, deadline, nlog(config()), fault, why);
+    else
+      dets = captureFresh(ctx, feedFor(ctx->node, topic), topic, service, deadline, nlog(config()), fault, why);
+    if (!cands && !dets) return fail(fault, why);
+  }
+  else if (source == "candidates")
   {
     CandidateFeed& feed = candidateFeedFor(ctx->node, topic);
     uint64_t seen;
@@ -2442,21 +2719,29 @@ BT::NodeStatus DetectCandidates::tick()
     return fail("DETECTION_TIMEOUT", "no fresh message on '" + topic + "' within " + std::to_string(timeout_ms) +
                 " ms (is the producer running? is it publishing RELIABLE?)");
 
-  // TF into target_frame: ONE lookup per source frame, shared by every candidate from it
+  // TF into target_frame AT THE OBSERVATION STAMP (vNext M4, KNOWN_DEBT M3.6): a camera that moves (on the arm)
+  // maps the observation through the pose it had when the image was taken, never the latest. ONE lookup per
+  // (source frame, stamp), shared by every candidate from it. An UNSTAMPED observation (stamp 0) has no time to
+  // look up at: it takes the latest transform, and the candidate's log line says so.
   auto tf = tfFor(ctx);
-  std::map<std::string, geometry_msgs::msg::TransformStamped> transforms;
+  std::map<std::pair<std::string, int64_t>, geometry_msgs::msg::TransformStamped> transforms;
   std::string tf_error;
-  auto transformTo = [&](const std::string& src) -> const geometry_msgs::msg::TransformStamped* {
-    auto it = transforms.find(src);
+  auto transformTo = [&](const std::string& src,
+                         const builtin_interfaces::msg::Time& stamp) -> const geometry_msgs::msg::TransformStamped* {
+    const int64_t ns = rclcpp::Time(stamp).nanoseconds();
+    auto it = transforms.find({src, ns});
     if (it != transforms.end()) return &it->second;
     try
     {
-      it = transforms.emplace(src, tf->lookupTransform(target, src, tf2::TimePointZero, tf2::durationFromSec(2.0))).first;
+      const tf2::TimePoint at = ns > 0 ? tf2::TimePoint(std::chrono::nanoseconds(ns)) : tf2::TimePointZero;
+      it = transforms.emplace(std::make_pair(src, ns),
+                              tf->lookupTransform(target, src, at, tf2::durationFromSec(2.0))).first;
       return &it->second;
     }
     catch (const std::exception& e)
     {
-      tf_error = "TF " + src + " -> " + target + ": " + e.what();
+      tf_error = "TF " + src + " -> " + target + (ns > 0 ? " at the observation stamp " +
+                 std::to_string(ns * 1e-9) + " s" : std::string(" (unstamped: latest)")) + ": " + e.what();
       return nullptr;
     }
   };
@@ -2485,7 +2770,7 @@ BT::NodeStatus DetectCandidates::tick()
       if (default_approach)
       {
         const std::string src = d.header.frame_id.empty() ? dets->header.frame_id : d.header.frame_id;
-        const auto* T = transformTo(src);
+        const auto* T = transformTo(src, dets->header.stamp);
         if (!T) return fail("TF_LOOKUP_FAILED", tf_error);
         cfg.default_approach = rotationOf(*T).inverse() * *default_approach;   // into the detection's frame
       }
@@ -2504,7 +2789,7 @@ BT::NodeStatus DetectCandidates::tick()
   for (std::size_t n = 0; n < set.candidates.size(); ++n)
   {
     const auto& c = set.candidates[n];
-    const auto* T = transformTo(c.header.frame_id);
+    const auto* T = transformTo(c.header.frame_id, c.header.stamp);
     if (!T) return fail("TF_LOOKUP_FAILED", tf_error);
     const Eigen::Quaterniond R = rotationOf(*T);
     geometry_msgs::msg::Pose P;
@@ -2530,9 +2815,11 @@ BT::NodeStatus DetectCandidates::tick()
     bb->set<std::string>(pre + ".stamp", std::to_string(c.header.stamp.sec) + "." + [&] {
       std::string ns = std::to_string(c.header.stamp.nanosec);
       return std::string(9 - std::min<std::size_t>(9, ns.size()), '0') + ns; }());
+    const bool stamped = rclcpp::Time(c.header.stamp).nanoseconds() > 0;
     RCLCPP_INFO(nlog(config()), "DetectCandidates: candidate %zu '%s' (provider %s) at (%.4f, %.4f, %.4f), approach "
-                "(%.4f, %.4f, %.4f), standoff %.4f m in %s -> BB[%s.*]", n, c.id.c_str(), c.provider.c_str(),
-                P.position.x, P.position.y, P.position.z, a.x(), a.y(), a.z(), c.standoff_m, target.c_str(), pre.c_str());
+                "(%.4f, %.4f, %.4f), standoff %.4f m in %s (%s) -> BB[%s.*]", n, c.id.c_str(), c.provider.c_str(),
+                P.position.x, P.position.y, P.position.z, a.x(), a.y(), a.z(), c.standoff_m, target.c_str(),
+                stamped ? "TF at the observation stamp" : "UNSTAMPED: the latest TF", pre.c_str());
   }
   bb->set<std::string>(candidateCountKey(out), std::to_string(set.candidates.size()));
   RCLCPP_INFO(nlog(config()), "DetectCandidates: %zu candidate(s) on BB[%s.0 ..] in the order the producer PUBLISHED "
@@ -2545,7 +2832,10 @@ BT::NodeStatus DetectCandidates::tick()
 // PreGrasp and (optionally) Retract WAYPOINTS of the grasp idiom. WHERE only: each waypoint's motion
 // type, profile and speed stay its task_parameters entry's (the idiom's), never the candidate's.
 //
-//   orientation        align_approach (the only form in M3.6, owner decision M3.6-1): the TCP
+//   orientation        candidate (vNext M4, ADR-0026 D5's reserved mode): the candidate's OWN orientation (as
+//                      DetectCandidates transformed it), refused (CANDIDATE_ORIENTATION_INCONSISTENT) unless its tool
+//                      +Z is the approach within kOrientationConsistencyRad; orientation_from optional.
+//                      align_approach (owner decision M3.6-1): the TCP
 //                      orientation = MinRot(z_ref -> a) * R_ref, R_ref the orientation of the
 //                      waypoint `orientation_from` (in the candidate set's frame), a the candidate's
 //                      approach: the application's reference tilted as little as possible so the
@@ -2557,6 +2847,9 @@ BT::NodeStatus DetectCandidates::tick()
 //   retract   = p - d * a                 retract_along_approach = d (back along the approach), or
 //             = p + d * e_z               retract_dz = d (up the frame's +Z axis)
 //   every waypoint: the same orientation, type tcp, frame = the candidate set's frame.
+//   max_tilt_deg       vNext M4, the FAIL-CLOSED orientation envelope: an approach tilted more than this from the
+//                      reference's tool +Z (orientation_from, required with it) is refused (APPROACH_OUTSIDE_ENVELOPE),
+//                      never clamped, in either mode.
 // The candidate's eef / site, when it names them, must be the step's (`eef`, `site`): a candidate for
 // another tool is refused, never executed with this one. Nothing is written on a refusal (`reason`).
 // Pure blackboard: no ROS, no runtime -- unit-tested by ticking it.
@@ -2569,11 +2862,17 @@ BT::PortsList SetWaypointFromCandidate::providedPorts()
           BT::InputPort<std::string>("standoff_m", "", "replaces the candidate's standoff"),
           BT::InputPort<std::string>("retract_along_approach", "", "Retract: back along the approach [m]"),
           BT::InputPort<std::string>("retract_dz", "", "Retract: up the frame's +Z [m]"),
-          BT::InputPort<std::string>("orientation", "", "align_approach"),
-          BT::InputPort<std::string>("orientation_from", "", "the reference waypoint of align_approach"),
+          BT::InputPort<std::string>("orientation", "", "align_approach | candidate (vNext M4)"),
+          BT::InputPort<std::string>("orientation_from", "", "the taught reference waypoint (align_approach; the "
+                                     "envelope's reference)"),
+          BT::InputPort<std::string>("max_tilt_deg", "", "the fail-closed orientation envelope: the largest tilt of "
+                                     "the approach from the reference's tool +Z (vNext M4)"),
           BT::InputPort<std::string>("eef", "", "the step's device"),
           BT::InputPort<std::string>("site", "", "the step's site"),
-          BT::OutputPort<std::string>("reason", "on FAILURE: why")}; }
+          BT::OutputPort<std::string>("reason", "on FAILURE: why"),
+          // TMR 2.8.1 (the M4.5 review): a refusal no retry or other candidate can fix is a FAULT
+          BT::OutputPort<std::string>("fault", "on FAILURE: the reason, only for INVALID_CONFIGURATION | "
+                                      "INVALID_REFERENCE | the step's own INVALID_STANDOFF")}; }
 BT::NodeStatus SetWaypointFromCandidate::tick()
 {
   auto bb = config().blackboard;
@@ -2582,13 +2881,21 @@ BT::NodeStatus SetWaypointFromCandidate::tick()
                     retract = in(*this, "retract"), orientation = in(*this, "orientation"),
                     reference = in(*this, "orientation_from"), standoff_text = in(*this, "standoff_m"),
                     along_text = in(*this, "retract_along_approach"), dz_text = in(*this, "retract_dz"),
-                    eef = in(*this, "eef"), site = in(*this, "site");
+                    eef = in(*this, "eef"), site = in(*this, "site"), tilt_text = in(*this, "max_tilt_deg");
   int index = 0;
   const bool index_read = strictIntIn(*this, "index", index);
+  // TMR 2.8.1 (the M4.5 review): `fault` -- written only for a refusal of the step's own CONFIGURATION, which no
+  // retry and no other candidate can fix (INVALID_CONFIGURATION, INVALID_REFERENCE: the taught reference, and
+  // INVALID_STANDOFF when the step gives the standoff). A refusal of THIS candidate (NO_CANDIDATE,
+  // INVALID_CANDIDATE, INVALID_STANDOFF from the candidate, CANDIDATE_SITE_MISMATCH, APPROACH_OUTSIDE_ENVELOPE,
+  // APPROACH_OPPOSES_REFERENCE, CANDIDATE_ORIENTATION_INCONSISTENT) stays a verdict: `reason` only.
   auto refuse = [&](const std::string& reason, const std::string& why) {
     RCLCPP_ERROR(log, "SetWaypointFromCandidate '%s' [%d]: %s: %s -- no waypoint written", from.c_str(), index,
                  reason.c_str(), why.c_str());
     setOutput("reason", reason);
+    const bool fault = reason == "INVALID_CONFIGURATION" || reason == "INVALID_REFERENCE" ||
+                       (reason == "INVALID_STANDOFF" && !standoff_text.empty());
+    if (fault) setOutput("fault", reason);   // refused (no write) on an unremapped port
     return BT::NodeStatus::FAILURE;
   };
   auto get = [&](const std::string& key, std::string& value) {
@@ -2600,10 +2907,21 @@ BT::NodeStatus SetWaypointFromCandidate::tick()
                   "candidate index (never defaulted to 0: it decides which object the arm goes to)");
   if (from.empty() || grasp.empty() || pregrasp.empty())
     return refuse("INVALID_CONFIGURATION", "from, grasp and pregrasp are required");
-  if (orientation != "align_approach")
+  if (orientation != "align_approach" && orientation != "candidate")
     return refuse("INVALID_CONFIGURATION", "orientation '" + orientation + "': a candidate's TCP orientation is "
-                  "align_approach in this version (the reference waypoint orientation_from, tilted onto the approach)");
-  if (reference.empty()) return refuse("INVALID_CONFIGURATION", "align_approach needs orientation_from (a waypoint)");
+                  "align_approach (the reference waypoint orientation_from, tilted onto the approach) or candidate "
+                  "(the producer's own full grasp orientation)");
+  if (orientation == "align_approach" && reference.empty())
+    return refuse("INVALID_CONFIGURATION", "align_approach needs orientation_from (a waypoint)");
+  double max_tilt = 0;
+  if (!tilt_text.empty())
+  {
+    if (!number(tilt_text, max_tilt) || !(max_tilt > 0.0 && max_tilt < 180.0))
+      return refuse("INVALID_CONFIGURATION", "max_tilt_deg '" + tilt_text + "' is not an angle in (0, 180) deg");
+    if (reference.empty())
+      return refuse("INVALID_CONFIGURATION", "max_tilt_deg needs orientation_from: the envelope bounds the tilt from "
+                    "a taught reference");
+  }
   if (!retract.empty() && along_text.empty() == dz_text.empty())
     return refuse("INVALID_CONFIGURATION", "a Retract is exactly one of retract_along_approach or retract_dz");
   if (retract.empty() && !(along_text.empty() && dz_text.empty()))
@@ -2646,10 +2964,11 @@ BT::NodeStatus SetWaypointFromCandidate::tick()
     return refuse("INVALID_CONFIGURATION", "the Retract distance must be a number > 0 m");
 
   std::string ref_text, ref_frame;
-  Eigen::Quaterniond R_ref;
-  if (!get(reference + ".orientation", ref_text) || !unitQuat(ref_text, R_ref))
+  Eigen::Quaterniond R_ref = Eigen::Quaterniond::Identity();
+  const bool has_reference = !reference.empty();
+  if (has_reference && (!get(reference + ".orientation", ref_text) || !unitQuat(ref_text, R_ref)))
     return refuse("INVALID_REFERENCE", "the reference waypoint '" + reference + "' has no unit orientation qx;qy;qz;qw");
-  if (!get(reference + ".frame", ref_frame) || ref_frame.empty())
+  if (has_reference && (!get(reference + ".frame", ref_frame) || ref_frame.empty()))
   {
     // a waypoint without a frame is in the runtime's base frame (MoveWaypoint's rule): say which it is
     BtContext* ctx = nullptr;
@@ -2659,14 +2978,42 @@ BT::NodeStatus SetWaypointFromCandidate::tick()
                     "runtime to say which its base frame is");
     ref_frame = ctx->runtime->baseFrame();
   }
-  if (ref_frame != frame)
+  if (has_reference && ref_frame != frame)
     return refuse("INVALID_REFERENCE", "the reference waypoint '" + reference + "' is in frame '" + ref_frame +
                   "', the candidate set in '" + frame + "': an orientation is compared in one frame");
-  const auto R_tcp = alignApproach(R_ref, a);
-  if (!R_tcp)
-    return refuse("APPROACH_OPPOSES_REFERENCE", "the reference '" + reference + "' points the tool's +Z exactly "
-                  "against candidate '" + id + "''s approach: the minimal rotation is undefined (teach a reference "
-                  "whose tool +Z points along the approach)");
+  // the FAIL-CLOSED orientation envelope (vNext M4, the M3.6 owner requirement): "MoveIt can plan it" is not by
+  // itself an acceptable grasp orientation -- an approach tilted further than max_tilt_deg from the taught
+  // reference's tool +Z is refused, never clamped, in either orientation mode
+  const double tilt = has_reference ? approachTiltDeg(R_ref, a) : 0.0;
+  if (!tilt_text.empty() && tilt > max_tilt)
+    return refuse("APPROACH_OUTSIDE_ENVELOPE", "candidate '" + id + "''s approach is tilted " + formatNumbers({tilt}) +
+                  " deg from the reference '" + reference + "''s tool +Z, beyond max_tilt_deg " + tilt_text +
+                  ": outside the permitted orientation envelope (never clamped)");
+  std::optional<Eigen::Quaterniond> R_tcp;
+  std::string how;
+  if (orientation == "align_approach")
+  {
+    R_tcp = alignApproach(R_ref, a);
+    if (!R_tcp)
+      return refuse("APPROACH_OPPOSES_REFERENCE", "the reference '" + reference + "' points the tool's +Z exactly "
+                    "against candidate '" + id + "''s approach: the minimal rotation is undefined (teach a reference "
+                    "whose tool +Z points along the approach)");
+    // the candidate's own orientation is REPLACED here, by owner decision M3.6-1 -- and the log says so
+    how = "align_approach(" + reference + "), the candidate's own orientation replaced";
+  }
+  else
+  {
+    // vNext M4 (ADR-0026 D5's reserved mode): the producer owns the full grasp orientation -- used as transformed,
+    // after checking it carries the approach on its tool +Z
+    std::string cand_q_text;
+    Eigen::Quaterniond R_c;
+    if (!get(pre + ".orientation", cand_q_text) || !unitQuat(cand_q_text, R_c))
+      return refuse("INVALID_CANDIDATE", "candidate '" + id + "' has no unit orientation on the blackboard");
+    const std::string why = candidateOrientationProblem(R_c, a);
+    if (!why.empty()) return refuse("CANDIDATE_ORIENTATION_INCONSISTENT", "candidate '" + id + "': " + why);
+    R_tcp = R_c.normalized();
+    how = "candidate (the producer's own)";
+  }
 
   const Eigen::Vector3d pg = p - standoff * a;
   const std::string q = quatText(*R_tcp);
@@ -2685,10 +3032,13 @@ BT::NodeStatus SetWaypointFromCandidate::tick()
     write(retract, rt);
   }
   const std::string retract_text = retract.empty() ? std::string() : ", " + retract + " = " + vecText(rt);
+  const std::string envelope = tilt_text.empty() ? std::string(has_reference ? ", tilt " + formatNumbers({tilt}) +
+                               " deg (no envelope set)" : "") : ", tilt " + formatNumbers({tilt}) + " deg <= " +
+                               tilt_text + " deg";
   RCLCPP_INFO(log, "SetWaypointFromCandidate: candidate '%s' (provider %s) -> %s = %s, %s = %s (standoff %g m along "
-              "-approach %s)%s, orientation align_approach(%s) = %s, frame %s", id.c_str(), provider.c_str(),
+              "-approach %s)%s, orientation %s = %s%s, frame %s", id.c_str(), provider.c_str(),
               grasp.c_str(), vecText(p).c_str(), pregrasp.c_str(), vecText(pg).c_str(), standoff, vecText(a).c_str(),
-              retract_text.c_str(), reference.c_str(), q.c_str(), frame.c_str());
+              retract_text.c_str(), how.c_str(), q.c_str(), envelope.c_str(), frame.c_str());
   return BT::NodeStatus::SUCCESS;
 }
 
@@ -2732,10 +3082,10 @@ LatestFeed<MsgT>& latestFeedFor(const rclcpp::Node::SharedPtr& node,
 rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr triggerClientFor(
   const rclcpp::Node::SharedPtr& node, const std::string& service)
 {
-  static std::map<std::string, rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr> clients;
+  static NodeKeyedCache<rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr> clients;   // keyed on the node (vNext M4)
   static std::mutex m;
   std::lock_guard<std::mutex> lk(m);
-  auto& c = clients[service];
+  auto& c = nodeKeyedEntry(clients, node, service);
   if (!c) c = node->create_client<std_srvs::srv::Trigger>(service);
   return c;
 }

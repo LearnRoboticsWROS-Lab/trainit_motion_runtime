@@ -169,11 +169,13 @@ void TaskRunner::payloadAction(const MotionStep& step)
   const std::string link = step.payload.frame.empty() ? runtime_.tipLink() : step.payload.frame;
   switch (step.payload_op)
   {
+    // LEGACY (TMR 2.8.1): PlanningSceneManager now says when move_group refused the update and logs it as an
+    // ERROR; the legacy TaskRunner keeps its steps' outcome (KNOWN_DEBT: it does not fail the step on it)
     case PayloadOp::ATTACH:
-      scene_.attachBox(step.payload.id, link, step.payload.dims, step.payload.pose);
+      (void)scene_.attachBox(step.payload.id, link, step.payload.dims, step.payload.pose);
       break;
     case PayloadOp::DETACH:
-      scene_.detachObject(step.payload.id, link);
+      (void)scene_.detachObject(step.payload.id, link);
       break;
     case PayloadOp::NONE:
     default:

@@ -7,6 +7,8 @@
       <input_port name="waypoint"/>
       <!-- vNext M2.7: written only when the move failed for a reason that is not the target's -->
       <output_port name="fault">MOTION_FAULT: CAUSE during PHASE</output_port>
+      <!-- vNext M4.5d (ADR-0024 amendment M4.5d): true = a part is held; any failure is then a FAULT -->
+      <input_port name="holding">M4.5d: true = a part is held; any failure is then a FAULT</input_port>
     </Action>
     <Action ID="MovePtp">
       <input_port name="joints" default=""/>
@@ -88,6 +90,8 @@
       <input_port name="from" default="">first state of the run (index; default 0)</input_port>
       <input_port name="to" default="">last state of the run (index; default the last state)</input_port>
       <output_port name="fault">MOTION_FAULT: CAUSE during PHASE (written only for a failure that is not the target's)</output_port>
+      <!-- vNext M4.5d (ADR-0024 amendment M4.5d): true = a part is held; any failure is then a FAULT -->
+      <input_port name="holding">M4.5d: true = a part is held; any failure is then a FAULT</input_port>
     </Action>
     <!-- ADR-0022: with the canonical end-effector contract (an `eef` block in bt_params) the
          gripper nodes command a SITE's grip actuator and report reason/fault/subject on

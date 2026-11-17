@@ -495,6 +495,9 @@ if(BUILD_TESTING)
   file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/m2_7_mf_actual/motion_fault)
   target_compile_definitions(test_m2_7_motion_fault PRIVATE
     TRAINIT_M27_MF_REPORT_DIR="${CMAKE_CURRENT_BINARY_DIR}/m2_7_mf_actual/motion_fault")
+  # vNext M4.5d (ADR-0024 amendment M4.5d): a motion failing while a part is HELD is a FAULT (domain 98)
+  trainit_m25_test(test_m45d_held_motion_fault 98 600 test_m45d_held_motion_fault)
+  ament_target_dependencies(test_m45d_held_motion_fault tf2_ros)
   # M6: the real trainit_run_bt as a child: exit 2, exit 3, the pinned lines (domain 88)
   trainit_m26_test(test_m2_6_eef_runner_child 88 900 test_m2_6_eef_runner_child)
   target_compile_definitions(test_m2_6_eef_runner_child PRIVATE TRAINIT_M26_CONTRACT_DIR="${_m26c}"
@@ -553,6 +556,9 @@ if(BUILD_TESTING)
   # AFTER (owner decision 11.2): the door's types, the task_runner family through the new
   # TaskRunner constructor, the BT nodes on a fake runtime (same domain, one binary at a time)
   trainit_m27_test(test_m2_7_bt_interface 82 600 test_m2_7_bt_interface)
+  # TMR 2.8.1 (the M4.5 review): AttachObject / DetachObject report a planning-scene update move_group refused
+  # (`fault` PLANNING_SCENE_UPDATE_FAILED), touch_links, the idempotent detach -- the M2.5 fakes, domain 78
+  trainit_m27_test(test_m45_scene_faults 78 300 test_m45_scene_faults)
 
   # vNext M3.1 (ADR-0024): FollowPath and MoveWaypoint's additive keys ticked for real against the
   # M2.5 fake move_group (domain 83): what each path sends through the door, the refusals that send
@@ -601,6 +607,12 @@ if(BUILD_TESTING)
     ENV ROS_DOMAIN_ID=73 ROS_LOCALHOST_ONLY=1 RMW_IMPLEMENTATION=rmw_fastrtps_cpp)
   target_link_libraries(test_m3_6_candidate_nodes trainit_motion_runtime)
   link_btcpp(test_m3_6_candidate_nodes)
+  # vNext M4 (ADR-0026 amendment M4): the consumer hardened for the SurfaceGrasp provider -- TF at the observation
+  # stamp, the capture, orientation="candidate", the max_tilt_deg envelope, the node-keyed feed (domain 76).
+  ament_add_gtest(test_m4_candidate_consumer test/test_m4_candidate_consumer.cpp TIMEOUT 180
+    ENV ROS_DOMAIN_ID=76 ROS_LOCALHOST_ONLY=1 RMW_IMPLEMENTATION=rmw_fastrtps_cpp)
+  target_link_libraries(test_m4_candidate_consumer trainit_motion_runtime)
+  link_btcpp(test_m4_candidate_consumer)
   # vNext M3.6 / M3-D (ADR-0026): Validation C -- the trees TSA generates (byte copies), ticked with the REAL
   # nodes against the M2.5 fake move_group and the M2.6 fake end effector, with two synthetic producers
   # (domain 74, an AFTER record: test/data/m3_6/captures/).
