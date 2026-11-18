@@ -111,9 +111,12 @@ public:
   // (servo_node/delta_twist_cmds and servo_node/status, topics; servo_node/start_servo, pause_servo
   // and unpause_servo, services), checked whether or not the tree runs a ServoTrack, then every name
   // `contract` gives its end-effector devices (eefEndpoints(); none for a LEGACY contract). A servo
-  // node a tree names in ServoTrack's servo_node port is not checked.
+  // node a tree names in ServoTrack's servo_node port is not checked. `extra_topics`: further robot-scoped topics
+  // the caller resolves in this robot's slot (trainit_task_server: the Robot Task Interface's command and status,
+  // ADR-0032), checked the same way.
   static std::vector<std::string> crossNamespaceRemaps(const rclcpp::Node::SharedPtr& node,
-                                                       const eef::Contract& contract);
+                                                       const eef::Contract& contract,
+                                                       const std::vector<std::string>& extra_topics = {});
 
   // --- MotionRuntime interface ----------------------------------------------
   MotionResult movePtp(const JointTarget& target, const MotionOptions& options) override;

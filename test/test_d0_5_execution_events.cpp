@@ -462,3 +462,51 @@ TEST(ExecutionEvents, TheTsaGoldenIsReadAsItsStepsAndTasks)
     process_in_step = process_in_step || (m.kind == Msg::PROCESS_EVENT && m.step_id == "conveyor_on");
   EXPECT_TRUE(process_in_step);
 }
+
+// P0.a case E2, in process (ADR-0030 Amendment P0, job mode): a CANCELLED job of the robot task server, ended the
+// way BtJobExecutor ends it (the tree halted after its tick, then runEnded with the job's result code). Every event
+// carries the job_id; the halted scopes exit HALTED innermost first; the exported (root) task's TASK_EXITED is held
+// until the result is known and carries it with its ORIGINAL stamp; RUN_ENDED is HALTED with the same code; nothing
+// else carries a code. (The R case K2_E2 checks the same on the real server.)
+TEST(ExecutionEvents, P0a_E2_ACancelledJobCarriesItsJobIdAndItsResultCode)
+{
+  const char* job = R"(<root BTCPP_format="4" main_tree_to_execute="job_watch">
+    <BehaviorTree ID="job_watch"><Sequence><SubTree ID="task_watch" _autoremap="true"/></Sequence></BehaviorTree>
+    <BehaviorTree ID="task_watch">
+      <Sequence><Sequence name="trainit_step:wait:dwell"><Hold/></Sequence></Sequence>
+    </BehaviorTree></root>)";
+  BT::BehaviorTreeFactory factory;
+  registerLeaves(factory);
+  factory.registerBehaviorTreeFromText(job);
+  auto tree = factory.createTree("job_watch", BT::Blackboard::create());
+  std::vector<Msg> events;
+  int32_t t = 0;
+  {
+    ExecutionEventPublisher pub(
+      tree, [&events](const Msg& m) { events.push_back(m); },
+      [&t]() { builtin_interfaces::msg::Time s; s.sec = 100; s.nanosec = static_cast<uint32_t>(t++); return s; },
+      "0a1b2c3d-2");
+    pub.setJob(2);
+    pub.runStarted();
+    for (int i = 0; i < 3; ++i) ASSERT_EQ(tree.tickOnce(), BT::NodeStatus::RUNNING);
+    tree.haltTree();                                             // the stop: the tick has returned, halt what runs
+    pub.runEnded(BT::NodeStatus::RUNNING, /*interrupted=*/true, /*result_code=*/200);
+  }
+  std::vector<std::string> got;
+  for (const auto& m : events) got.push_back(text(m));
+  EXPECT_EQ(got, (std::vector<std::string>{
+    "RUN_STARTED", "TASK_ENTERED watch", "STEP_ENTERED watch/wait(dwell)", "STEP_EXITED watch/wait(dwell) HALTED",
+    "TASK_EXITED watch HALTED", "RUN_ENDED HALTED"}));
+  ASSERT_EQ(events.size(), 6u);
+  for (std::size_t k = 0; k < events.size(); ++k)
+  {
+    EXPECT_EQ(events[k].job_id, 2u) << k;
+    EXPECT_EQ(events[k].seq, k + 1) << k;
+    EXPECT_EQ(events[k].run_id, "0a1b2c3d-2") << k;
+    const bool carries = events[k].kind == Msg::TASK_EXITED || events[k].kind == Msg::RUN_ENDED;
+    EXPECT_EQ(events[k].result_code, carries ? 200 : 0) << k;
+  }
+  // the deferred exit keeps the moment the task exited: before the run's end, after its step's exit
+  EXPECT_GT(events[4].header.stamp.nanosec, events[3].header.stamp.nanosec);
+  EXPECT_LT(events[4].header.stamp.nanosec, events[5].header.stamp.nanosec);
+}

@@ -16,7 +16,7 @@ find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(control_msgs REQUIRED)
 find_package(trajectory_msgs REQUIRED)      # ADR-0022: an EEF axis goal (FollowJointTrajectory)
-find_package(trainit_interfaces 0.2.0 REQUIRED)   # ADR-0022: EndEffectorState (TMR 2.0.0); ADR-0026: GraspCandidate (2.5.0)
+find_package(trainit_interfaces 0.4.0 REQUIRED)   # ADR-0022: EndEffectorState (TMR 2.0.0); ADR-0026: GraspCandidate (2.5.0)
 find_package(diagnostic_msgs REQUIRED)   # ADR-0026: a grasp candidate's metadata
 find_package(shape_msgs REQUIRED)
 find_package(moveit_core REQUIRED)
@@ -118,6 +118,12 @@ add_library(trainit_motion_runtime SHARED
   src/grasp_candidates.cpp
   # D0.5 (ADR-0030): the execution-event observer (no MoveIt; test_m2_5_seam_scan: kPlain)
   src/execution_events.cpp
+  src/rti_contract.cpp        # P0.a (ADR-0032): the Robot Task Interface vocabulary + export table (pure)
+  src/rti_state_machine.cpp   # P0.a (ADR-0032): the RTI v1 state machine (pure, steady time injected)
+  src/robot_task_server.cpp   # P0.a (ADR-0032): the RTI's ROS binding (one callback group, one lock, a wall timer)
+  src/runner_stack.cpp        # P0.a: trainit_run_bt's runtime stack, factored (shared with trainit_task_server)
+  src/bt_job_executor.cpp     # P0.a (ADR-0032 Decision 11): the task server's job executor
+  src/moveit_runtime_probe.cpp # P0.a (ADR-0032 Decision 5): "ready" on a MoveIt deployment (seam class B)
 )
 target_include_directories(trainit_motion_runtime PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -135,7 +141,8 @@ set_source_files_properties(src/motion_types.cpp src/manual_motion_strategy_sele
 # deprecated declaration used in one of them is a build error, not a warning
 # (test_m2_5_seam_scan counts what the compiler cannot see).
 set_source_files_properties(src/bt_nodes.cpp src/task_runner.cpp src/trainit_run_bt_node.cpp
-  src/trainit_run_task_node.cpp PROPERTIES COMPILE_OPTIONS "-Werror=deprecated-declarations")
+  src/trainit_run_task_node.cpp src/runner_stack.cpp src/bt_job_executor.cpp src/trainit_task_server_node.cpp
+  PROPERTIES COMPILE_OPTIONS "-Werror=deprecated-declarations")
 
 # --- install -----------------------------------------------------------------
 install(DIRECTORY include/ DESTINATION include)
@@ -177,6 +184,27 @@ else()
   message(STATUS "[trainit_motion_runtime] Groot2 live monitor DISABLED (no libzmq).")
 endif()
 install(TARGETS trainit_run_bt DESTINATION lib/${PROJECT_NAME})
+
+# P0.a (ADR-0032 Decision 11): the RobotTaskServer -- one process serves a robot's EXPORTED tasks to ONE machine master
+# over the Robot Task Interface v1 (one run per job), sharing trainit_run_bt's runtime stack. trainit_run_bt unchanged.
+add_executable(trainit_task_server src/trainit_task_server_node.cpp)
+target_link_libraries(trainit_task_server trainit_motion_runtime)
+link_btcpp(trainit_task_server)
+ament_target_dependencies(trainit_task_server rclcpp)
+install(TARGETS trainit_task_server DESTINATION lib/${PROJECT_NAME})
+# P0.a (ADR-0032 Decision 10a): the FAKE PLC -- the RTI's reference requester as a command line (a test /
+# commissioning tool; never a machine master in production, never started by TSA).
+# P0.a (ADR-0032 Decision 10a): the REFERENCE REQUESTER -- the fake PLC's logic, a test / commissioning tool -- in a
+# library of its own: the runtime library (what a robot application links) never contains a requester. Installed
+# for the fake PLC executable, not exported.
+add_library(trainit_rti_reference_requester SHARED src/reference_requester.cpp)
+target_link_libraries(trainit_rti_reference_requester trainit_motion_runtime)
+ament_target_dependencies(trainit_rti_reference_requester rclcpp trainit_interfaces)
+install(TARGETS trainit_rti_reference_requester LIBRARY DESTINATION lib ARCHIVE DESTINATION lib RUNTIME DESTINATION bin)
+add_executable(trainit_fake_plc src/trainit_fake_plc_node.cpp)
+target_link_libraries(trainit_fake_plc trainit_rti_reference_requester trainit_motion_runtime)
+ament_target_dependencies(trainit_fake_plc rclcpp)
+install(TARGETS trainit_fake_plc DESTINATION lib/${PROJECT_NAME})
 
 # --- generic scene loader (box|cylinder|sphere|mesh -> planning scene) --------
 # Standalone node (no BT, no runtime lib); used by the config-phase
@@ -306,6 +334,19 @@ if(BUILD_TESTING)
   # DetectObject's write path TICKED against a live detector (node + subscription +
   # TF), so the blackboard contract the rest of the system reads is executed, not
   # assumed. 20 s is the pub/sub discovery allowance, not the expected duration.
+  # P0.a (ADR-0032): the pure Robot Task Interface state machine, a fake steady clock -- every rule and race order
+  ament_add_gtest(test_p0a_rti_state_machine test/test_p0a_rti_state_machine.cpp TIMEOUT 60)
+  target_link_libraries(test_p0a_rti_state_machine trainit_motion_runtime)
+  # P0.a (ADR-0032): the frozen matrix's S cases end to end through the ROS binding (scripted executor + probe,
+  # the reference requester). Domain 75, localhost only.
+  ament_add_gtest(test_p0a_rti_server test/test_p0a_rti_server.cpp TIMEOUT 600 SKIP_LINKING_MAIN_LIBRARIES
+    ENV ROS_DOMAIN_ID=75 ROS_LOCALHOST_ONLY=1 RMW_IMPLEMENTATION=rmw_fastrtps_cpp)
+  target_link_libraries(test_p0a_rti_server trainit_rti_reference_requester trainit_motion_runtime)
+  set_tests_properties(test_p0a_rti_server PROPERTIES RESOURCE_LOCK trainit_p0a_domain_75)
+  # P0.a (assumption A7): the seeded held state reaches a task's holding port and its post-condition the root entry
+  ament_add_gtest(test_p0a_held_seed test/test_p0a_held_seed.cpp TIMEOUT 30)
+  target_link_libraries(test_p0a_held_seed trainit_motion_runtime)
+  link_btcpp(test_p0a_held_seed)
   ament_add_gtest(test_detect_object_tick test/test_detect_object_tick.cpp TIMEOUT 20)
   target_link_libraries(test_detect_object_tick trainit_motion_runtime)
   link_btcpp(test_detect_object_tick)
@@ -433,6 +474,21 @@ if(BUILD_TESTING)
   # its expected dump, the token file and the reference normaliser, plus this repository's
   # mutation table (every expected column computed by the reference) and the canonical
   # bin-picking tree TSA will pin its generated bytes to. Harness helpers: test/m2_6/eef_after_*.hpp.
+  # P0.a (ADR-0032): the frozen matrix's R cases -- the real trainit_task_server (and trainit_run_bt for B2) as child
+  # processes on the TSA-generated served fixture, the fakes and the reference requester in-process. Domain 77.
+  find_package(rosgraph_msgs REQUIRED)
+  trainit_m26_test(test_p0a_task_server 77 1800 test_p0a_task_server)
+  file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/p0a_actual)
+  target_compile_definitions(test_p0a_task_server PRIVATE
+    TRAINIT_TASK_SERVER_EXE="$<TARGET_FILE:trainit_task_server>"
+    TRAINIT_FAKE_PLC_EXE="$<TARGET_FILE:trainit_fake_plc>"
+    TRAINIT_P0A_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/data/p0a"
+    TRAINIT_P0A_ACTUAL_DIR="${CMAKE_CURRENT_BINARY_DIR}/p0a_actual"
+    TRAINIT_M26_CONTRACT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/data/m2_6_contract"
+    TRAINIT_M26_SCRATCH_DIR="${CMAKE_CURRENT_BINARY_DIR}/p0a_actual")
+  ament_target_dependencies(test_p0a_task_server rosgraph_msgs)
+  add_dependencies(test_p0a_task_server trainit_task_server trainit_fake_plc)
+  target_link_libraries(test_p0a_task_server trainit_rti_reference_requester)
   set(_m26c ${CMAKE_CURRENT_SOURCE_DIR}/test/data/m2_6_contract)
   function(trainit_m26_pure_test name timeout)
     file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/m2_6_actual)

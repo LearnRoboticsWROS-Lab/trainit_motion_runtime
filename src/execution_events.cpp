@@ -150,13 +150,20 @@ ExecutionEventPublisher::Msg ExecutionEventPublisher::base(uint8_t kind, const I
   return m;
 }
 
-void ExecutionEventPublisher::emit(Msg m)
+void ExecutionEventPublisher::setJob(uint32_t job_id)
+{
+  const std::lock_guard<std::mutex> lock(mutex_);
+  job_id_ = job_id;
+}
+
+void ExecutionEventPublisher::emit(Msg m, bool keep_stamp)
 {
   if (ended_) return;                                       // nothing after RUN_ENDED
   try
   {
-    m.header.stamp = clock_();
+    if (!keep_stamp) m.header.stamp = clock_();
     m.run_id = run_id_;
+    m.job_id = job_id_;
     m.seq = seq_ + 1;
     sink_(m);
     seq_ = m.seq;
@@ -204,6 +211,7 @@ void ExecutionEventPublisher::enter(const BT::TreeNode* node, const Info& info)
     candidateOf(info, m);
   }
   active_.push_back(node);
+  if (job_id_ != 0 && info.is_task && root_task_ == nullptr) root_task_ = node;   // job mode: the exported task
   emit(std::move(m));
 }
 
@@ -219,6 +227,21 @@ void ExecutionEventPublisher::exit(const BT::TreeNode* node, const Info& info, u
   }
   const auto at = std::find(active_.rbegin(), active_.rend(), node);
   if (at != active_.rend()) active_.erase(std::next(at).base());
+  if (job_id_ != 0 && node == root_task_)
+  {
+    // job mode: held until runEnded gives it the job's result_code; stamped NOW (when the task really exited)
+    try
+    {
+      m.header.stamp = clock_();
+    }
+    catch (...)
+    {
+      ++dropped_;
+    }
+    if (deferred_exit_) emit(std::move(*deferred_exit_), true);   // never in a generated job tree: kept, not lost
+    deferred_exit_ = std::move(m);
+    return;
+  }
   emit(std::move(m));
 }
 
@@ -256,7 +279,7 @@ void ExecutionEventPublisher::runStarted()
   emit(base(Msg::RUN_STARTED, Info{}));
 }
 
-void ExecutionEventPublisher::runEnded(BT::NodeStatus final_status, bool interrupted)
+void ExecutionEventPublisher::runEnded(BT::NodeStatus final_status, bool interrupted, uint16_t result_code)
 {
   const std::lock_guard<std::mutex> lock(mutex_);
   if (ended_) return;
@@ -269,7 +292,14 @@ void ExecutionEventPublisher::runEnded(BT::NodeStatus final_status, bool interru
       exit(node, info_.at(node), Msg::HALTED);
     }
   }
+  if (deferred_exit_)
+  {
+    deferred_exit_->result_code = result_code;   // ADR-0030 Amendment P0: the exported task's exit carries it
+    emit(std::move(*deferred_exit_), true);
+    deferred_exit_.reset();
+  }
   Msg m = base(Msg::RUN_ENDED, Info{});
+  m.result_code = result_code;
   m.status = interrupted ? Msg::HALTED
            : final_status == BT::NodeStatus::SUCCESS ? Msg::SUCCEEDED : Msg::FAILED;
   emit(std::move(m));

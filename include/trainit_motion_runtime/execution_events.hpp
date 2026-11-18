@@ -105,7 +105,14 @@ public:
   ~ExecutionEventPublisher() override;
 
   void runStarted();
-  void runEnded(BT::NodeStatus final_status, bool interrupted);
+  // `result_code`: the job's (ADR-0030 Amendment P0) on RUN_ENDED -- and on the deferred root-task exit in job mode;
+  // 0 for trainit_run_bt's one-shot run (unchanged).
+  void runEnded(BT::NodeStatus final_status, bool interrupted, uint16_t result_code = 0);
+  // JOB MODE (trainit_task_server, ADR-0030 Amendment P0): `job_id` on every event of this run, and the TASK_EXITED of
+  // the run's ROOT task (the first task entered: the exported task) is held until runEnded, which publishes it with
+  // the job's result_code and its ORIGINAL stamp (the moment the task exited). Call before runStarted. A run without
+  // it (job_id 0) is exactly the D0.5 one.
+  void setJob(uint32_t job_id);
   void processDispatched(const ProcessEvent& e);
   const std::string& runId() const { return run_id_; }
   uint64_t dropped() const { return dropped_; }   // events lost to an error while observing or publishing
@@ -123,7 +130,7 @@ private:
     const BT::TreeNode* candidate = nullptr;  // a grasp step's SetWaypointFromCandidate
   };
 
-  void emit(Msg m);                                         // run id, seq, stamp; caller holds mutex_
+  void emit(Msg m, bool keep_stamp = false);                // run id, seq, stamp, job; caller holds mutex_
   void enter(const BT::TreeNode* node, const Info& info);
   void exit(const BT::TreeNode* node, const Info& info, uint8_t status);
   Msg base(uint8_t kind, const Info& info) const;
@@ -140,6 +147,9 @@ private:
   uint64_t seq_ = 0;
   uint64_t dropped_ = 0;
   bool ended_ = false;                                      // RUN_ENDED emitted: nothing after it
+  uint32_t job_id_ = 0;                                     // job mode (0: a one-shot run)
+  const BT::TreeNode* root_task_ = nullptr;                 // job mode: the first task entered
+  std::optional<Msg> deferred_exit_;                        // job mode: the root task's TASK_EXITED, stamped
 };
 
 }  // namespace trainit

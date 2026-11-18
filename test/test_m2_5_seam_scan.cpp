@@ -24,9 +24,12 @@
 namespace
 {
 // The runtime's CONSUMERS: scanned, and built with -Werror=deprecated-declarations.
+// P0.a (ADR-0032 Decision 11): trainit_run_bt's runtime stack, factored (runner_stack.cpp), the second runner that
+// shares it (trainit_task_server) and its job executor are consumers too.
 const std::vector<std::string> kUnits = {
   "src/bt_nodes.cpp", "src/task_runner.cpp", "src/trainit_run_bt_node.cpp",
-  "src/trainit_run_task_node.cpp"};
+  "src/trainit_run_task_node.cpp", "src/runner_stack.cpp", "src/bt_job_executor.cpp",
+  "src/trainit_task_server_node.cpp"};
 
 // Sources with no MoveIt access at all: scanned too (every count must be 0).
 // vNext M2.6 (ADR-0022): the end-effector contract's parser, its two pure tables (the actuator
@@ -42,7 +45,11 @@ const std::vector<std::string> kPlain = {
   // vNext M3.6 (ADR-0026): the grasp-candidate contract (validation, projection, align_approach)
   "src/grasp_candidates.cpp",
   // D0.5 (ADR-0030): the execution-event observer (BehaviorTree status changes, a ROS publisher)
-  "src/execution_events.cpp"};
+  "src/execution_events.cpp",
+  // P0.a (ADR-0032): the Robot Task Interface -- its vocabulary and export table, the pure state machine, its ROS
+  // binding, the reference requester and the fake PLC: robot-task semantics only, never MoveIt (Decision 11)
+  "src/rti_contract.cpp", "src/rti_state_machine.cpp", "src/robot_task_server.cpp", "src/reference_requester.cpp",
+  "src/trainit_fake_plc_node.cpp"};
 
 // Sources that legitimately name MoveIt (ADR-0015 amendment M2.5-4), not scanned.
 const std::map<std::string, std::string> kExempt = {
@@ -57,6 +64,8 @@ const std::map<std::string, std::string> kExempt = {
   {"src/scene_manager_node.cpp", "C: the scene-loading node (planning-scene writes)"},
   {"src/gripper_controller.cpp", "C: end-effector actuation (GripperCommand)"},
   {"src/process_controller.cpp", "C: cell I/O (ADR-0013)"},
+  {"src/moveit_runtime_probe.cpp", "B: the RTI's \"ready\" on a MoveIt deployment: this robot's MoveIt action servers "
+                                   "answer (ADR-0032 Decision 5), as the runners' start-up wait"},
 };
 
 const std::vector<std::string> kCodeNames = {
@@ -247,8 +256,12 @@ TEST(M25SeamScan, the_consumers_depend_on_the_door_not_on_the_concrete_runtime)
     {"src/task_runner.cpp", "\\bMoveItMotionRuntime\\b", 1, "only the compatibility constructor's definition"},
     {"src/task_runner.cpp", "\\bscene\\(\\)", 1, "only in the compatibility constructor"},
     {"src/task_runner.cpp", "\\bnode\\(\\)", 1, "only in the compatibility constructor (its logger)"},
-    {"src/trainit_run_bt_node.cpp", "ctx\\.scene = &runtime->scene\\(\\);", 1,
-     "the BT runner hands the runtime's scene to the context"},
+    {"src/runner_stack.cpp", "ctx\\.scene = &runtime->scene\\(\\);", 1,
+     "the runner stack (trainit_run_bt, trainit_task_server) hands the runtime's scene to the context"},
+    {"src/trainit_run_bt_node.cpp", "\\bRunnerStack\\b", 1, "the BT runner builds its stack from RunnerStack"},
+    {"src/trainit_task_server_node.cpp", "\\bRunnerStack\\b", 1, "the task server builds the SAME stack"},
+    {"src/trainit_task_server_node.cpp", "\\bMoveItMotionRuntime\\b", 0,
+     "the task server names only the door (its MoveIt probe is moveit_runtime_probe.cpp)"},
     {"src/trainit_run_task_node.cpp",
      "TaskRunner runner\\(\\*runtime, runtime->scene\\(\\), node->get_logger\\(\\),", 1,
      "the task runner is built from the door, the scene and the logger"},

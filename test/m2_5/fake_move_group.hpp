@@ -196,6 +196,19 @@ template <typename ActionT>
 using GoalHandle = rclcpp_action::ServerGoalHandle<ActionT>;
 
 // --- the fake move_group, one per namespace ------------------------------------------------------------
+// P0.a: the error code of an action result, wherever its type keeps it (MoveGroup / ExecuteTrajectory: error_code;
+// MoveGroupSequence: response.error_code)
+template <typename R>
+auto setCode(R& r, int c, int) -> decltype(r.error_code.val = c, void())
+{
+  r.error_code.val = c;
+}
+template <typename R>
+auto setCode(R& r, int c, long) -> decltype(r.response.error_code.val = c, void())
+{
+  r.response.error_code.val = c;
+}
+
 class FakeMoveGroup
 {
 public:
@@ -279,9 +292,20 @@ public:
   // Finish every held goal (HOLD) with ABORT.
   void releaseHeld()
   {
-    std::vector<std::function<void()>> pending;
+    std::vector<std::function<void(std::optional<int>)>> pending;
     { std::lock_guard<std::mutex> g(held_m_); pending.swap(held_); }
-    for (auto& f : pending) f();
+    for (auto& f : pending) f(std::nullopt);
+  }
+
+  // P0.a: what a real move_group does when its trajectory_execution_event says "stop" -- every execution in flight
+  // ends, its result carrying PREEMPTED. Off by default (every committed capture holds through a stop, M3.4).
+  bool stop_releases_held{false};
+  int stops_heard() const { return stops_heard_.load(); }
+  // P0.a: the goals HELD now (an execution in flight at the controller)
+  std::size_t heldCount() const
+  {
+    std::lock_guard<std::mutex> g(held_m_);
+    return held_.size();
   }
 
   std::string scriptText() const
@@ -347,7 +371,8 @@ private:
       case Reply::Status::HOLD:
       {
         std::lock_guard<std::mutex> g(held_m_);
-        held_.push_back([h, res] {
+        held_.push_back([h, res](std::optional<int> code) {
+          if (code) setCode(*res, *code, 0);        // P0.a: stopped -> PREEMPTED
           if (h->is_canceling()) h->canceled(res);   // its client asked (vNext M3.4)
           else if (h->is_active()) h->abort(res);
         });
@@ -537,7 +562,19 @@ private:
     const std::string ev = resolvedName(node_, "trajectory_execution_event", false);
     event_sub_ = node_->create_subscription<std_msgs::msg::String>(
       "trajectory_execution_event", rclcpp::SystemDefaultsQoS(),
-      [this, ev](std_msgs::msg::String::ConstSharedPtr m) { log_.topic(ev, "String: " + m->data, ""); },
+      [this, ev](std_msgs::msg::String::ConstSharedPtr m) {
+        log_.topic(ev, "String: " + m->data, "");
+        if (m->data == "stop")
+        {
+          ++stops_heard_;
+          if (stop_releases_held)
+          {
+            std::vector<std::function<void(std::optional<int>)>> pending;
+            { std::lock_guard<std::mutex> g(held_m_); pending.swap(held_); }
+            for (auto& f : pending) f(ErrorCodes::PREEMPTED);
+          }
+        }
+      },
       so);
     const std::string aco = resolvedName(node_, "attached_collision_object", false);
     aco_sub_ = node_->create_subscription<moveit_msgs::msg::AttachedCollisionObject>(
@@ -570,10 +607,11 @@ private:
   rclcpp::Subscription<moveit_msgs::msg::AttachedCollisionObject>::SharedPtr aco_sub_;
   rclcpp::Subscription<moveit_msgs::msg::PlanningScene>::SharedPtr scene_sub_;
   mutable std::mutex script_m_;
-  std::mutex held_m_;
+  mutable std::mutex held_m_;
   mutable std::mutex goals_m_;
   std::vector<moveit_msgs::msg::MotionPlanRequest> mg_goals_;
-  std::vector<std::function<void()>> held_;
+  std::vector<std::function<void(std::optional<int>)>> held_;
+  std::atomic<int> stops_heard_{0};
   std::atomic<int> mg_ordinal_{0}, seq_ordinal_{0}, cart_ordinal_{0};
 };
 

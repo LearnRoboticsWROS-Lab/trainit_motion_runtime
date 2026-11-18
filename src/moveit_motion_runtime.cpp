@@ -241,7 +241,8 @@ std::vector<std::string> MoveItMotionRuntime::crossNamespaceRemaps(const rclcpp:
 }
 
 std::vector<std::string> MoveItMotionRuntime::crossNamespaceRemaps(const rclcpp::Node::SharedPtr& node,
-                                                                   const eef::Contract& contract)
+                                                                   const eef::Contract& contract,
+                                                                   const std::vector<std::string>& extra_topics)
 {
   ScopedIds ids = runnerIds();
   // D0.5 (ADR-0030): the run's execution events (a publisher; execution_events.hpp kExecutionEventsTopic,
@@ -256,6 +257,7 @@ std::vector<std::string> MoveItMotionRuntime::crossNamespaceRemaps(const rclcpp:
     if (e.kind == EefEndpoint::Kind::ACTION) addActionEntities(ids, e.name);
     else ids.emplace_back(e.name, e.kind == EefEndpoint::Kind::SERVICE);
   }
+  for (const auto& topic : extra_topics) ids.emplace_back(topic, false);
   return remapsOutOf(node, ids);
 }
 

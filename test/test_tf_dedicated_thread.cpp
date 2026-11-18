@@ -1,4 +1,5 @@
-// ROS2ML-SYNC D3 (TMR 2.6.1): a static scan of the BT runner. Its tf2 Buffer is filled by the executor's
+// ROS2ML-SYNC D3 (TMR 2.6.1): a static scan of the BT runner's stack (P0.a: factored into runner_stack.cpp, which
+// trainit_run_bt and trainit_task_server both build -- pinned by test_m2_5_seam_scan). Its tf2 Buffer is filled by the executor's
 // spinner thread while the tree ticks on the main one (the listener is built with spin_thread=false), so
 // the buffer must be told so: without setUsingDedicatedThread(true) tf2 refuses every lookup timeout --
 // it logs an error and answers at once instead of waiting (seen on the ROS2ML course cell, whose current
@@ -25,7 +26,7 @@ std::string code(const std::string& rel)
 
 TEST(TfDedicatedThread, TheRunnersBufferIsToldTheSpinnerFillsIt)
 {
-  const std::string src = code("src/trainit_run_bt_node.cpp");
+  const std::string src = code("src/runner_stack.cpp");
   ASSERT_FALSE(src.empty());
   const std::regex listener(R"(TransformListener>\(\s*\*\s*(\w+)\s*,\s*\w+\s*,\s*false\s*\))");
   int listeners = 0;
@@ -42,7 +43,7 @@ TEST(TfDedicatedThread, TheRunnersBufferIsToldTheSpinnerFillsIt)
   // the premise of the flag: the executor holds the node and its spinner thread runs BEFORE the buffer
   const auto buffer_at = src.find("std::make_shared<tf2_ros::Buffer>");
   ASSERT_NE(buffer_at, std::string::npos);
-  for (const char* before_buffer : {"exec.add_node(node)", "std::thread spinner"})
+  for (const char* before_buffer : {"exec->add_node(node)", "spinner = std::thread"})
   {
     const auto at = src.find(before_buffer);
     EXPECT_NE(at, std::string::npos) << before_buffer;
