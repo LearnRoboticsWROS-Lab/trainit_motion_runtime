@@ -70,7 +70,8 @@ std::optional<StepTag> parseStepName(const std::string& name);
 std::optional<std::string> taskOfTreeId(const std::string& tree_id);
 // "run-<UTC YYYYmmddTHHMMSSZ>-<8 hex>", from the wall clock and a random draw.
 std::string makeRunId();
-// process_on | process_off | set_value | external (the canonical model's vocabulary) and the event's value.
+// process_on | process_off | set_value | external | request (the canonical model's vocabulary; `request`: P0.b, a
+// machine request the machine-channel registry wrote) and the event's value.
 std::pair<std::string, double> processKindAndValue(const ProcessEvent& e);
 
 // The process controller the nodes call, reporting every DISPATCHED event to `observer` (a dispatch the

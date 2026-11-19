@@ -34,9 +34,14 @@ ReferenceRequester::ReferenceRequester(const rclcpp::Node::SharedPtr& node, Opti
 {
   image_.requester_session = options_.session != 0 ? options_.session : randomSession();
   pub_ = node_->create_publisher<CommandMsg>(options_.command_topic, rtiQos());
-  sub_ = node_->create_subscription<StatusMsg>(options_.status_topic, rtiQos(),
+  sub_ = node_->create_subscription<StatusMsg>(options_.status_topic, statusReaderQos(),
                                                 [this](const StatusMsg::SharedPtr m) { onStatus(*m); });
   timer_ = node_->create_wall_timer(options_.period, [this]() { onTimer(); });
+}
+
+rclcpp::QoS ReferenceRequester::statusReaderQos()
+{
+  return rclcpp::QoS(rclcpp::KeepLast(20)).reliable().transient_local();
 }
 
 ReferenceRequester::~ReferenceRequester()
@@ -160,9 +165,11 @@ void ReferenceRequester::onStatus(const StatusMsg& m)
     const bool state_changed = !prev || prev->state != m.state || prev->server_session != m.server_session;
     const bool result_changed = !prev || prev->job_id != m.job_id || prev->result != m.result ||
                                 prev->result_code != m.result_code;
+    // P0.b (D5): the result's detail (a machine step's plain words: MACHINE turner TIMEOUT -- ...) on the same line
     if (result_changed && m.result != StatusMsg::RESULT_NONE)
       lines.push_back("Job " + std::to_string(m.job_id) + " (" + m.task_name + ") finished: " +
-                      resultName(static_cast<Result>(m.result)) + " " + codeText(m.result_code));
+                      resultName(static_cast<Result>(m.result)) + " " + codeText(m.result_code) +
+                      (m.detail.empty() ? std::string() : " -- " + m.detail));
     if (state_changed)
     {
       switch (m.state)
@@ -182,6 +189,12 @@ void ReferenceRequester::onStatus(const StatusMsg& m)
         default: break;
       }
     }
+    // P0.b (D5): what the RUNNING job shows (a machine step: WAITING FOR MACHINE ..., MACHINE turner BUSY ...), printed
+    // on every change of the detail -- the job never looks hung
+    if (m.state == StatusMsg::STATE_RUNNING && !m.detail.empty() &&
+        (!prev || prev->state != StatusMsg::STATE_RUNNING || prev->server_session != m.server_session ||
+         prev->job_id != m.job_id || prev->detail != m.detail))
+      lines.push_back("Robot busy: job " + std::to_string(m.job_id) + ": " + m.detail);
   }
   cv_.notify_all();
   for (const auto& l : lines) say(l);

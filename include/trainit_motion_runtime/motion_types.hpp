@@ -67,12 +67,16 @@ enum class ProcessSegmentType
 };
 
 // --- Process I/O event kind (Section 10) -------------------------------------
+// REQUEST (P0.b, ADR-0030): a machine-service request actually written by the machine-channel registry
+// (machine_channels.hpp), reported as the execution event of process kind `request`. It is NOT a process output:
+// both process controllers refuse it (the handshake never goes through the ProcessController, D2).
 enum class ProcessEventType
 {
   ENABLE_PROCESS,
   DISABLE_PROCESS,
   TRIGGER,
-  SET_ANALOG_VALUE
+  SET_ANALOG_VALUE,
+  REQUEST
 };
 
 // --- Planner profile: the concrete pipeline/planner a selector resolves to ---

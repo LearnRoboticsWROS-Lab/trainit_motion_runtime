@@ -80,6 +80,10 @@ public:
   // The job `counter` returned (called by the executor, from its thread). Returns the decided result code, or
   // nullopt when the report is not the current job's (ignored).
   std::optional<Decided> jobEnded(uint64_t counter, const JobEnd& end);
+  // P0.b (D5): the job `counter`'s activity (called by the executor's tick thread, through the machine-channel
+  // registry's activity sink): under the ONE lock, StateMachine::onActivity; on a change, one `RTI: job N: <text>` log
+  // line and the status published at once (ADR-0032 Decision 8a.1: every input under one lock).
+  void jobActivity(uint64_t counter, const std::string& text);
 
   uint32_t session() const { return session_; }
   // The ExecutionEvent run id of the job `counter`: "<server_session as 8 hex>-<counter>" (ADR-0030 Amendment P0).

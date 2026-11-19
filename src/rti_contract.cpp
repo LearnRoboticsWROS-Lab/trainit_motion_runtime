@@ -86,6 +86,7 @@ const char* codeName(uint16_t c)
     case code::STATION_UNAVAILABLE: return "STATION_UNAVAILABLE";
     case code::SERVER_STARTED: return "SERVER_STARTED";
     case code::REQUESTER_CONFLICT: return "REQUESTER_CONFLICT";
+    case code::STATION_BUSY: return "STATION_BUSY";
     case code::INVALID_REQUEST: return "INVALID_REQUEST";
     case code::UNKNOWN_TASK: return "UNKNOWN_TASK";
     case code::BUSY: return "BUSY";

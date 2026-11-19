@@ -11,7 +11,10 @@
 //   - stop: requestStop() (from the RTI's callback) calls MotionRuntime::stop() at once and the tick thread halts the
 //     tree as soon as the current tick returns; a stop is applied only to the job it names (its counter);
 //   - the end: the tree's status, `trainit__outcome`, `trainit__holding`, the fault gate's reason
-//     (`trainit__fault`) and whether an end-effector fault was latched during the job -> RobotTaskServer::jobEnded.
+//     (`trainit__fault`) and whether an end-effector fault was latched during the job -> RobotTaskServer::jobEnded;
+//   - P0.b: the machine-channel registry's JOB scope begins before RUN_STARTED (this job's outstanding requests, its
+//     machine failure latch, its activity sink -> RobotTaskServer::jobActivity); the job's machine failure (its
+//     STATION code and text) is read into the end (D3).
 // Anything that escapes a job (an exception outside the tree's own catch) FAILS that job, held state UNKNOWN.
 // The runtime probe is MoveItRuntimeProbe (moveit_runtime_probe.hpp).
 // =============================================================================

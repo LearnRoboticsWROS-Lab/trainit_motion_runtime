@@ -16,7 +16,9 @@ find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(control_msgs REQUIRED)
 find_package(trajectory_msgs REQUIRED)      # ADR-0022: an EEF axis goal (FollowJointTrajectory)
-find_package(trainit_interfaces 0.4.0 REQUIRED)   # ADR-0022: EndEffectorState (TMR 2.0.0); ADR-0026: GraspCandidate (2.5.0)
+# ADR-0022: EndEffectorState (TMR 2.0.0); ADR-0026: GraspCandidate (2.5.0); P0.b: ChannelRequest / ChannelStatus,
+# CODE_STATION_BUSY 313 (0.5.0, TMR 2.11.0)
+find_package(trainit_interfaces 0.5.0 REQUIRED)
 find_package(diagnostic_msgs REQUIRED)   # ADR-0026: a grasp candidate's metadata
 find_package(shape_msgs REQUIRED)
 find_package(moveit_core REQUIRED)
@@ -124,6 +126,11 @@ add_library(trainit_motion_runtime SHARED
   src/runner_stack.cpp        # P0.a: trainit_run_bt's runtime stack, factored (shared with trainit_task_server)
   src/bt_job_executor.cpp     # P0.a (ADR-0032 Decision 11): the task server's job executor
   src/moveit_runtime_probe.cpp # P0.a (ADR-0032 Decision 5): "ready" on a MoveIt deployment (seam class B)
+  # P0.b (P0B_DESIGN §3.4): the machine handshake -- the robot's pure rules, the per-process channel registry (ROS),
+  # the two StatefulActionNodes RequestMachine / WaitForMachine (all MoveIt-free; test_m2_5_seam_scan: kPlain)
+  src/machine_channel.cpp
+  src/machine_channels.cpp
+  src/machine_nodes.cpp
 )
 target_include_directories(trainit_motion_runtime PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -347,6 +354,16 @@ if(BUILD_TESTING)
   ament_add_gtest(test_p0a_held_seed test/test_p0a_held_seed.cpp TIMEOUT 30)
   target_link_libraries(test_p0a_held_seed trainit_motion_runtime)
   link_btcpp(test_p0a_held_seed)
+  # P0.b (P0B_DESIGN §3.4): the robot's machine-handshake rules, PURE with an injected steady time (U): every row of the
+  # request / wait-done / wait-ready decision tables in their order (the ready-wait's D19 amendment, PB-P24), liveness
+  # (§3.4 LIVE, D8), the wait's clock (D10), the seq wrap (PB-P6), the user-facing texts
+  ament_add_gtest(test_p0b_channel_rules test/test_p0b_channel_rules.cpp TIMEOUT 60)
+  target_link_libraries(test_p0b_channel_rules trainit_motion_runtime)
+  target_compile_definitions(test_p0b_channel_rules PRIVATE TRAINIT_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+  # P0.b: the RTI's side, PURE: the RUNNING job's activity -> detail (D5), the STATION code's precedence (D3) against the
+  # causes, the outcomes and an end-effector fault, 313 appended
+  ament_add_gtest(test_p0b_rti test/test_p0b_rti.cpp TIMEOUT 60)
+  target_link_libraries(test_p0b_rti trainit_motion_runtime)
   ament_add_gtest(test_detect_object_tick test/test_detect_object_tick.cpp TIMEOUT 20)
   target_link_libraries(test_detect_object_tick trainit_motion_runtime)
   link_btcpp(test_detect_object_tick)
@@ -485,10 +502,24 @@ if(BUILD_TESTING)
     TRAINIT_P0A_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/data/p0a"
     TRAINIT_P0A_ACTUAL_DIR="${CMAKE_CURRENT_BINARY_DIR}/p0a_actual"
     TRAINIT_M26_CONTRACT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/data/m2_6_contract"
-    TRAINIT_M26_SCRATCH_DIR="${CMAKE_CURRENT_BINARY_DIR}/p0a_actual")
+    TRAINIT_M26_SCRATCH_DIR="${CMAKE_CURRENT_BINARY_DIR}/p0a_actual"
+    # P0.b: the runners' machine-handshake wiring (a hand-written fixture, not a TSA golden; test/p0b/)
+    TRAINIT_P0B_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/data/p0b")
   ament_target_dependencies(test_p0a_task_server rosgraph_msgs)
   add_dependencies(test_p0a_task_server trainit_task_server trainit_fake_plc)
   target_link_libraries(test_p0a_task_server trainit_rti_reference_requester)
+  # P0.b (P0B_DESIGN §3.4, the frozen matrix's S cases): RequestMachine / WaitForMachine ticked in process against a
+  # SCRIPTED status source implementing §3.3 (timed cycle, fault, freeze, restart, a second publisher, ...), the real
+  # registry, the RTI's activity path and the reference requester's lines. Domain 95, localhost only; CL2 / CL3
+  # publish /clock at 0.5x. Each test is named after its case; its timings are test properties.
+  ament_add_gtest(test_p0b_machine_nodes test/test_p0b_machine_nodes.cpp TIMEOUT 1200 SKIP_LINKING_MAIN_LIBRARIES
+    ENV ROS_DOMAIN_ID=95 ROS_LOCALHOST_ONLY=1 RMW_IMPLEMENTATION=rmw_fastrtps_cpp)
+  target_link_libraries(test_p0b_machine_nodes trainit_rti_reference_requester trainit_motion_runtime)
+  link_btcpp(test_p0b_machine_nodes)
+  ament_target_dependencies(test_p0b_machine_nodes rosgraph_msgs)
+  target_compile_definitions(test_p0b_machine_nodes PRIVATE TRAINIT_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+  target_include_directories(test_p0b_machine_nodes PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/test)   # p0b/scripted_source.hpp
+  set_tests_properties(test_p0b_machine_nodes PROPERTIES RESOURCE_LOCK trainit_p0b_domain_95)
   set(_m26c ${CMAKE_CURRENT_SOURCE_DIR}/test/data/m2_6_contract)
   function(trainit_m26_pure_test name timeout)
     file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/m2_6_actual)

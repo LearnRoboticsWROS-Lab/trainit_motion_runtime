@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- TMR's P0.b RUNNER fixture (test_p0a_task_server, the P0.b section): HAND-WRITTEN in the shape TSA generates (the
+     TSA/TMR contract of P0B_IMPLEMENTATION_PLAN.md, under faults: stop); NOT a TSA golden. Machine steps only, no
+     motion: it proves the runners' wiring of the machine handshake (the prepare visitor, the remap check, the start
+     diagnostic, the job scope, the RTI activity, the station code, the execution events). `turn` asks the served
+     machine service `turner`; `turn_typo` names `turnr`, a service no source serves (PB-P8). -->
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <SubTree ID="task_turn" _autoremap="true"/>
+  </BehaviorTree>
+  <BehaviorTree ID="task_turn">
+    <Sequence>
+      <Sequence name="trainit_step:ask_turn:process"><RequestMachine channel="turner" fault="{trainit__fault}"/></Sequence>
+      <Sequence name="trainit_step:turned:wait"><WaitForMachine channel="turner" for="done" timeout_ms="8000" fault="{trainit__fault}"/></Sequence>
+      <Sequence name="trainit_step:may_load:wait"><WaitForMachine channel="turner" for="ready" timeout_ms="2000" fault="{trainit__fault}"/></Sequence>
+    </Sequence>
+  </BehaviorTree>
+  <BehaviorTree ID="task_turn_typo">
+    <Sequence>
+      <Sequence name="trainit_step:ask_typo:process"><RequestMachine channel="turnr" fault="{trainit__fault}"/></Sequence>
+      <Sequence name="trainit_step:typo_done:wait"><WaitForMachine channel="turnr" for="done" timeout_ms="8000" fault="{trainit__fault}"/></Sequence>
+    </Sequence>
+  </BehaviorTree>
+  <BehaviorTree ID="job_turn">
+    <Sequence>
+      <Script code="trainit__fault := ''"/>
+      <Fallback>
+        <SubTree ID="task_turn" _autoremap="true"/>
+        <Sequence _failureIf="trainit__fault == ''">
+          <Log message="FAULT: the run stops (application.faults: stop), never retried or recovered; the reason follows"/>
+          <Log message="{trainit__fault}"/>
+          <AlwaysFailure/>
+        </Sequence>
+      </Fallback>
+    </Sequence>
+  </BehaviorTree>
+  <BehaviorTree ID="job_turn_typo">
+    <Sequence>
+      <Script code="trainit__fault := ''"/>
+      <Fallback>
+        <SubTree ID="task_turn_typo" _autoremap="true"/>
+        <Sequence _failureIf="trainit__fault == ''">
+          <Log message="FAULT: the run stops (application.faults: stop), never retried or recovered; the reason follows"/>
+          <Log message="{trainit__fault}"/>
+          <AlwaysFailure/>
+        </Sequence>
+      </Fallback>
+    </Sequence>
+  </BehaviorTree>
+</root>

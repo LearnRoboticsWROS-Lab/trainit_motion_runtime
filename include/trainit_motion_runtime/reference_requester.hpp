@@ -82,6 +82,11 @@ public:
 
   ReferenceRequester(const rclcpp::Node::SharedPtr& node, Options options);
   ~ReferenceRequester();
+  // The status READER's QoS: RELIABLE, TRANSIENT_LOCAL, a KEEP_LAST 20 history -- QoS-compatible with the server's
+  // depth-1 writer (the wire unchanged): two statuses that arrive between two executor deliveries are both handled in
+  // order, so a RUNNING detail the job leaves within a millisecond (a ready-wait that is ready at once, then the
+  // result) is still printed (P0.b O1). The command image stays depth 1 (level-held).
+  static rclcpp::QoS statusReaderQos();
   ReferenceRequester(const ReferenceRequester&) = delete;
   ReferenceRequester& operator=(const ReferenceRequester&) = delete;
 
@@ -103,7 +108,8 @@ public:
   View view(uint32_t job_id) const;
   // Waits until `pred` holds for the latest status (true), or `timeout` passes (false).
   bool waitFor(const std::function<bool(const StatusMsg&)>& pred, std::chrono::milliseconds timeout) const;
-  // Plain-words transitions (the fake PLC prints them): "Robot needs reset (server started)", "Robot ready", ...
+  // Plain-words transitions (the fake PLC prints them): "Robot needs reset (server started)", "Robot ready", ...;
+  // P0.b: every change of a RUNNING job's detail ("Robot busy: job N: <detail>") and a result's detail.
   void setObserver(std::function<void(const std::string&)> observer);
 
 private:

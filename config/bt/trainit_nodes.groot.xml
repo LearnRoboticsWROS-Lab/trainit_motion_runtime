@@ -279,6 +279,20 @@
       <input_port name="site" default=""/>
       <output_port name="reason"/>
     </Action>
+    <!-- P0.b (P0B_DESIGN §3.4): the machine handshake on a LOGICAL machine service: a NEW request (it synchronises
+         with the service's status, then writes it or fails: STATION_UNAVAILABLE 310 / STATION_FAULT 306 /
+         STATION_BUSY 313), and the wait for its DONE, or for the machine READY (STATION_TIMEOUT 305 on the runner's
+         clock). StatefulActionNodes: RUNNING while they wait, halted at once. -->
+    <Action ID="RequestMachine">
+      <input_port name="channel">a logical machine service id (never a topic, a PLC address or an I/O)</input_port>
+      <output_port name="fault">on FAILURE: MACHINE &lt;service&gt; FAULT / UNAVAILABLE (its STATION code)</output_port>
+    </Action>
+    <Action ID="WaitForMachine">
+      <input_port name="channel">a logical machine service id (never a topic, a PLC address or an I/O)</input_port>
+      <input_port name="for">done | ready</input_port>
+      <input_port name="timeout_ms">the wait's bound on the runner's clock: an integer 1..600000 (no default)</input_port>
+      <output_port name="fault">on FAILURE: MACHINE &lt;service&gt; FAULT / TIMEOUT / UNAVAILABLE (its STATION code)</output_port>
+    </Action>
     <Action ID="Wait">
       <input_port name="duration_ms" default="100"/>
     </Action>

@@ -35,7 +35,10 @@ const std::vector<std::string> kNewSources = {
   "src/motion_failure.cpp", "include/trainit_motion_runtime/motion_failure.hpp",
   // vNext M3.1 (ADR-0024, ADR-0025): the provider table and the path library, the same rules
   "src/motion_providers.cpp", "include/trainit_motion_runtime/motion_providers.hpp",
-  "src/path_library.cpp", "include/trainit_motion_runtime/path_library.hpp"};
+  "src/path_library.cpp", "include/trainit_motion_runtime/path_library.hpp",
+  // P0.b (ADR-0023): the machine handshake's sources -- every name relative to the runner, no function-static
+  "src/machine_channel.cpp", "include/trainit_motion_runtime/machine_channel.hpp", "src/machine_channels.cpp",
+  "src/machine_nodes.cpp"};
 
 std::string read(const std::string& rel)
 {

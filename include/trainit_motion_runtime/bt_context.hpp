@@ -29,6 +29,7 @@ namespace trainit
 {
 
 class EndEffectorRegistry;   // end_effector_registry.hpp (ADR-0022)
+class MachineChannels;       // machine_channels.hpp (P0.b)
 
 // Blackboard keys.
 inline constexpr const char* BB_BT_CONTEXT      = "trainit_context";
@@ -80,6 +81,12 @@ struct BtContext
   // too; a scene node does not check it (like the motion nodes do not check `runtime`). LAST, so
   // the positional initialisation `BtContext ctx{runtime, gripper, process, node}` still compiles.
   PlanningSceneManager* scene{nullptr};
+  // --- the machine handshake (P0.b, P0B_DESIGN §3.4, decision D2) ------------------------------------------------
+  // The runner's machine-channel registry: what RequestMachine / WaitForMachine read and write (real ROS whatever
+  // `process_controller` says; never the ProcessController). Every runner stack sets it; null in a hand-built
+  // context: a machine node then FAILS (no registry). LAST, so the positional initialisation
+  // `BtContext ctx{runtime, gripper, process, node}` still compiles.
+  MachineChannels* machines{nullptr};
 };
 
 }  // namespace trainit

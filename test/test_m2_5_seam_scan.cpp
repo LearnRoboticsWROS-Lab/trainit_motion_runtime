@@ -49,7 +49,10 @@ const std::vector<std::string> kPlain = {
   // P0.a (ADR-0032): the Robot Task Interface -- its vocabulary and export table, the pure state machine, its ROS
   // binding, the reference requester and the fake PLC: robot-task semantics only, never MoveIt (Decision 11)
   "src/rti_contract.cpp", "src/rti_state_machine.cpp", "src/robot_task_server.cpp", "src/reference_requester.cpp",
-  "src/trainit_fake_plc_node.cpp"};
+  "src/trainit_fake_plc_node.cpp",
+  // P0.b (P0B_DESIGN §3.4): the machine handshake -- the robot's pure rules, the channel registry (a status subscription
+  // and a request publisher per service), the two BT nodes: machine semantics only, never MoveIt
+  "src/machine_channel.cpp", "src/machine_channels.cpp", "src/machine_nodes.cpp"};
 
 // Sources that legitimately name MoveIt (ADR-0015 amendment M2.5-4), not scanned.
 const std::map<std::string, std::string> kExempt = {

@@ -53,6 +53,7 @@ std::pair<std::string, double> processKindAndValue(const ProcessEvent& e)
     case ProcessEventType::DISABLE_PROCESS: return {"process_off", 0.0};
     case ProcessEventType::SET_ANALOG_VALUE: return {"set_value", e.value};
     case ProcessEventType::TRIGGER: return {"external", 0.0};
+    case ProcessEventType::REQUEST: return {"request", 0.0};   // P0.b: a machine request written (it carries none)
   }
   return {"external", 0.0};
 }

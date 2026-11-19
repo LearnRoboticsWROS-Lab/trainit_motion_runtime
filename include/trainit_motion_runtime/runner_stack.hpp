@@ -4,11 +4,15 @@
 // MoveIt wait, the same end-effector registry, executor, runtime, controllers, profiles, context and TF -- in the same
 // order, with the same log lines. trainit_run_bt's behaviour is unchanged (P0.a assumption A3, checked by its suites).
 //
-//   configure(node)  -- the parameters and every configuration check, the MoveIt wait, the end-effector registry.
+//   configure(node)  -- the parameters and every configuration check, the MoveIt wait, the end-effector registry,
+//                       the machine-channel registry (P0.b: its callback group).
 //                       0 = ready; otherwise the exit code (2 a configuration error, 1 interrupted).
-//   start(extra)     -- the executor (2 threads + 1 per end-effector device + `extra`) and its spinner, the runtime,
-//                       the gripper / process controllers, the profiles, the BtContext, TF. 0, or 2.
+//   start(extra)     -- the executor (2 threads + 1 per end-effector device + 1 for the machine-channel registry +
+//                       `extra`) and its spinner, the runtime, the gripper / process controllers, the profiles, the
+//                       BtContext, TF. 0, or 2.
 //   seed(bb)         -- a blackboard's runtime entries and task_parameters (what every tree of the bundle reads).
+//   prepareChannels(tree) / prepareMachineServices() -- P0.b: the channels a loaded tree names LITERALLY, made ready
+//                       before its first tick (the prepare visitor both runners share). 0, or 2.
 // A callback group the caller needs served must be created between configure() and start() (Humble's executor
 // collects a node's groups when the node is added).
 // =============================================================================
@@ -21,6 +25,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 #include <thread>
 #include <vector>
@@ -34,6 +39,7 @@
 #include "trainit_motion_runtime/end_effector_registry.hpp"
 #include "trainit_motion_runtime/execution_events.hpp"
 #include "trainit_motion_runtime/gripper_controller.hpp"
+#include "trainit_motion_runtime/machine_channels.hpp"
 #include "trainit_motion_runtime/moveit_motion_runtime.hpp"
 #include "trainit_motion_runtime/path_library.hpp"
 #include "trainit_motion_runtime/process_controller.hpp"
@@ -54,6 +60,16 @@ public:
   void stopSpinning();
   // `log_parameters`: log each task parameter (the runner, and the server once); false: quiet (every job)
   void seed(const BT::Blackboard::Ptr& bb, bool log_parameters = true) const;
+  // vNext M3.5 + P0.b: the channels a loaded tree names LITERALLY, made ready before its first tick -- every
+  // ProcessEvent channel through the process controller (its publisher exists during the DDS settle; `request` is no
+  // process output: never prepared there), and every machine service a RequestMachine / WaitForMachine names,
+  // collected for prepareMachineServices(). A channel read from the blackboard ({key}) is not prepared. Call it for
+  // every tree the runner will tick (trainit_task_server: each exported task's job tree).
+  void prepareChannels(BT::Tree& tree);
+  // P0.b: the collected machine services -- `<service>/request` and `<service>/status` refused when a remap sends them
+  // out of this robot's namespace (ADR-0023 Decision 5: FATAL, 2, before anything is created), then the registry's
+  // status subscription and request publisher for each. 0, or 2.
+  int prepareMachineServices();
 
   rclcpp::Node::SharedPtr node;
   std::string bt_tree_file;
@@ -74,6 +90,10 @@ public:
   // Set BEFORE configure(): further robot-scoped topics the caller resolves in this robot's slot, refused by the
   // same cross-namespace remap check (ADR-0023 Decision 5). trainit_run_bt: none; trainit_task_server: the RTI's.
   std::vector<std::string> extra_scoped_topics;
+  // P0.b: `channel_status_max_age_ms` (default 1000, bounds 200..10000; outside: exit 2) -- a machine service is LIVE
+  // only while its status heartbeat changed within it (the steady clock), and a request synchronises within it.
+  int channel_status_max_age_ms{1000};
+  std::set<std::string> machine_services;   // collected by prepareChannels()
 
   std::unique_ptr<EndEffectorRegistry> eefs;
   std::unique_ptr<rclcpp::executors::MultiThreadedExecutor> exec;
@@ -86,6 +106,9 @@ public:
   BtContext ctx{};
   std::shared_ptr<tf2_ros::Buffer> tf_buffer;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener;
+  // P0.b (D2): the machine-channel registry, built by configure() (its callback group before the executor collects
+  // the node's groups), wired by start() (the process observer, BtContext::machines). Always present.
+  std::unique_ptr<MachineChannels> machines;
 };
 
 // vNext M3.4 (owner decision D8, the MINIMAL stop scope): when orchestration stops while a tree runs -- SIGINT /

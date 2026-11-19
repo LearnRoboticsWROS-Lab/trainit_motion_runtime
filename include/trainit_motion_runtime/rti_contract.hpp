@@ -54,6 +54,10 @@ constexpr uint16_t CANCELLED_HOLD_UNKNOWN = 309;
 constexpr uint16_t STATION_UNAVAILABLE = 310;
 constexpr uint16_t SERVER_STARTED = 311;
 constexpr uint16_t REQUESTER_CONFLICT = 312;
+// P0.b (trainit_interfaces 0.5.0; ADR-0032 Decision 7, APPENDED): a job asked a machine service that was still busy
+// (BUSY / HOMING, or this robot's previous request to it not yet taken) -- nothing was requested; or the machine
+// rejected the job's request as BUSY. FAILED, FAULTED: a machine-master sequencing error, acknowledged by a RESET.
+constexpr uint16_t STATION_BUSY = 313;
 constexpr uint16_t INVALID_REQUEST = 400;
 constexpr uint16_t UNKNOWN_TASK = 401;
 constexpr uint16_t BUSY = 402;
@@ -71,7 +75,7 @@ const char* cmdName(uint8_t cmd);
 const char* stateName(State state);
 const char* ackName(Ack ack);
 const char* resultName(Result result);
-const char* codeName(uint16_t code);   // "OK", "BIN_EMPTY", ..., "NOT_SYNCHRONIZED"; "" for 0
+const char* codeName(uint16_t code);   // "OK", "BIN_EMPTY", ..., "STATION_BUSY", ..., "NOT_SYNCHRONIZED"; "" for 0
 
 // The next sequence number after `seq`: +1, wrapping from 2^32-1 to 1 (0 is skipped: "no command yet").
 uint32_t nextSeq(uint32_t seq);

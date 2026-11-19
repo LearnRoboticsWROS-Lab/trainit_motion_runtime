@@ -10,6 +10,8 @@
 //   rti_stop_timeout_ms             5000  (50..60000, >= 2 periods): STOPPING's bound -- a job whose tree has not
 //                                         returned by then is decided FAILED with the held state unknown, FAULTED
 //   rti_runtime_state_max_age_ms    1000  (50..10000): an end-effector state older than this = runtime not ready
+// P0.b: a job's machine steps (RequestMachine / WaitForMachine) show their state in the status `detail` while it runs,
+// and a failed one ends the job FAILED with its STATION code (305 / 306 / 310 / 313).
 // It starts FAULTED / SERVER_STARTED (R9) until the requester's RESET. Exit codes: 0 after a shutdown, 2 a
 // configuration error (before serving: a tasks file, a job tree that does not load, a parameter out of bounds, the
 // runner's own checks), 1 interrupted while waiting for MoveIt, 3 an internal error of the RTI binding ended serving
@@ -131,16 +133,12 @@ int main(int argc, char** argv)
                                                   entry.treeId().c_str(), p.c_str());
       if (!problems.empty()) return fail(2);
     }
-    auto& process = stack.process;
-    tree.applyVisitor([&process](const BT::TreeNode* n) {
-      if (n->registrationName() != "ProcessEvent") return;
-      const auto& ports = n->config().input_ports;
-      const auto channel = ports.find("channel");
-      if (channel == ports.end() || !isLogicalChannel(channel->second)) return;
-      const auto kind = ports.find("kind");
-      process->prepare(channel->second, kind != ports.end() && kind->second == "set_value");
-    });
+    // the literal process channels prepared, the machine services collected (the visitor trainit_run_bt shares)
+    stack.prepareChannels(tree);
   }
+  // P0.b: every machine service the job trees name -- the remap check of its names (exit 2), then its status
+  // subscription and request publisher, before the settle (a request synchronises on a status already flowing)
+  if (const int rc = stack.prepareMachineServices(); rc != 0) return fail(rc);
   RCLCPP_INFO(log, "trainit_task_server: tree file '%s', tasks file '%s', planner_mode=%s backend=%s",
               stack.bt_tree_file.c_str(), tasks_file.c_str(), stack.mode_str.c_str(), stack.backend_str.c_str());
   std::this_thread::sleep_for(std::chrono::seconds(3));   // let DDS action channels settle (as trainit_run_bt)
@@ -150,6 +148,8 @@ int main(int argc, char** argv)
     for (const auto& w : writers) RCLCPP_FATAL(log, "end-effector contract: %s (ADR-0022)", w.c_str());
     if (!writers.empty()) return fail(2);
   }
+  // P0.b: each machine service the job trees name, with or without a status seen (a WARN names the unserved one, PB-P8)
+  if (stack.machines) stack.machines->reportStart();
 
   rti::MoveItRuntimeProbe probe(node, stack.eefs.get(), std::chrono::milliseconds(max_age));
   rti::BtJobExecutor executor(stack, factory);

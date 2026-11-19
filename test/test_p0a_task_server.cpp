@@ -4,6 +4,8 @@
 // test_p0a_task_export.py), against the M2.5 fake move_group and joint states and the M2.6 fake end-effector adapter,
 // with the REFERENCE requester (the fake PLC's logic) in this process -- or the fake PLC executable as a child (F8).
 // Domain 77, localhost only, graph-guarded. Each test is named after its case; measured timings are test properties.
+// P0.b (TMR 2.11.0) appends two RUNNER cases (P0b_R_*: the machine handshake's wiring in the real task server and
+// trainit_run_bt, a hand-written fixture in test/data/p0b/, a scripted status source in this process).
 //
 // The fixture: place_part #12 (30 s: open the tool, PTP ready, dwell 2 s, PTP home), home #7 (5 s: open the tool,
 // PTP home), pick_part #3 (10 s: PTP ready, close the tool -- it ENDS HOLDING), carry #4 (10 s: PTP ready, PTP home --
@@ -36,6 +38,7 @@
 #include "m2_6/child_process.hpp"
 #include "m2_6/eef_after_contract.hpp"
 #include "m2_6/eef_after_fakes.hpp"
+#include "p0b/scripted_source.hpp"
 #include "trainit_motion_runtime/reference_requester.hpp"
 #include "trainit_motion_runtime/rti_contract.hpp"
 
@@ -661,14 +664,19 @@ TEST(P0aTaskServer, F8_TheRequesterProcessIsKilledWhileRunning)
   ASSERT_TRUE(H().waitResult(1));
   EXPECT_EQ(H().last()->result_code, StatusMsg::CODE_REQUESTER_LOST);
   ASSERT_TRUE(H().waitState(StatusMsg::STATE_FAULTED));
-  // the killed participant leaves the graph after its lease: a restarted PLC is then the ONE requester
+  // the killed participant leaves the graph after its lease: a restarted PLC is then the ONE requester. Each
+  // participant sees the lease expire on its own: the SERVER's view may still count the killed requester a little
+  // after this harness's view cleared (about 0.5 s observed, P0.b review round) -- a RESET sent then is
+  // NOT_SYNCHRONIZED and retried ONCE (ADR-0032 Decision 10a rule 2), never executed. The restarted PLC's operator
+  // therefore presses RESET once more 3 s later (a RESET in IDLE is accepted and changes nothing): the case still
+  // proves that the restarted PLC process becomes the one requester and resets the robot.
   const auto g0 = Clock::now();
   ASSERT_TRUE(m26::waitUntil([] { return H().commandPublishers() == 0; }, milliseconds(60000)));
   record("killed_publisher_left_the_graph_ms", msSince(g0));
   auto again = std::make_unique<m26::ChildProcess>(
     TRAINIT_FAKE_PLC_EXE,
     std::vector<std::string>{"--ros-args", "-p", "tasks_file:=" + kServed + "/tasks.yaml", "-p",
-                             "script:=sleep 300; reset", "-p", "stay_on_eof:=true"},
+                             "script:=sleep 300; reset; sleep 3000; reset", "-p", "stay_on_eof:=true"},
     m26::childEnvironment(TRAINIT_M26_DOMAIN, actualDir()), actualDir() + "/f8_plc2.log");
   ASSERT_TRUE(H().waitState(StatusMsg::STATE_IDLE, milliseconds(15000))) << H().last()->detail;
   again->stop(milliseconds(5000));
@@ -1037,6 +1045,169 @@ TEST(P0aTaskServer, B2_OneBundleTwoRunModelsTheSameTaskEvents)
   EXPECT_FALSE(a.empty());
   EXPECT_EQ(a, b) << "the same TASK / STEP sequence: no file edited between the two run models";
   stopChild(server);
+}
+
+// =====================================================================================================================
+// P0.b (P0B_DESIGN §3.4, TMR 2.11.0): the RUNNERS' wiring of the machine handshake -- the REAL trainit_task_server and
+// trainit_run_bt with machine steps (RequestMachine / WaitForMachine, the TSA <-> TMR contract's XML) against a
+// SCRIPTED status source in this process (test/p0b/scripted_source.hpp, §3.3): the prepare visitor's literal services,
+// the remap check, the start diagnostic after the settle, the registry's callback group served by its own executor
+// thread, the job scope, the RTI detail while RUNNING, the STATION code at the RTI, the execution events. A
+// HAND-WRITTEN fixture (test/data/p0b/: machine steps only, no motion), NOT a TSA golden; the served bt_params of
+// P0.a, unchanged. The frozen matrix's M / I cases run in TSA's launched tier and on Isaac.
+// =====================================================================================================================
+namespace
+{
+const std::string kP0b = TRAINIT_P0B_DATA_DIR;
+constexpr uint32_t kP0bTableId = 2586834367u;   // CRC-32 of "5:turn:30000\n6:turn_typo:30000\n"
+
+// a requester generated for the P0.b fixture's export table, its plain-words lines recorded (the fake PLC's)
+struct P0bPlc
+{
+  P0bPlc()
+  {
+    node = std::make_shared<rclcpp::Node>("p0b_plc", "/", rclcpp::NodeOptions().use_global_arguments(false));
+    ReferenceRequester::Options o;
+    o.expected_table_id = kP0bTableId;
+    plc = std::make_unique<ReferenceRequester>(node, o);
+    plc->setObserver([this](const std::string& l) {
+      std::lock_guard<std::mutex> g(m);
+      lines.push_back(l);
+    });
+    exec.add_node(node);
+    spinner = std::thread([this] { exec.spin(); });
+  }
+  ~P0bPlc()
+  {
+    exec.cancel();
+    spinner.join();
+    plc.reset();
+    node.reset();
+  }
+  bool saw(const std::string& part)
+  {
+    std::lock_guard<std::mutex> g(m);
+    for (const auto& l : lines)
+      if (l.find(part) != std::string::npos) return true;
+    return false;
+  }
+  std::string all()
+  {
+    std::lock_guard<std::mutex> g(m);
+    std::string out;
+    for (const auto& l : lines) out += l + "\n";
+    return out;
+  }
+  rclcpp::Node::SharedPtr node;
+  std::unique_ptr<ReferenceRequester> plc;
+  rclcpp::executors::SingleThreadedExecutor exec;
+  std::thread spinner;
+  std::mutex m;
+  std::vector<std::string> lines;
+};
+}  // namespace
+
+TEST(P0aTaskServer, P0b_R_TheTaskServerRunsTheMachineHandshake)
+{
+  Scope s("P0b_R", 300);
+  p0b_test::ScriptedSource::Knobs k;
+  k.cycle_ms = 600;
+  p0b_test::ScriptedSource turner("turner", k, "/");   // the robot's slot: the root
+  auto server = startServer("p0b_r", "", kP0b + "/task_program.xml", kP0b + "/tasks.yaml");
+  ASSERT_TRUE(serving()) << readAll(actualDir() + "/p0b_r.log");
+  P0bPlc plc;
+  ASSERT_TRUE(plc.plc->waitFor([](const StatusMsg& m) { return m.heartbeat > 0; }, milliseconds(5000)));
+  ASSERT_EQ(plc.plc->reset().outcome, O::ACCEPTED);
+  ASSERT_TRUE(H().waitState(StatusMsg::STATE_IDLE)) << H().last()->detail;
+  // the start diagnostic, after the settle (PB-P8: the unserved service is named; never an exit)
+  std::string log = readAll(actualDir() + "/p0b_r.log");
+  EXPECT_NE(log.find("machine service 'turner': status seen (READY, live)"), std::string::npos) << log;
+  EXPECT_NE(log.find("no status for machine service 'turnr' -- is the machine simulation (or the PLC) serving it?"),
+            std::string::npos)
+    << log;
+
+  // N1 (R): request -> BUSY -> DONE -> ready: SUCCEEDED OK, one cycle; the machine's words in the RUNNING detail
+  ASSERT_EQ(plc.plc->start(5, 1).outcome, O::ACCEPTED);
+  ASSERT_TRUE(H().waitResult(1, milliseconds(15000)));
+  EXPECT_EQ(H().last()->result, StatusMsg::RESULT_SUCCEEDED);
+  EXPECT_EQ(H().last()->result_code, StatusMsg::CODE_OK) << H().last()->detail;
+  EXPECT_EQ(turner.accepted(), 1);
+  bool busy_detail = false;
+  for (const auto& [t, m] : H().statusCopy())
+    if (m.state == StatusMsg::STATE_RUNNING && m.detail.rfind("MACHINE turner BUSY: ", 0) == 0) busy_detail = true;
+  EXPECT_TRUE(busy_detail) << "the RTI detail while RUNNING shows the machine's state";
+  EXPECT_TRUE(plc.saw("Robot busy: job 1: MACHINE turner REQUESTED")) << plc.all();
+  EXPECT_TRUE(plc.saw("Robot busy: job 1: MACHINE turner BUSY: ")) << plc.all();
+  EXPECT_TRUE(plc.saw("Job 1 (turn) finished: SUCCEEDED OK (100)")) << plc.all();
+  // E1 (R, supporting): the job's events -- the identified steps and the PROCESS_EVENT `request` with the job id
+  ASSERT_TRUE(H().waitEvent([](const Event& e) { return e.kind == Event::RUN_ENDED && e.job_id == 1u; },
+                            milliseconds(3000)));
+  bool request_event = false, wait_entered = false, wait_exited = false;
+  for (const auto& e : H().eventsCopy())
+  {
+    if (e.job_id != 1u) continue;
+    if (e.kind == Event::PROCESS_EVENT && e.process_kind == "request" && e.process_channel == "turner" &&
+        e.step_id == "ask_turn")
+      request_event = true;
+    if (e.kind == Event::STEP_ENTERED && e.step_id == "turned" && e.step_kind == "wait") wait_entered = true;
+    if (e.kind == Event::STEP_EXITED && e.step_id == "turned" && e.status == Event::SUCCEEDED) wait_exited = true;
+  }
+  EXPECT_TRUE(request_event);
+  EXPECT_TRUE(wait_entered);
+  EXPECT_TRUE(wait_exited);
+  log = readAll(actualDir() + "/p0b_r.log");
+  EXPECT_NE(log.find("RTI: job 1: MACHINE turner REQUESTED"), std::string::npos) << log;
+  EXPECT_NE(log.find("MACHINE: MACHINE turner DONE in "), std::string::npos) << log;
+
+  // F1 (R): a stuck actuator -> the job FAILED STATION_FAULT 306, FAULTED; the result's detail names the machine fault
+  turner.faultNextCycleAfter(300, p0b_test::StatusMsg::FAULT_ACTUATOR_TIMEOUT);
+  ASSERT_EQ(plc.plc->start(5, 2).outcome, O::ACCEPTED);
+  ASSERT_TRUE(H().waitResult(2, milliseconds(15000)));
+  EXPECT_EQ(H().last()->result, StatusMsg::RESULT_FAILED);
+  EXPECT_EQ(H().last()->result_code, StatusMsg::CODE_STATION_FAULT) << H().last()->detail;
+  ASSERT_TRUE(H().waitState(StatusMsg::STATE_FAULTED));
+  EXPECT_EQ(H().last()->fault_code, StatusMsg::CODE_STATION_FAULT);
+  EXPECT_NE(H().last()->detail.find("MACHINE turner FAULT -- STATION_FAULT (306)"), std::string::npos)
+    << H().last()->detail;
+  EXPECT_TRUE(plc.saw("Job 2 (turn) finished: FAILED STATION_FAULT (306) -- MACHINE turner FAULT")) << plc.all();
+  // F6 (R): the source's RESET (the operator / machine master -- never the robot), then the RTI RESET: the next job runs
+  turner.reset();
+  ASSERT_TRUE(m26::waitUntil([&] { return turner.image().state == p0b_test::StatusMsg::STATE_READY; },
+                             milliseconds(5000)));
+  ASSERT_EQ(plc.plc->reset().outcome, O::ACCEPTED);
+  ASSERT_TRUE(H().waitState(StatusMsg::STATE_IDLE));
+  ASSERT_EQ(plc.plc->start(5, 3).outcome, O::ACCEPTED);
+  ASSERT_TRUE(H().waitResult(3, milliseconds(15000)));
+  EXPECT_EQ(H().last()->result_code, StatusMsg::CODE_OK) << H().last()->detail;
+
+  // PB-P8 (R): the service no source serves -> FAILED STATION_UNAVAILABLE 310, "no status for service 'turnr'"
+  ASSERT_EQ(plc.plc->start(6, 4).outcome, O::ACCEPTED);
+  ASSERT_TRUE(H().waitResult(4, milliseconds(15000)));
+  EXPECT_EQ(H().last()->result_code, StatusMsg::CODE_STATION_UNAVAILABLE) << H().last()->detail;
+  EXPECT_NE(H().last()->detail.find("no status for service 'turnr'"), std::string::npos) << H().last()->detail;
+  for (const char* never : {"REFUSED", "JOB LOST", "Robot LOST", "internal error"})
+    EXPECT_EQ(plc.all().find(never), std::string::npos) << never << "\n" << plc.all();
+  stopChild(server);
+}
+
+// PB-P18 (R): trainit_run_bt, its FIRST step a request (the registry subscribed before the settle): it synchronises and
+// succeeds -- never a start-up 310; the nodes' MACHINE: lines are its activity (no RTI).
+TEST(P0aTaskServer, P0b_R_TheRunnerRunsAFirstStepRequest)
+{
+  Scope s("P0b_R_run_bt", 300);
+  p0b_test::ScriptedSource::Knobs k;
+  k.cycle_ms = 400;
+  p0b_test::ScriptedSource turner("turner", k, "/");
+  auto runner = startChild(TRAINIT_RUN_BT_EXE, "p0b_run_bt", kP0b + "/task_program.xml", kP0b + "/tasks.yaml");
+  ASSERT_TRUE(runner->wait(milliseconds(90000)));
+  const std::string log = readAll(runner->output());
+  EXPECT_EQ(runner->exitText(), "exit code 0") << log;
+  EXPECT_NE(log.find("machine service 'turner': status seen (READY, live)"), std::string::npos) << log;
+  EXPECT_NE(log.find("MACHINE: MACHINE turner REQUESTED"), std::string::npos) << log;
+  EXPECT_NE(log.find("MACHINE: MACHINE turner DONE in "), std::string::npos) << log;
+  EXPECT_NE(log.find("MACHINE: MACHINE turner DONE: ready after "), std::string::npos) << log;
+  EXPECT_NE(log.find("BT finished: SUCCESS"), std::string::npos) << log;
+  EXPECT_EQ(turner.accepted(), 1);
 }
 
 int main(int argc, char** argv)

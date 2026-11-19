@@ -396,13 +396,17 @@ A canonical task coordinates MOTION + PROCESS ACTIONS + PERCEPTION CAPTURE with 
   a hardware address or a controller symbol: the controller binds it. Refused, nothing dispatched: an
   unknown kind (`capture` is DetectObject's trigger, `dwell` is BT's `Sleep`), a channel that is not an
   id, a misplaced, missing or non-finite value, no controller. `EnableProcess` / `DisableProcess` are
-  the unchanged legacy aliases. Every event is blocking; `external` has no handshake (ADR-0013 is not
-  implemented here).
+  the unchanged legacy aliases. Every event is blocking; `external` has no handshake -- a machine
+  handshake is `RequestMachine` / `WaitForMachine` (P0.b, below). `kind="request"` is refused here
+  ("RequestMachine runs it"), and both controllers refuse a `ProcessEventType::REQUEST` (nothing is
+  dispatched, no `process_enabled` publisher is created): a machine request never goes through the
+  `ProcessController` (the mock one would "dispatch" it with nothing on the wire).
 - **`RosProcessController`** keeps ONE publisher per channel and signal (`<channel>/process_enabled`
   Bool, `<channel>/process_value` Float64, transient_local depth 1, relative: the runner's namespace)
   for its lifetime: a late driver receives the latched last command (2.3.0 destroyed the publisher at
-  once). `trainit_run_bt` prepares the literal channels of the tree's ProcessEvent nodes before the
-  first tick.
+  once). Both runners prepare the literal channels of the tree's ProcessEvent nodes before the first
+  tick, through ONE visitor (`RunnerStack::prepareChannels`, TMR 2.11.0: it also collects the machine
+  services of the tree's machine nodes; `kind="request"` is never prepared).
 - **Paths with events.** `paths.yaml` records where a path STOPS for an event: `events: [{at: {state,
   when: after_arrival | before_departure}, kind}]` (the action is the BT node). The loader refuses an
   event on a dense path, out of range, before departing the last state, or a blend into an event state.
@@ -506,6 +510,60 @@ vocabulary, on the relative `trainit/execution_events` of the runner's robot slo
   HALTED, while the context can still publish. Nothing after RUN_ENDED.
 - **Observation never changes execution:** an error while observing or publishing is counted and dropped, never
   thrown into the tick. Nothing here records data (the data foundation is a consumer, ADR-0029).
+
+## The machine handshake (P0.b, TMR 2.11.0, P0B_DESIGN §3.4)
+
+A robot task asks a LOGICAL machine service (`turner`, `indexer`: never a topic, a seq, a PLC address or an
+I/O in the application) for a cycle and waits for it, with the identity-acknowledged contract of P0B_DESIGN §3
+(trainit_interfaces 0.5.0: `<service>/request` ChannelRequest, `<service>/status` ChannelStatus, relative names in
+the robot's slot, RELIABLE + TRANSIENT_LOCAL + depth 1 on the wire). NOT a safety function (ADR-0033): the machine is
+asked, never commanded; the machine master (the PLC, or `trainit_cell_io` in simulation) owns its cycle.
+
+- **Two StatefulActionNodes** (`machine_nodes.{hpp,cpp}`, TMR's first production ones: RUNNING while they wait,
+  never blocking a tick, never throwing, never waking the tree; a halt is immediate and never touches the machine):
+  `<RequestMachine channel="turner"/>` and `<WaitForMachine channel="turner" for="done|ready" timeout_ms="8000"/>`,
+  both with an optional `fault` output (TSA remaps it to the fault gate under `faults: stop`).
+- **The rules are pure** (`machine_channel.{hpp,cpp}`, injected steady time): a request synchronises (RUNNING) until
+  the current source session's heartbeat changed twice -- bounded by `channel_status_max_age_ms`, never on a source
+  known dead -- then decides in ONE tick: 310 not live / two requesters, 306 FAULT, 313 BUSY / HOMING / this
+  process's previous request not yet consumed, else it writes `{source_session, requester_session, seq}`. A wait for
+  `done` checks, each tick and in this order: no request in this job (a program error, no code), a source restart
+  (310; "two sources" when two status publishers are counted), not live (310), its request rejected (313 / 306 / 310),
+  its cycle DONE (SUCCESS, before any fault), FAULT or its cycle aborted (306), the timeout on the RUNNER's clock (305
+  with the last state). A wait for `ready` requires
+  the completion of this job's pending request (never the READY of before it); with none pending it also waits while
+  this PROCESS's last request to the current source session is not yet taken -- the 313 condition, e.g. a request of
+  a job cancelled at once (D19, the owner's amendment of P0B_DESIGN §3.4, case PB-P24). LIVE = a heartbeat change
+  (counted within its own session) within the max age on the STEADY clock AND exactly one status publisher AND a valid
+  state; across a source restart the previous session's last change keeps the source live until the max age (a
+  session change is neither a sign of life nor a heartbeat change: it restarts the synchronisation's count).
+- **The registry** (`machine_channels.{hpp,cpp}`, owned by `RunnerStack`, reached through the LAST `BtContext` member
+  `machines`, real ROS whatever `process_controller` says): per service a status subscription in its own callback
+  group (created before the executor collects the node; one more executor thread) -- its READER history KEEP_LAST 20,
+  so two images arriving between two deliveries are both applied in order (QoS-compatible with the depth-1 writers) --
+  and a request publisher (depth 1, level-held), the publisher counts every 100 ms on the resolved names; it logs
+  "machine service 'x': status arriving ..." when a source's status starts to reach the robot (the first image, a NEW
+  -- or, with two status publishers counted, ANOTHER -- source session, or an image after more than the max age without
+  one; a session told at most once per max age: the robot's own view of a source). PROCESS
+  scope: the requester session, the seq per source session, the last request written (the 313 rule and the
+  ready-wait's D19 rule survive a cancelled job). JOB scope (`beginJob` before
+  RUN_STARTED, both runners): the outstanding request per service, the job's first machine failure, the activity
+  sink. A request written is a PROCESS_EVENT of kind `request` (ADR-0030), through the runner's process observer.
+- **The runners** prepare the services the trees name literally before the 3 s settle (the cross-namespace remap
+  check of `<service>/request|status` first: exit 2), and log after it, per service, "status seen" or
+  "no status for machine service 'x' -- is the machine simulation (or the PLC) serving it?" (never an exit: the first
+  request ends 310). Parameter `channel_status_max_age_ms` (1000; 200..10000, else exit 2).
+- **The RTI** (ADR-0032): a job whose tree did not succeed ends FAILED with the machine step's STATION code (305 /
+  306 / 310 / 313 STATION_BUSY, appended) -- latched by the registry whatever the gate, checked before
+  TERMINAL_FAULT and the 301 fallback, but after an end-effector fault latched in the same job (EEF_FAULT 308: the
+  tool's state unconfirmed is the more severe uncertainty); a stop cause keeps precedence (a cancel masks it). A tree
+  that succeeded keeps its own result, its detail without the text of a machine failure it recovered (only a
+  hand-written tree can: TSA refuses request / wait inside a fallback or a retry). While RUNNING, the machine
+  step's plain words are the status `detail` (`StateMachine::onActivity` / `RobotTaskServer::jobActivity`, under the
+  one lock, an `RTI: job N: <text>` log line); the nodes log `MACHINE: <text>`; the fake PLC prints
+  `Robot busy: job N: <text>` and the result's detail (the reference requester's status READER keeps a KEEP_LAST 20
+  history, QoS-compatible with the depth-1 writer: a detail the job leaves within a millisecond is still printed). The words: WAITING FOR MACHINE, MACHINE <s> REQUESTED / BUSY /
+  DONE / FAULT / TIMEOUT / UNAVAILABLE -- never a topic or a counter.
 
 ## Not yet (by design)
 - STOMP: declared in the registry and never loaded — there is no STOMP plugin for MoveIt

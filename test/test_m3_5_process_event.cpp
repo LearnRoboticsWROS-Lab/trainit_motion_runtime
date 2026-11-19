@@ -44,6 +44,7 @@ const char* typeName(ProcessEventType t)
     case ProcessEventType::DISABLE_PROCESS: return "DISABLE";
     case ProcessEventType::TRIGGER: return "TRIGGER";
     case ProcessEventType::SET_ANALOG_VALUE: return "SET_ANALOG";
+    case ProcessEventType::REQUEST: return "REQUEST";   // P0.b: never dispatched (the controllers refuse it)
   }
   return "?";
 }
@@ -183,6 +184,27 @@ TEST_F(ProcessEventTick, E_what_is_not_a_process_event_is_refused_and_nothing_is
     EXPECT_EQ(tick(xml, &rec), "FAILURE") << xml;
   EXPECT_TRUE(rec.events.empty());
   EXPECT_EQ(tick("<ProcessEvent kind=\"process_on\" channel=\"dispenser\"/>", nullptr), "FAILURE");
+}
+
+// P0.b (D1, D2): a machine request is not a process output -- ProcessEvent refuses kind="request" (RequestMachine
+// writes it, through the machine-channel registry), and both process controllers refuse a REQUEST event: nothing is
+// dispatched, nothing is published on the channel's process_enabled.
+TEST_F(ProcessEventTick, E_a_machine_request_is_not_a_process_output)
+{
+  RecordingProcess rec;
+  EXPECT_EQ(tick("<ProcessEvent kind=\"request\" channel=\"turner\"/>", &rec), "FAILURE");
+  EXPECT_TRUE(rec.events.empty());
+
+  trainit::ProcessEvent e;
+  e.type = ProcessEventType::REQUEST;
+  e.channel = "p0b_turner";
+  trainit::MockProcessController mock(node_->get_logger());
+  EXPECT_FALSE(mock.executeEvent(e));
+  trainit::RosProcessController ros(node_);
+  EXPECT_FALSE(ros.executeEvent(e));
+  std::this_thread::sleep_for(std::chrono::milliseconds(200));
+  EXPECT_EQ(probe_->count_publishers("/p0b_turner/process_enabled"), 0u) << "a refused request created a publisher";
+  EXPECT_EQ(probe_->count_publishers("/p0b_turner/process_value"), 0u);
 }
 
 TEST_F(ProcessEventTick, E_a_controller_that_does_not_dispatch_fails_the_event)

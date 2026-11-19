@@ -39,7 +39,8 @@ static_assert(StatusM::CODE_OK == code::OK && StatusM::CODE_BIN_EMPTY == code::B
               StatusM::CODE_CANCELLED_HOLD_UNKNOWN == code::CANCELLED_HOLD_UNKNOWN &&
               StatusM::CODE_STATION_UNAVAILABLE == code::STATION_UNAVAILABLE &&
               StatusM::CODE_SERVER_STARTED == code::SERVER_STARTED &&
-              StatusM::CODE_REQUESTER_CONFLICT == code::REQUESTER_CONFLICT);
+              StatusM::CODE_REQUESTER_CONFLICT == code::REQUESTER_CONFLICT &&
+              StatusM::CODE_STATION_BUSY == code::STATION_BUSY);   // P0.b: appended (trainit_interfaces 0.5.0)
 static_assert(StatusM::REJECT_INVALID_REQUEST == code::INVALID_REQUEST &&
               StatusM::REJECT_UNKNOWN_TASK == code::UNKNOWN_TASK && StatusM::REJECT_BUSY == code::BUSY &&
               StatusM::REJECT_NOT_READY == code::NOT_READY && StatusM::REJECT_FAULTED == code::FAULTED &&
@@ -346,6 +347,18 @@ std::optional<Decided> RobotTaskServer::jobEnded(uint64_t counter, const JobEnd&
   logTransition(before, after, "end");
   if (!stopped_) publishLocked();
   return d;
+}
+
+void RobotTaskServer::jobActivity(uint64_t counter, const std::string& text)
+{
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (stopped_) return;
+  const Status before = machine_.status();
+  machine_.onActivity(counter, text);
+  const Status& after = machine_.status();
+  if (after == before) return;   // not the RUNNING job's, or the same text
+  RCLCPP_INFO(node_->get_logger(), "RTI: job %u: %s", after.job_id, after.detail.c_str());
+  publishLocked();
 }
 
 void RobotTaskServer::execute(const Effects& fx)

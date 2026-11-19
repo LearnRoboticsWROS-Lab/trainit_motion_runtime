@@ -134,6 +134,13 @@ int RunnerStack::configure(const rclcpp::Node::SharedPtr& n)
   profiles_file  = getStr(node, "motion_profiles_file", "");
   groot_monitor  = getBool(node, "groot_monitor", true);
   groot_port     = getInt(node, "groot_port", 1667);
+  // P0.b (P0B_DESIGN §3.4: LIVE = the heartbeat changed within it): the machine services' status max age, steady clock
+  channel_status_max_age_ms = getInt(node, "channel_status_max_age_ms", 1000);
+  if (channel_status_max_age_ms < 200 || channel_status_max_age_ms > 10000)
+  {
+    RCLCPP_FATAL(log, "invalid channel_status_max_age_ms %d (bounds 200..10000 ms) -- exit 2", channel_status_max_age_ms);
+    return 2;
+  }
 
   // The end-effector contract (ADR-0022). An `eef` block makes the project canonical; without
   // one the LEGACY contract runs exactly as before. It is read from the parameter OVERRIDES (the
@@ -202,6 +209,11 @@ int RunnerStack::configure(const rclcpp::Node::SharedPtr& n)
   // so their callback groups are collected with it (a group created later, once MoveIt's clients
   // exist, was never served in this process).
   if (canonical) eefs = std::make_unique<EndEffectorRegistry>(node, contract);
+  // P0.b (D2): the machine-channel registry -- its callback group too is created before the executor adds the node;
+  // its subscriptions and publishers come when the loaded trees name their services (prepareMachineServices)
+  MachineChannels::Options machine_options;
+  machine_options.max_age = std::chrono::milliseconds(channel_status_max_age_ms);
+  machines = std::make_unique<MachineChannels>(node, machine_options);
   return 0;
 }
 
@@ -209,9 +221,11 @@ int RunnerStack::start(std::size_t extra_threads)
 {
   auto log = node->get_logger();
   // Spinner FIRST (MoveGroupInterface needs the node spinning), on its own threads: two, plus
-  // one per end-effector device (each device's clients and state share one callback group).
+  // one per end-effector device (each device's clients and state share one callback group), plus one for the
+  // machine-channel registry's group (P0.b: its status callbacks never wait behind the RTI's heartbeat, nor it behind them).
   exec = std::make_unique<rclcpp::executors::MultiThreadedExecutor>(
-    rclcpp::ExecutorOptions(), (canonical ? 2 + contract.devices.size() : 2) + extra_threads);
+    rclcpp::ExecutorOptions(),
+    (canonical ? 2 + contract.devices.size() : 2) + (machines ? 1 : 0) + extra_threads);
   exec->add_node(node);
   spinner = std::thread([this]() { exec->spin(); });
 
@@ -226,6 +240,8 @@ int RunnerStack::start(std::size_t extra_threads)
   // the tree exists. The controller itself is unchanged.
   process_observer = std::make_shared<ObservedProcessController::Observer>();
   process = std::make_unique<ObservedProcessController>(std::move(process), process_observer);
+  // P0.b: a machine request actually written is an execution event too (kind `request`), through the same observer
+  if (machines) machines->setProcessObserver(process_observer);
 
   profiles = loadMotionProfiles(profiles_file);
   // vNext M3.1: a path or segment that names a profile this runner did not load is refused here,
@@ -288,6 +304,50 @@ int RunnerStack::start(std::size_t extra_threads)
   tf_listener = std::make_shared<tf2_ros::TransformListener>(*tf_buffer, node, false);
   ctx.tf = tf_buffer;
   ctx.eefs = eefs.get();   // null on the LEGACY contract
+  ctx.machines = machines.get();   // P0.b: RequestMachine / WaitForMachine
+  return 0;
+}
+
+void RunnerStack::prepareChannels(BT::Tree& tree)
+{
+  tree.applyVisitor([this](const BT::TreeNode* n) {
+    const auto& ports = n->config().input_ports;
+    const auto channel = ports.find("channel");
+    if (channel == ports.end() || !isLogicalChannel(channel->second)) return;   // a {key} is read at its tick
+    const std::string& id = n->registrationName();
+    if (id == "RequestMachine" || id == "WaitForMachine")
+    {
+      machine_services.insert(channel->second);   // P0.b: a machine service (prepareMachineServices)
+      return;
+    }
+    if (id != "ProcessEvent") return;
+    const auto kind = ports.find("kind");
+    if (kind != ports.end() && kind->second == "request") return;   // never a process output (ProcessEvent refuses it)
+    process->prepare(channel->second, kind != ports.end() && kind->second == "set_value");
+  });
+}
+
+int RunnerStack::prepareMachineServices()
+{
+  if (machine_services.empty() || !machines) return 0;
+  std::vector<std::string> topics;
+  for (const auto& s : machine_services)
+  {
+    topics.push_back(machine::requestTopic(s));
+    topics.push_back(machine::statusTopic(s));
+  }
+  // ADR-0023 Decision 5: a machine service's request and status stay in this robot's slot (the names are known only
+  // once the trees are loaded: a second check, the same rule and exit as configure()'s)
+  const auto escaped = MoveItMotionRuntime::crossNamespaceRemaps(node, contract, topics);
+  if (!escaped.empty())
+  {
+    std::string all;
+    for (const auto& e : escaped) all += (all.empty() ? "" : ", ") + e;
+    RCLCPP_FATAL(node->get_logger(), "machine services: a remap sends this robot's resources out of its namespace %s: "
+                 "%s (ADR-0023: a cross-namespace remap) -- exit 2", node->get_namespace(), all.c_str());
+    return 2;
+  }
+  for (const auto& s : machine_services) machines->prepare(s);
   return 0;
 }
 

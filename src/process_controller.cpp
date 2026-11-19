@@ -20,9 +20,15 @@ const char* toStr(ProcessEventType t)
     case ProcessEventType::DISABLE_PROCESS: return "DISABLE";
     case ProcessEventType::TRIGGER:         return "TRIGGER";
     case ProcessEventType::SET_ANALOG_VALUE:return "SET_ANALOG";
+    case ProcessEventType::REQUEST:         return "REQUEST";
   }
   return "?";
 }
+
+// P0.b (D2): a machine request is not a process output -- the machine-channel registry writes it, never a controller
+constexpr const char* kNotAProcessOutput =
+  "a machine request is not a process output: RequestMachine writes it through the machine-channel registry -- "
+  "nothing was dispatched";
 }  // namespace
 
 // --- mock --------------------------------------------------------------------
@@ -33,6 +39,11 @@ MockProcessController::MockProcessController(rclcpp::Logger logger)
 
 bool MockProcessController::executeEvent(const ProcessEvent& event)
 {
+  if (event.type == ProcessEventType::REQUEST)
+  {
+    RCLCPP_ERROR(logger_, "[mock process] channel='%s': %s", event.channel.c_str(), kNotAProcessOutput);
+    return false;
+  }
   RCLCPP_INFO(logger_, "[mock process] %s channel='%s' value=%.3f",
               toStr(event.type), event.channel.c_str(), event.value);
   return true;
@@ -70,6 +81,11 @@ void RosProcessController::prepare(const std::string& channel, bool analog)
 
 bool RosProcessController::executeEvent(const ProcessEvent& event)
 {
+  if (event.type == ProcessEventType::REQUEST)
+  {
+    RCLCPP_ERROR(node_->get_logger(), "[process] channel='%s': %s", event.channel.c_str(), kNotAProcessOutput);
+    return false;
+  }
   if (event.type == ProcessEventType::SET_ANALOG_VALUE)
   {
     std_msgs::msg::Float64 m;

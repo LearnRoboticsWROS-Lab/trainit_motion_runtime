@@ -69,9 +69,9 @@ int main(int argc, char** argv)
   auto& exec = *stack.exec;
   auto& spinner = stack.spinner;
   auto& runtime = stack.runtime;
-  auto& process = stack.process;
   auto& process_observer = stack.process_observer;
   auto& eefs = stack.eefs;
+  auto& machines = stack.machines;
 
   BT::BehaviorTreeFactory factory;
   registerAllNodes(factory);
@@ -109,14 +109,15 @@ int main(int argc, char** argv)
   // below, so a driver that subscribed early has matched before the first event (nothing is published
   // before the first event). A channel read from the blackboard ({key}) and the legacy aliases
   // (EnableProcess / DisableProcess) keep creating theirs at their first event.
-  tree.applyVisitor([&process](const BT::TreeNode* n) {
-    if (n->registrationName() != "ProcessEvent") return;
-    const auto& ports = n->config().input_ports;
-    const auto channel = ports.find("channel");
-    if (channel == ports.end() || !isLogicalChannel(channel->second)) return;   // a {key} is read at its tick
-    const auto kind = ports.find("kind");
-    process->prepare(channel->second, kind != ports.end() && kind->second == "set_value");
-  });
+  // P0.b: the same visitor (factored, shared with trainit_task_server) collects the machine services the tree's
+  // RequestMachine / WaitForMachine name; their status subscriptions exist during the settle too (PB-P18), after the
+  // cross-namespace remap check of their names (exit 2).
+  stack.prepareChannels(tree);
+  if (const int rc = stack.prepareMachineServices(); rc != 0)
+  {
+    exec.cancel(); spinner.join(); rclcpp::shutdown();
+    return rc;
+  }
 
 #ifdef BTCPP_GROOT2_SUPPORT
   std::unique_ptr<BT::Groot2Publisher> groot;
@@ -160,7 +161,12 @@ int main(int argc, char** argv)
     }
   }
 
+  // P0.b: each machine service the tree names, with or without a status seen (a WARN names the unserved one, PB-P8)
+  if (machines) machines->reportStart();
+
   BT::NodeStatus status = BT::NodeStatus::RUNNING;
+  // P0.b: the run is the machine-channel registry's JOB scope (no RTI here: the nodes' MACHINE: lines are the activity)
+  if (machines) machines->beginJob(nullptr);
   events->runStarted();
   try
   {
@@ -194,6 +200,7 @@ int main(int argc, char** argv)
   RCLCPP_INFO(log, "BT finished: %s", BT::toStr(status).c_str());
   events->runEnded(status, status == BT::NodeStatus::RUNNING);   // RUNNING here: stopped by a shutdown
   *process_observer = nullptr;
+  if (machines) machines->endJob();
 
   int rc = (status == BT::NodeStatus::SUCCESS) ? 0 : 1;
   // Exit code 3 (canonical projects only, ADR-0022 D5): the tree ended SUCCESS, but an

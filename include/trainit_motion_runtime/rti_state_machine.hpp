@@ -9,6 +9,7 @@
 //                 carries a session other than the adopted one: Decision 10);
 //   onCheck    -- the periodic check: runtime readiness and the command publisher count (every status period);
 //   onJobEnded -- the job tree has returned (a natural end, or the halt after a stop): decides the result, once.
+//   onActivity -- P0.b (D5): the RUNNING job's activity (a machine step's plain-words state) -> the status `detail`.
 // Effects: start a job (StartJob) / stop the current job (stop + halt).
 //
 // The server starts FAULTED with fault_code SERVER_STARTED (R9, owner-approved): only a RESET returns it to the
@@ -75,6 +76,13 @@ struct JobEnd
   std::optional<bool> holding;    // trainit__holding at the end (nullopt = absent / not a boolean: UNKNOWN)
   bool eef_fault{false};          // an end-effector fault latched during the job
   std::string reason;             // the fault gate's reason or an exception's text (detail only)
+  // P0.b (D3): the job's FIRST machine-step failure, latched by the machine-channel registry whatever the tree's fault
+  // gate: its STATION code (305 / 306 / 310 / 313; 0 = none, or a failure that is not a machine condition -- D4, D10)
+  // and its plain-words text (detail). A FAILED tree with a station code ends FAILED with THAT code (an end-effector
+  // fault latched in the same job outranks it: EEF_FAULT 308); a tree that SUCCEEDED keeps its own result and its
+  // detail never carries the text (a hand-written tree recovered the failure).
+  uint16_t station_code{0};
+  std::string station_text;
 };
 
 // The effect "start this job" (executed by the binding outside the lock).
@@ -124,6 +132,10 @@ public:
   // The job with `counter` returned. Valid in RUNNING / STOPPING for the current job; anything else is ignored
   // (returns nullopt). Decides the result once (Decision 8a.4).
   std::optional<Decided> onJobEnded(uint64_t counter, const JobEnd& end, SteadyTime now);
+  // P0.b (D5): the job `counter`'s activity -- what a machine step shows while it runs ("MACHINE turner BUSY: 2 s of
+  // 8.0 s"). Applied ONLY while that job is RUNNING (STOPPING keeps its "stopping: <cause>"; a finished job keeps its
+  // result's detail): `detail` becomes `text`. Never touches the state, the result, the cause or a code.
+  void onActivity(uint64_t counter, const std::string& text);
 
   const Status& status() const { return status_; }
   const ExportTable& table() const { return table_; }

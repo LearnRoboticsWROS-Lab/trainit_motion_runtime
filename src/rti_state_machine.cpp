@@ -364,6 +364,13 @@ Decided StateMachine::decide(const JobEnd& end) const
       if (end.outcome == "NOTHING_PICKABLE") return {Result::SUCCEEDED, code::NOTHING_PICKABLE};
       return {Result::SUCCEEDED, code::OK};
     }
+    // P0.b (D3): a machine step's STATION code -- latched whatever the tree's fault gate -- decides a tree that did not
+    // succeed, before TERMINAL_FAULT (a gated program's outcome) and the 301 fallback: never TASK_FAILED, never 300.
+    // An end-effector fault latched in the same job is checked BEFORE it (C++ review M4): the tool's physical state is
+    // then unconfirmed -- the more severe uncertainty (ADR-0032 8a.4) -- so the result is EEF_FAULT 308 and the
+    // machine's words stay in the detail.
+    if (end.station_code != 0 && end.eef_fault) return {Result::FAILED, code::EEF_FAULT};
+    if (end.station_code != 0) return {Result::FAILED, end.station_code};
     if (end.outcome == "TERMINAL_FAULT") return {Result::FAILED, code::TERMINAL_FAULT};
     if (end.outcome == "PICKABLE_EXHAUSTED" || end.outcome == "RECOVERY_EXHAUSTED")
     {
@@ -416,6 +423,12 @@ std::optional<Decided> StateMachine::onJobEnded(uint64_t counter, const JobEnd& 
   return d;
 }
 
+void StateMachine::onActivity(uint64_t counter, const std::string& text)
+{
+  if (status_.state != State::RUNNING || !job_ || job_->counter != counter) return;
+  status_.detail = text;
+}
+
 void StateMachine::finish(const JobEnd& end, const Decided& d, SteadyTime now)
 {
   // ROBOT state: handed to the next job (Decision 8) -- UNKNOWN when the end leaves the tool physically unconfirmed
@@ -433,8 +446,18 @@ void StateMachine::finish(const JobEnd& end, const Decided& d, SteadyTime now)
     if (cause_ == Cause::CANCEL && end.tree == JobEnd::Tree::SUCCESS) detail += " (too late: the task had completed)";
     if (cause_ == Cause::CANCEL && !end.outcome.empty() && end.tree != JobEnd::Tree::SUCCESS)
       detail += " (the task's own outcome " + end.outcome + " is masked by the cancel)";
+    if (cause_ == Cause::CANCEL && end.station_code != 0 && end.tree != JobEnd::Tree::SUCCESS)
+      detail += std::string(" (the machine failure ") + codeName(end.station_code) + " is masked by the cancel)";
     if (!later_.empty()) detail += "; later: " + later_;
   }
+  // P0.b: the machine step's own words (once: the fault gate's reason is usually the same text) -- only for a tree
+  // that did NOT succeed (C++ review M3): a hand-written tree that recovered a machine failure (a retry, a fallback)
+  // and then succeeded never reports that stale failure. Otherwise D3 holds: the job's FIRST machine failure stands.
+  // TSA-generated trees cannot recover a machine failure (TSA refuses request / wait inside a fallback or a retry,
+  // R-P0B-06), so the latch only matters for hand-written trees.
+  if (end.tree != JobEnd::Tree::SUCCESS && !end.station_text.empty() &&
+      end.reason.find(end.station_text) == std::string::npos)
+    detail += (detail.empty() ? "" : "; ") + end.station_text;
   if (!end.reason.empty()) detail += (detail.empty() ? "" : "; ") + end.reason;
 
   status_.result = d.result;

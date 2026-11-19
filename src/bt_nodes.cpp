@@ -7,6 +7,7 @@
 #include "trainit_motion_runtime/detection_candidates.hpp"
 #include "trainit_motion_runtime/end_effector_registry.hpp"
 #include "trainit_motion_runtime/grasp_candidates.hpp"
+#include "trainit_motion_runtime/machine_nodes.hpp"
 #include "trainit_motion_runtime/motion_failure.hpp"
 #include "trainit_motion_runtime/motion_providers.hpp"
 #include "trainit_motion_runtime/path_library.hpp"
@@ -1341,9 +1342,11 @@ BT::NodeStatus ProcessEventNode::tick()
   else if (kind == "process_off") e.type = ProcessEventType::DISABLE_PROCESS;
   else if (kind == "set_value") e.type = ProcessEventType::SET_ANALOG_VALUE;
   else if (kind == "external") e.type = ProcessEventType::TRIGGER;
-  else if (kind == "capture" || kind == "dwell")
+  else if (kind == "capture" || kind == "dwell" || kind == "request")
     return refuse("a " + kind + " event is not a process output: " +
-                  (kind == "capture" ? std::string("DetectObject trigger=\"true\"") : std::string("Sleep")) +
+                  (kind == "capture" ? std::string("DetectObject trigger=\"true\"")
+                   : kind == "dwell" ? std::string("Sleep")
+                                     : std::string("RequestMachine (P0.b)")) +
                   " runs it");
   else return refuse("unknown kind (accepted: process_on, process_off, set_value, external)");
   if (!isLogicalChannel(channel))
@@ -3824,6 +3827,9 @@ void registerAllNodes(BT::BehaviorTreeFactory& f)
   f.registerNodeType<CheckRobotState>("CheckRobotState");
   f.registerNodeType<Wait>("Wait");
   f.registerNodeType<Log>("Log");
+  // P0.b (D1): the machine handshake -- a request to a logical machine service, and the wait for its DONE / READY
+  f.registerNodeType<RequestMachine>("RequestMachine");
+  f.registerNodeType<WaitForMachine>("WaitForMachine");
 }
 
 }  // namespace trainit

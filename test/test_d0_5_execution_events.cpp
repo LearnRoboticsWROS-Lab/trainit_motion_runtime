@@ -367,6 +367,10 @@ TEST(ExecutionEvents, TheProcessKindsAreTheCanonicalModels)
   EXPECT_EQ(trainit::processKindAndValue(e), (std::pair<std::string, double>{"set_value", 3.25}));
   e.type = trainit::ProcessEventType::TRIGGER;
   EXPECT_EQ(trainit::processKindAndValue(e), (std::pair<std::string, double>{"external", 0.0}));
+  // P0.b (ADR-0030, trainit_interfaces 0.5.0): a machine request written by the registry -- kind `request`, no value
+  e.type = trainit::ProcessEventType::REQUEST;
+  e.value = 7.0;
+  EXPECT_EQ(trainit::processKindAndValue(e), (std::pair<std::string, double>{"request", 0.0}));
 }
 
 TEST(ExecutionEvents, TheRunnersPublisherIsRelativeReliableVolatileAndGuarded)

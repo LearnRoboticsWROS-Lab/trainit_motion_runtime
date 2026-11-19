@@ -209,6 +209,26 @@ void BtJobExecutor::runJob(const StartJob& job)
   RCLCPP_INFO(log, "job %u (%s, task #%u): run %s, tree %s, held state %s", job.job_id, job.task.c_str(), job.number,
               events->runId().c_str(), job.tree_id.c_str(),
               job.holding ? (*job.holding ? "HELD" : "free") : "UNKNOWN");
+  // P0.b (D2, D3, D5): the machine-channel registry's JOB scope -- this job's outstanding requests and its first
+  // machine failure start empty; a machine step's activity reaches the RTI detail while the job is RUNNING. The
+  // PROCESS scope (the last request written, the seq) survives the job: a cancelled job's request still counts.
+  MachineChannels* const machines = stack_.machines.get();
+  if (machines)
+  {
+    RobotTaskServer* const server = server_;
+    const uint64_t counter = job.counter;
+    machines->beginJob([server, counter](const std::string& text) {
+      if (server) server->jobActivity(counter, text);
+    });
+  }
+  struct EndMachineJob
+  {
+    MachineChannels* machines;
+    ~EndMachineJob()
+    {
+      if (machines) machines->endJob();
+    }
+  } const end_machine_job{machines};
   events->runStarted();
   BT::NodeStatus status = BT::NodeStatus::RUNNING;
   bool halted = false;
@@ -263,6 +283,12 @@ void BtJobExecutor::runJob(const StartJob& job)
   end.holding = threw ? std::nullopt : readHeld(bb);
   const std::string gate = readString(bb, kGateKey);
   if (!gate.empty()) end.reason += (end.reason.empty() ? "" : "; ") + gate;
+  if (machines)
+  {
+    // P0.b (D3): the job's machine failure, whatever the tree's fault gate -- decide() gives its STATION code
+    end.station_code = machines->jobStationCode();
+    end.station_text = machines->jobStationText();
+  }
   if (stack_.eefs)
   {
     const auto faults = stack_.eefs->latchedFaults();

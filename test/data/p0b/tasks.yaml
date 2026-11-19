@@ -1,0 +1,18 @@
+# TMR's P0.b RUNNER fixture (test_p0a_task_server, the P0.b section): HAND-WRITTEN, the shape of TSA's tasks.yaml
+# (schema 1) -- NOT a TSA golden. Two exported tasks of machine steps only.
+schema_version: 1
+main_task: turn
+export_table_id: 2586834367   # CRC-32 of "5:turn:30000\n6:turn_typo:30000\n" (ADR-0032 Decision 3)
+tasks:
+  turn:
+    tree: task_turn
+    description: "Ask the turner for a cycle, wait for its DONE, then for it READY"
+    inputs: []
+    outputs: []
+    export: {number: 5, timeout_s: 30.0}
+  turn_typo:
+    tree: task_turn_typo
+    description: "Ask a machine service no source serves (a typo in the cell's configuration)"
+    inputs: []
+    outputs: []
+    export: {number: 6, timeout_s: 30.0}
